@@ -44,7 +44,7 @@ function timeToMinutes(t) {
 
 function AvailabilityGrid({ day, members, availabilities }) {
     const timeSlots = [];
-    const gridStartHour = 00; // 5 PM
+    const gridStartHour = 12; // 5 PM
     const gridEndHour = 24;   // Midnight
 
     for (let hour = gridStartHour; hour < gridEndHour; hour++) {
