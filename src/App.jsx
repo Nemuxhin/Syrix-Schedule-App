@@ -12,12 +12,13 @@ import { getFirestore, collection, onSnapshot, doc, setDoc, deleteDoc } from 'fi
 // --- Firebase Configuration ---
 // 📄 PASTE YOUR FIREBASE CONFIG OBJECT HERE
 const firebaseConfig = {
-    apiKey: "PASTE_YOUR_API_KEY",
-    authDomain: "PASTE_YOUR_AUTH_DOMAIN",
-    projectId: "PASTE_YOUR_PROJECT_ID",
-    storageBucket: "PASTE_YOUR_STORAGE_BUCKET",
-    messagingSenderId: "PASTE_YOUR_MESSAGING_SENDER_ID",
-    appId: "PASTE_YOUR_APP_ID"
+    apiKey: "AIzaSyAcZy0oY6fmwJ4Lg9Ac-Bq__eMukMC_u0w",
+    authDomain: "syrix-team-schedule.firebaseapp.com",
+    projectId: "syrix-team-schedule",
+    storageBucket: "syrix-team-schedule.firebasestorage.app",
+    messagingSenderId: "571804588891",
+    appId: "1:571804588891:web:c3c17a4859b6b4f057187e",
+    measurementId: "G-VGXG0NCTGX"
 };
 
 // Initialize Firebase and Firestore
