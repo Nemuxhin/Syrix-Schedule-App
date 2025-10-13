@@ -2,7 +2,7 @@
 Syrix Team Availability - Single-file React prototype - FIREBASE VERSION
 - This version uses a real-time Firebase Firestore backend instead of localStorage.
 - Data is now shared between all users in real-time.
-- UPDATE: Added a dark mode toggle.
+- UPDATE: Re-implemented Discord webhook integration.
 */
 
 import React from 'react';
@@ -29,6 +29,71 @@ const db = getFirestore(app);
 const DEFAULT_MEMBERS = ["Tawz", "Nemuxhin", "Aries", "Cat", "Nicky"];
 const DAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
 
+const timezones = [
+    "UTC", "GMT", "Europe/London", "Europe/Paris", "Europe/Berlin",
+    "America/New_York", "America/Chicago", "America/Denver", "America/Los_Angeles",
+    "Asia/Tokyo", "Australia/Sydney"
+];
+
+const getAbsDateForDay = (dayString) => {
+    const today = new Date();
+    const todayDayIndex = (today.getDay() + 6) % 7;
+    const targetDayIndex = DAYS.indexOf(dayString);
+    const dayDifference = targetDayIndex - todayDayIndex;
+    const targetDate = new Date();
+    targetDate.setDate(today.getDate() + dayDifference);
+    return targetDate;
+};
+
+const convertToGMT = (day, time, timezone) => {
+    const [hours, minutes] = time.split(':').map(Number);
+    const localDate = getAbsDateForDay(day);
+    localDate.setHours(hours, minutes, 0, 0);
+
+    const gmtFormatter = new Intl.DateTimeFormat('en-GB', {
+        timeZone: 'UTC',
+        weekday: 'long',
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: false,
+    });
+
+    const gmtDateParts = gmtFormatter.formatToParts(localDate).reduce((acc, part) => {
+        acc[part.type] = part.value;
+        return acc;
+    }, {});
+
+    return {
+        day: gmtDateParts.weekday,
+        time: `${gmtDateParts.hour}:${gmtDateParts.minute}`
+    };
+};
+
+const convertFromGMT = (day, time, timezone) => {
+    if (!day || !time) return { day: '', time: '' };
+    const [hours, minutes] = time.split(':').map(Number);
+    const gmtDate = getAbsDateForDay(day);
+    gmtDate.setUTCHours(hours, minutes, 0, 0);
+
+    const formatter = new Intl.DateTimeFormat('en-GB', {
+        timeZone: timezone,
+        weekday: 'long',
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: false,
+    });
+
+    const localDateParts = formatter.formatToParts(gmtDate).reduce((acc, part) => {
+        acc[part.type] = part.value;
+        return acc;
+    }, {});
+
+    return {
+        day: localDateParts.weekday,
+        time: `${localDateParts.hour}:${localDateParts.minute}`
+    };
+};
+
 function timeToMinutes(t) {
     if (!t) return 0;
     const [h, m] = t.split(":").map(Number);
@@ -41,8 +106,60 @@ function minutesToTime(m) {
     return `${hh}:${mm}`;
 }
 
-function BestTimesDisplay({ availabilities, members }) {
+function AvailableNowIndicator({ availabilities, members, userTimezone }) {
+    const [now, setNow] = React.useState(new Date());
+
+    React.useEffect(() => {
+        const timer = setInterval(() => setNow(new Date()), 60000);
+        return () => clearInterval(timer);
+    }, []);
+
+    const dayIndex = now.getUTCDay();
+    const currentGMTDay = DAYS[(dayIndex + 6) % 7];
+    const currentGMTMinutes = now.getUTCHours() * 60 + now.getUTCMinutes();
+
+    const isAvailable = (member) => {
+        const memberSlots = availabilities[member] || [];
+        for (const slot of memberSlots) {
+            if (slot.day === currentGMTDay && currentGMTMinutes >= timeToMinutes(slot.start) && currentGMTMinutes < timeToMinutes(slot.end)) {
+                return true;
+            }
+        }
+        return false;
+    };
+
+    const availableMembers = members.filter(member => availabilities[member] && isAvailable(member));
+
+    return (
+        <div className="bg-white dark:bg-slate-800 p-4 rounded-lg shadow mb-6">
+            <h2 className="font-semibold text-slate-900 dark:text-slate-100 mb-2">Who's Available Now? <span className="text-sm font-normal text-slate-500 dark:text-slate-400">({userTimezone})</span></h2>
+            {availableMembers.length > 0 ? (
+                <div className="flex flex-wrap gap-2">
+                    {availableMembers.map(member => (
+                        <span key={member} className="px-3 py-1 bg-emerald-100 dark:bg-emerald-900/50 text-emerald-800 dark:text-emerald-200 text-sm font-medium rounded-full">
+                            {member}
+                        </span>
+                    ))}
+                </div>
+            ) : (
+                <p className="text-slate-500 dark:text-slate-400 text-sm">No one is currently available.</p>
+            )}
+        </div>
+    );
+}
+
+// --- UPDATED: BestTimesDisplay now includes post button and logic ---
+function BestTimesDisplay({ availabilities, members, postToDiscord, userTimezone }) {
+    const [postingStatus, setPostingStatus] = React.useState({}); // Tracks status per slot
     const activeMembers = members.filter(member => availabilities[member] && availabilities[member].length > 0);
+
+    const handlePost = async (day, slot) => {
+        const slotId = `${day}-${slot.start}-${slot.end}`;
+        setPostingStatus(prev => ({ ...prev, [slotId]: 'posting' }));
+        const success = await postToDiscord(day, slot, userTimezone);
+        setPostingStatus(prev => ({ ...prev, [slotId]: success ? 'success' : 'idle' }));
+        setTimeout(() => setPostingStatus(prev => ({ ...prev, [slotId]: 'idle' })), 2000);
+    };
 
     const calculateBestTimes = () => {
         const bucketSize = 30;
@@ -99,18 +216,37 @@ function BestTimesDisplay({ availabilities, members }) {
                     <div className="space-y-2">
                         {bestTimes[day]
                             .sort((a, b) => b.count - a.count)
-                            .map((slot, i) => (
-                                <div key={i} className={`p-2 rounded-md border ${slot.count === activeMembers.length ? 'bg-emerald-100 border-emerald-300 dark:bg-emerald-900/50 dark:border-emerald-700' : 'bg-slate-50 border-slate-200 dark:bg-slate-700/50 dark:border-slate-600'}`}>
-                                    <div className="flex justify-between items-center text-sm">
-                                        <span className="font-medium text-slate-700 dark:text-slate-300">
-                                            {minutesToTime(slot.start)} – {minutesToTime(slot.end)}
-                                        </span>
-                                        <span className={`font-bold px-2 py-1 rounded-full text-xs ${slot.count === activeMembers.length ? 'bg-emerald-500 text-white' : 'bg-slate-300 text-slate-800 dark:bg-slate-600 dark:text-slate-200'}`}>
-                                            {slot.count} / {activeMembers.length} players
-                                        </span>
+                            .map((slot, i) => {
+                                const slotId = `${day}-${slot.start}-${slot.end}`;
+                                const status = postingStatus[slotId] || 'idle';
+                                return (
+                                    <div key={i} className={`p-2 rounded-md border ${slot.count === activeMembers.length ? 'bg-emerald-100 border-emerald-300 dark:bg-emerald-900/50 dark:border-emerald-700' : 'bg-slate-50 border-slate-200 dark:bg-slate-700/50 dark:border-slate-600'}`}>
+                                        <div className="flex justify-between items-center text-sm">
+                                            <span className="font-medium text-slate-700 dark:text-slate-300">
+                                                {minutesToTime(slot.start)} – {minutesToTime(slot.end)}
+                                            </span>
+                                            <div className="flex items-center gap-2">
+                                                <span className={`font-bold px-2 py-1 rounded-full text-xs ${slot.count === activeMembers.length ? 'bg-emerald-500 text-white' : 'bg-slate-300 text-slate-800 dark:bg-slate-600 dark:text-slate-200'}`}>
+                                                    {slot.count} / {activeMembers.length} players
+                                                </span>
+                                                <button
+                                                    onClick={() => handlePost(day, slot)}
+                                                    disabled={status !== 'idle'}
+                                                    className={`w-24 text-center text-xs font-semibold py-1 px-2 rounded-md transition-all ${status === 'idle' ? 'bg-blue-500 hover:bg-blue-600 text-white' : ''
+                                                        } ${status === 'posting' ? 'bg-slate-400 text-white' : ''
+                                                        } ${status === 'success' ? 'bg-emerald-500 text-white' : ''
+                                                        }`}
+                                                >
+                                                    {status === 'idle' && 'Post to Discord'}
+                                                    {status === 'posting' && 'Posting...'}
+                                                    {status === 'success' && 'Posted!'}
+                                                </button>
+                                            </div>
+                                        </div>
                                     </div>
-                                </div>
-                            ))}
+                                )
+                            })
+                        }
                     </div>
                 </div>
             ))}
@@ -172,6 +308,33 @@ function AvailabilityGrid({ day, members, availabilities }) {
     );
 }
 
+function NextSteps() {
+    return (
+        <footer className="mt-6 bg-white dark:bg-slate-800 p-4 rounded-lg shadow">
+            <h2 className="font-semibold text-slate-900 dark:text-slate-100 mb-3">What's Next?</h2>
+            <p className="text-sm text-slate-600 dark:text-slate-400 mb-4">   
+            </p>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+                <div>
+                    <h3 className="font-medium text-slate-800 dark:text-slate-200 mb-2">Quality-of-Life Improvements</h3>
+                    <ul className="list-disc list-inside space-y-2 text-slate-600 dark:text-slate-400">
+                        <li>
+                            <span className="font-semibold text-slate-700 dark:text-slate-300">Confirmation Modals:</span> Replace browser alerts with attractive, custom-styled modals that fit the app's theme.
+                        </li>
+                    </ul>
+                </div>
+                <div>
+                    <h3 className="font-medium text-slate-800 dark:text-slate-200 mb-2">Major Feature Upgrades</h3>
+                    <ul className="list-disc list-inside space-y-2 text-slate-600 dark:text-slate-400">
+                        <li>
+                            <span className="font-semibold text-slate-700 dark:text-slate-300">User Accounts:</span> Add a simple login system so each player can only edit their own schedule.
+                        </li>
+                    </ul>
+                </div>
+            </div>
+        </footer>
+    );
+}
 
 export default function App() {
     const [members, setMembers] = React.useState(DEFAULT_MEMBERS);
@@ -181,6 +344,10 @@ export default function App() {
     const [start, setStart] = React.useState('12:00');
     const [end, setEnd] = React.useState('23:30');
     const [isDarkMode, setIsDarkMode] = React.useState(false);
+    const [saveStatus, setSaveStatus] = React.useState('idle');
+    const [userTimezone, setUserTimezone] = React.useState(Intl.DateTimeFormat().resolvedOptions().timeZone);
+    // --- NEW STATE for webhook URL ---
+    const [webhookUrl, setWebhookUrl] = React.useState('');
 
     React.useEffect(() => {
         const availabilitiesCol = collection(db, 'availabilities');
@@ -194,12 +361,16 @@ export default function App() {
         return () => unsubscribe();
     }, []);
 
-    // Effect for loading and applying theme
     React.useEffect(() => {
         const savedTheme = localStorage.getItem('theme');
-        if (savedTheme === 'dark') {
-            setIsDarkMode(true);
-        }
+        if (savedTheme === 'dark') setIsDarkMode(true);
+
+        const savedTimezone = localStorage.getItem('timezone');
+        if (savedTimezone && timezones.includes(savedTimezone)) setUserTimezone(savedTimezone);
+
+        // --- NEW: Load webhook URL from localStorage ---
+        const savedWebhook = localStorage.getItem('webhookUrl');
+        if (savedWebhook) setWebhookUrl(savedWebhook);
     }, []);
 
     React.useEffect(() => {
@@ -212,26 +383,51 @@ export default function App() {
         }
     }, [isDarkMode]);
 
+    // --- NEW: Save webhook URL to localStorage ---
+    const handleWebhookChange = (url) => {
+        setWebhookUrl(url);
+        localStorage.setItem('webhookUrl', url);
+    };
+
+    const handleTimezoneChange = (tz) => {
+        setUserTimezone(tz);
+        localStorage.setItem('timezone', tz);
+    }
+
     async function addAvailability() {
         if (timeToMinutes(end) <= timeToMinutes(start)) {
             alert('End time must be after start time');
             return;
         }
-        const newEntry = { day, start, end };
+        setSaveStatus('saving');
+        const gmtStart = convertToGMT(day, start, userTimezone);
+        const gmtEnd = convertToGMT(day, end, userTimezone);
+        const newEntry = { day: gmtStart.day, start: gmtStart.time, end: gmtEnd.time };
         const currentSlots = availabilities[selectedMember] || [];
         const updatedSlots = [...currentSlots, newEntry];
         updatedSlots.sort((a, b) => DAYS.indexOf(a.day) - DAYS.indexOf(b.day) || timeToMinutes(a.start) - timeToMinutes(b.start));
         const memberDocRef = doc(db, 'availabilities', selectedMember);
-        await setDoc(memberDocRef, { slots: updatedSlots });
+        try {
+            await setDoc(memberDocRef, { slots: updatedSlots });
+            setSaveStatus('success');
+        } catch (error) {
+            console.error("Error saving availability: ", error);
+            setSaveStatus('idle');
+        } finally {
+            setTimeout(() => setSaveStatus('idle'), 2000);
+        }
     }
 
     async function clearDayForMember() {
         const member = selectedMember;
-        const selectedDay = day;
+        const localSelectedDay = day;
         const currentSlots = availabilities[member] || [];
         if (currentSlots.length === 0) return;
 
-        const updatedSlots = currentSlots.filter(slot => slot.day !== selectedDay);
+        const updatedSlots = currentSlots.filter(slot => {
+            const localSlotDay = convertFromGMT(slot.day, slot.start, userTimezone).day;
+            return localSlotDay !== localSelectedDay;
+        });
 
         const memberDocRef = doc(db, 'availabilities', member);
 
@@ -247,26 +443,71 @@ export default function App() {
         await deleteDoc(memberDocRef);
     }
 
+    // --- NEW: Function to handle posting to Discord ---
+    async function postToDiscord(day, slot, tz) {
+        if (!webhookUrl) {
+            alert('Please add a Discord webhook URL in the Settings section first.');
+            return false;
+        }
+
+        const activeMembersCount = members.filter(member => availabilities[member] && availabilities[member].length > 0).length;
+
+        const content = `**Team Availability Alert!**\n\n**Best Time Found:**\n> **When:** ${day}, ${minutesToTime(slot.start)} - ${minutesToTime(slot.end)} (${tz})\n> **Who:** ${slot.count} / ${activeMembersCount} players available.\n\nLet's get a game in!`;
+
+        try {
+            const response = await fetch(webhookUrl, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ content: content }),
+            });
+            if (!response.ok) {
+                throw new Error(`Webhook returned status ${response.status}`);
+            }
+            return true;
+        } catch (error) {
+            console.error('Failed to post to Discord:', error);
+            alert('Failed to post to Discord. Check the webhook URL and your console for errors.');
+            return false;
+        }
+    }
+
+    const displayAvailabilities = React.useMemo(() => {
+        const converted = {};
+        for (const member in availabilities) {
+            converted[member] = availabilities[member].map(slot => {
+                const localStart = convertFromGMT(slot.day, slot.start, userTimezone);
+                const localEnd = convertFromGMT(slot.day, slot.end, userTimezone);
+                return { day: localStart.day, start: localStart.time, end: localEnd.time };
+            });
+        }
+        return converted;
+    }, [availabilities, userTimezone]);
+
+
     return (
         <div className="min-h-screen bg-slate-100 text-slate-800 dark:bg-slate-900 dark:text-slate-200 p-6">
             <div className="">
-                <header className="flex items-center justify-between mb-6">
-                    <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-100">Syrix — Team Availability (GMT)</h1>
+                <header className="flex items-center justify-between mb-6 flex-wrap gap-4">
+                    <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-100">Syrix — Team Availability</h1>
                     <div className="flex items-center gap-4">
-                        <div className="text-sm text-slate-600 dark:text-slate-400">Real-time version powered by Firebase</div>
+                        <div>
+                            <label htmlFor="tz-select" className="sr-only">Timezone</label>
+                            <select
+                                id="tz-select"
+                                value={userTimezone}
+                                onChange={e => handleTimezoneChange(e.target.value)}
+                                className="p-2 border border-slate-300 dark:border-slate-600 rounded text-slate-900 dark:text-slate-200 bg-white dark:bg-slate-700 text-sm"
+                            >
+                                {timezones.map(tz => <option key={tz} value={tz}>{tz}</option>)}
+                            </select>
+                        </div>
                         <button onClick={() => setIsDarkMode(!isDarkMode)} className="p-2 rounded-full bg-slate-200 dark:bg-slate-700 text-slate-800 dark:text-slate-200">
-                            {isDarkMode ? (
-                                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" className="bi bi-sun-fill" viewBox="0 0 16 16">
-                                    <path d="M8 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM8 0a.5.5 0 0 1 .5.5v2a.5.5 0 0 1-1 0v-2A.5.5 0 0 1 8 0zm0 13a.5.5 0 0 1 .5.5v2a.5.5 0 0 1-1 0v-2A.5.5 0 0 1 8 13zm8-5a.5.5 0 0 1-.5.5h-2a.5.5 0 0 1 0-1h2a.5.5 0 0 1 .5.5zM3 8a.5.5 0 0 1-.5.5h-2a.5.5 0 0 1 0-1h2A.5.5 0 0 1 3 8zm10.657-5.657a.5.5 0 0 1 0 .707l-1.414 1.415a.5.5 0 1 1-.707-.708l1.414-1.414a.5.5 0 0 1 .707 0zm-9.193 9.193a.5.5 0 0 1 0 .707L3.05 13.657a.5.5 0 0 1-.707-.707l1.414-1.414a.5.5 0 0 1 .707 0zm9.193 2.121a.5.5 0 0 1-.707 0l-1.414-1.414a.5.5 0 0 1 .707-.707l1.414 1.414a.5.5 0 0 1 0 .707zM4.464 4.465a.5.5 0 0 1-.707 0L2.343 3.05a.5.5 0 1 1 .707-.707l1.414 1.414a.5.5 0 0 1 0 .708z" />
-                                </svg>
-                            ) : (
-                                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" className="bi bi-moon-fill" viewBox="0 0 16 16">
-                                    <path d="M6 .278a.768.768 0 0 1 .08.858 7.208 7.208 0 0 0-.878 3.46c0 4.021 3.278 7.277 7.318 7.277.527 0 1.04-.055 1.533-.16a.787.787 0 0 1 .81.316.733.733 0 0 1-.031.893A8.349 8.349 0 0 1 8.344 16C3.734 16 0 12.286 0 7.71 0 4.266 2.114 1.312 5.124.06A.752.752 0 0 1 6 .278z" />
-                                </svg>
-                            )}
+                            {isDarkMode ? '☀️' : '🌙'}
                         </button>
                     </div>
                 </header>
+
+                <AvailableNowIndicator availabilities={availabilities} members={members} userTimezone={userTimezone} />
 
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                     <div className="bg-white dark:bg-slate-800 p-4 rounded-lg shadow space-y-6">
@@ -276,12 +517,10 @@ export default function App() {
                             <select className="w-full p-2 border border-slate-300 dark:border-slate-600 rounded mb-3 text-slate-900 dark:text-slate-200 bg-white dark:bg-slate-700" value={selectedMember} onChange={e => setSelectedMember(e.target.value)}>
                                 {members.map(m => <option key={m} value={m}>{m}</option>)}
                             </select>
-
                             <label className="block text-sm font-medium text-slate-700 dark:text-slate-300">Day</label>
                             <select className="w-full p-2 border border-slate-300 dark:border-slate-600 rounded mb-3 text-slate-900 dark:text-slate-200 bg-white dark:bg-slate-700" value={day} onChange={e => setDay(e.target.value)}>
                                 {DAYS.map(d => <option key={d} value={d}>{d}</option>)}
                             </select>
-
                             <div className="flex gap-2 mb-3">
                                 <div className="flex-1">
                                     <label className="block text-sm font-medium text-slate-700 dark:text-slate-300">Start</label>
@@ -292,26 +531,27 @@ export default function App() {
                                     <input type="time" className="w-full p-2 border border-slate-300 dark:border-slate-600 rounded text-slate-900 dark:text-slate-200 bg-white dark:bg-slate-700" value={end} onChange={e => setEnd(e.target.value)} />
                                 </div>
                             </div>
-
                             <div className="flex items-center flex-wrap gap-2">
-                                <button className="bg-blue-600 hover:bg-blue-700 text-white font-bold px-4 py-2 rounded-md" onClick={addAvailability}>Save Availability</button>
-                                <button className="bg-slate-200 hover:bg-slate-300 text-slate-800 dark:bg-slate-700 dark:hover:bg-slate-600 dark:text-slate-200 font-bold px-3 py-2 rounded-md" onClick={clearDayForMember}>
-                                    Clear for {day}
+                                <button
+                                    className={`font-bold px-4 py-2 rounded-md flex items-center justify-center transition-all ${saveStatus === 'success' ? 'bg-emerald-500 text-white' : 'bg-blue-600 hover:bg-blue-700 text-white'}`}
+                                    onClick={addAvailability}
+                                    disabled={saveStatus !== 'idle'}
+                                >
+                                    {saveStatus === 'idle' && 'Save Availability'}
+                                    {saveStatus === 'saving' && (<svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>)}
+                                    {saveStatus === 'success' && (<> <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" className="bi bi-check-lg mr-2" viewBox="0 0 16 16"><path d="M12.736 3.97a.733.733 0 0 1 1.047 0c.286.289.29.756.01 1.05L7.88 12.01a.733.733 0 0 1-1.065.02L3.217 8.384a.757.757 0 0 1 0-1.06.733.733 0 0 1 1.047 0l3.052 3.093 5.4-6.425a.247.247 0 0 1 .02-.022z" /></svg> Saved! </>)}
                                 </button>
-                                <button className="text-xs text-slate-500 hover:text-red-600 dark:text-slate-400 font-semibold" onClick={() => clearAllForMember(selectedMember)}>
-                                    Clear All
-                                </button>
+                                <button className="bg-slate-200 hover:bg-slate-300 text-slate-800 dark:bg-slate-700 dark:hover:bg-slate-600 dark:text-slate-200 font-bold px-3 py-2 rounded-md" onClick={clearDayForMember}> Clear for {day} </button>
+                                <button className="text-xs text-slate-500 hover:text-red-600 dark:text-slate-400 font-semibold" onClick={() => clearAllForMember(selectedMember)}> Clear All </button>
                             </div>
                         </div>
-
                         <div className="border-t border-slate-200 dark:border-slate-700 pt-4">
                             <h3 className="font-medium text-slate-900 dark:text-slate-100 mb-2">Best Times</h3>
                             <div className="max-h-[24rem] overflow-y-auto pr-2">
-                                <BestTimesDisplay availabilities={availabilities} members={members} />
+                                <BestTimesDisplay availabilities={displayAvailabilities} members={members} postToDiscord={postToDiscord} userTimezone={userTimezone} />
                             </div>
                         </div>
                     </div>
-
                     <div className="md:col-span-2 bg-white dark:bg-slate-800 p-4 rounded-lg shadow">
                         <h2 className="font-semibold text-slate-900 dark:text-slate-100 mb-2">Manager Dashboard</h2>
                         <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
@@ -319,11 +559,11 @@ export default function App() {
                                 <h3 className="font-medium text-slate-900 dark:text-slate-100">All Submitted Slots</h3>
                                 <div className="space-y-2 mt-2 max-h-[30rem] overflow-y-auto pr-2">
                                     {members.map(m => (
-                                        (availabilities[m] && availabilities[m].length > 0) && (
+                                        (displayAvailabilities[m] && displayAvailabilities[m].length > 0) && (
                                             <div key={m} className="p-3 border border-slate-200 dark:border-slate-700 rounded-md">
                                                 <div className="font-semibold text-slate-800 dark:text-slate-200">{m}</div>
                                                 <div className="text-sm mt-2 text-slate-600 dark:text-slate-400">
-                                                    {(availabilities[m] || []).map((s, i) => (
+                                                    {(displayAvailabilities[m] || []).map((s, i) => (
                                                         <div key={i} className="py-1">{s.day} — {s.start} to {s.end}</div>
                                                     ))}
                                                 </div>
@@ -332,14 +572,13 @@ export default function App() {
                                     ))}
                                 </div>
                             </div>
-
                             <div>
                                 <h3 className="font-medium text-slate-900 dark:text-slate-100">Availability Grid</h3>
                                 <div className="mt-2 space-y-4 max-h-[30.5rem] overflow-y-auto">
                                     {DAYS.map(d => (
                                         <div key={d}>
                                             <div className="font-semibold text-slate-800 dark:text-slate-200 mb-2">{d}</div>
-                                            <AvailabilityGrid day={d} members={members} availabilities={availabilities} />
+                                            <AvailabilityGrid day={d} members={members} availabilities={displayAvailabilities} />
                                         </div>
                                     ))}
                                 </div>
@@ -347,6 +586,27 @@ export default function App() {
                         </div>
                     </div>
                 </div>
+
+                {/* --- NEW: Settings section for Discord Webhook --- */}
+                <div className="mt-6 bg-white dark:bg-slate-800 p-4 rounded-lg shadow">
+                    <h2 className="font-semibold text-slate-900 dark:text-slate-100 mb-2">Settings</h2>
+                    <div>
+                        <label htmlFor="webhook-url" className="block text-sm font-medium text-slate-700 dark:text-slate-300">Discord Webhook URL</label>
+                        <input
+                            id="webhook-url"
+                            type="password"
+                            value={webhookUrl}
+                            onChange={e => handleWebhookChange(e.target.value)}
+                            placeholder="Paste your Discord webhook URL here"
+                            className="w-full p-2 mt-1 border border-slate-300 dark:border-slate-600 rounded text-slate-900 dark:text-slate-200 bg-white dark:bg-slate-700"
+                        />
+                        <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+                            Your webhook is saved in your browser and is not shared. Get this from Server Settings &gt; Integrations &gt; Webhooks.
+                        </p>
+                    </div>
+                </div>
+
+                <NextSteps />
             </div>
         </div>
     );
