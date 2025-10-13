@@ -5,7 +5,7 @@ Syrix Team Availability - Single-file React prototype - FIREBASE VERSION
 - ACCESSIBILITY UPDATE: Improved color contrast and fixed dropdown text visibility.
 */
 
-import React, 'react';
+import React from 'react'; // FIXED: Corrected import statement
 import { initializeApp } from 'firebase/app';
 import { getFirestore, collection, onSnapshot, doc, setDoc, deleteDoc } from 'firebase/firestore';
 
@@ -44,7 +44,7 @@ function timeToMinutes(t) {
 
 function AvailabilityGrid({ day, members, availabilities }) {
     const timeSlots = [];
-    const gridStartHour = 12; // 12 AM
+    const gridStartHour = 17; // 5 PM
     const gridEndHour = 24;   // Midnight
 
     for (let hour = gridStartHour; hour < gridEndHour; hour++) {
@@ -146,13 +146,11 @@ export default function App() {
                     <div className="bg-white p-4 rounded-lg shadow">
                         <h2 className="font-semibold text-slate-900 mb-2">Member — Add Availability</h2>
                         <label className="block text-sm font-medium text-slate-700">Profile</label>
-                        {/* ADDED: text-slate-900 to ensure visibility */}
                         <select className="w-full p-2 border border-slate-300 rounded mb-3 text-slate-900" value={selectedMember} onChange={e => setSelectedMember(e.target.value)}>
                             {members.map(m => <option key={m} value={m}>{m}</option>)}
                         </select>
 
                         <label className="block text-sm font-medium text-slate-700">Day</label>
-                        {/* ADDED: text-slate-900 to ensure visibility */}
                         <select className="w-full p-2 border border-slate-300 rounded mb-3 text-slate-900" value={day} onChange={e => setDay(e.target.value)}>
                             {DAYS.map(d => <option key={d} value={d}>{d}</option>)}
                         </select>
@@ -160,12 +158,10 @@ export default function App() {
                         <div className="flex gap-2 mb-3">
                             <div className="flex-1">
                                 <label className="block text-sm font-medium text-slate-700">Start</label>
-                                {/* ADDED: text-slate-900 to ensure visibility */}
                                 <input type="time" className="w-full p-2 border border-slate-300 rounded text-slate-900" value={start} onChange={e => setStart(e.target.value)} />
                             </div>
                             <div className="flex-1">
                                 <label className="block text-sm font-medium text-slate-700">End</label>
-                                {/* ADDED: text-slate-900 to ensure visibility */}
                                 <input type="time" className="w-full p-2 border border-slate-300 rounded text-slate-900" value={end} onChange={e => setEnd(e.target.value)} />
                             </div>
                         </div>
