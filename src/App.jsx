@@ -2,29 +2,22 @@
 Syrix Team Availability - Single-file React prototype - FIREBASE VERSION
 - This version uses a real-time Firebase Firestore backend instead of localStorage.
 - Data is now shared between all users in real-time.
-- ACCESSIBILITY UPDATE: Improved color contrast and fixed dropdown text visibility.
+- UPDATE: The "Clear" button now removes slots for the selected day only. Added "Clear All" as a secondary option.
 */
 
-import React from 'react'; // FIXED: Corrected import statement
+import React from 'react';
 import { initializeApp } from 'firebase/app';
 import { getFirestore, collection, onSnapshot, doc, setDoc, deleteDoc } from 'firebase/firestore';
 
 // --- Firebase Configuration ---
 // 📄 PASTE YOUR FIREBASE CONFIG OBJECT HERE
 const firebaseConfig = {
-    apiKey: "AIzaSyB9gQgB2OkxtMahi3a_g9g7e-b6tFFlDm4",
-
-    authDomain: "syrix-schedule-app.firebaseapp.com",
-
-    projectId: "syrix-schedule-app",
-
-    storageBucket: "syrix-schedule-app.firebasestorage.app",
-
-    messagingSenderId: "1003227848787",
-
-    appId: "1:1003227848787:web:ba0f151cee837e549ee6a6",
-
-    measurementId: "G-1DE07V6CXP"
+    apiKey: "PASTE_YOUR_API_KEY",
+    authDomain: "PASTE_YOUR_AUTH_DOMAIN",
+    projectId: "PASTE_YOUR_PROJECT_ID",
+    storageBucket: "PASTE_YOUR_STORAGE_BUCKET",
+    messagingSenderId: "PASTE_YOUR_MESSAGING_SENDER_ID",
+    appId: "PASTE_YOUR_APP_ID"
 };
 
 // Initialize Firebase and Firestore
@@ -44,7 +37,7 @@ function timeToMinutes(t) {
 
 function AvailabilityGrid({ day, members, availabilities }) {
     const timeSlots = [];
-    const gridStartHour = 12; // 5 PM
+    const gridStartHour = 17; // 5 PM
     const gridEndHour = 24;   // Midnight
 
     for (let hour = gridStartHour; hour < gridEndHour; hour++) {
@@ -101,8 +94,8 @@ export default function App() {
     const [selectedMember, setSelectedMember] = React.useState(DEFAULT_MEMBERS[0]);
     const [availabilities, setAvailabilities] = React.useState({});
     const [day, setDay] = React.useState(DAYS[0]);
-    const [start, setStart] = React.useState('12:00');
-    const [end, setEnd] = React.useState('23:59');
+    const [start, setStart] = React.useState('18:00');
+    const [end, setEnd] = React.useState('22:00');
 
     React.useEffect(() => {
         const availabilitiesCol = collection(db, 'availabilities');
@@ -129,7 +122,29 @@ export default function App() {
         await setDoc(memberDocRef, { slots: updatedSlots });
     }
 
-    async function clearMember(member) {
+    // NEW: This function only clears the slots for the currently selected day
+    async function clearDayForMember() {
+        const member = selectedMember;
+        const selectedDay = day;
+        const currentSlots = availabilities[member] || [];
+        if (currentSlots.length === 0) return; // Nothing to clear
+
+        // Keep only the slots that are NOT for the selected day
+        const updatedSlots = currentSlots.filter(slot => slot.day !== selectedDay);
+
+        const memberDocRef = doc(db, 'availabilities', member);
+
+        if (updatedSlots.length === 0) {
+            // If no slots are left, delete the member's document entirely
+            await deleteDoc(memberDocRef);
+        } else {
+            // Otherwise, update the document with the remaining slots
+            await setDoc(memberDocRef, { slots: updatedSlots });
+        }
+    }
+
+    // RENAMED: This function clears ALL slots for a member
+    async function clearAllForMember(member) {
         const memberDocRef = doc(db, 'availabilities', member);
         await deleteDoc(memberDocRef);
     }
@@ -146,28 +161,37 @@ export default function App() {
                     <div className="bg-white p-4 rounded-lg shadow">
                         <h2 className="font-semibold text-slate-900 mb-2">Member — Add Availability</h2>
                         <label className="block text-sm font-medium text-slate-700">Profile</label>
-                        <select className="w-full p-2 border border-slate-300 rounded mb-3 text-white" value={selectedMember} onChange={e => setSelectedMember(e.target.value)}>
+                        <select className="w-full p-2 border border-slate-300 rounded mb-3 text-slate-900" value={selectedMember} onChange={e => setSelectedMember(e.target.value)}>
                             {members.map(m => <option key={m} value={m}>{m}</option>)}
                         </select>
 
                         <label className="block text-sm font-medium text-slate-700">Day</label>
-                        <select className="w-full p-2 border border-slate-300 rounded mb-3 text-white" value={day} onChange={e => setDay(e.target.value)}>
+                        <select className="w-full p-2 border border-slate-300 rounded mb-3 text-slate-900" value={day} onChange={e => setDay(e.target.value)}>
                             {DAYS.map(d => <option key={d} value={d}>{d}</option>)}
                         </select>
 
                         <div className="flex gap-2 mb-3">
                             <div className="flex-1">
                                 <label className="block text-sm font-medium text-slate-700">Start</label>
-                                <input type="time" className="w-full p-2 border border-slate-300 rounded text-white" value={start} onChange={e => setStart(e.target.value)} />
+                                <input type="time" className="w-full p-2 border border-slate-300 rounded text-slate-900" value={start} onChange={e => setStart(e.target.value)} />
                             </div>
                             <div className="flex-1">
                                 <label className="block text-sm font-medium text-slate-700">End</label>
-                                <input type="time" className="w-full p-2 border border-slate-300 rounded text-white" value={end} onChange={e => setEnd(e.target.value)} />
+                                <input type="time" className="w-full p-2 border border-slate-300 rounded text-slate-900" value={end} onChange={e => setEnd(e.target.value)} />
                             </div>
                         </div>
 
-                        <button className="bg-blue-600 hover:bg-blue-700 text-white font-bold px-4 py-2 rounded-md" onClick={addAvailability}>Save Availability</button>
-                        <button className="ml-2 bg-slate-200 hover:bg-slate-300 text-slate-800 font-bold px-3 py-2 rounded-md" onClick={() => clearMember(selectedMember)}>Clear My Availability</button>
+                        <div className="flex items-center flex-wrap gap-2">
+                            <button className="bg-blue-600 hover:bg-blue-700 text-white font-bold px-4 py-2 rounded-md" onClick={addAvailability}>Save Availability</button>
+                            {/* CHANGED: Button now clears only the selected day */}
+                            <button className="bg-slate-200 hover:bg-slate-300 text-slate-800 font-bold px-3 py-2 rounded-md" onClick={clearDayForMember}>
+                                Clear for {day}
+                            </button>
+                            {/* ADDED: A new button to clear all entries */}
+                            <button className="text-xs text-slate-500 hover:text-red-600 font-semibold" onClick={() => clearAllForMember(selectedMember)}>
+                                Clear All
+                            </button>
+                        </div>
                     </div>
 
                     <div className="md:col-span-2 bg-white p-4 rounded-lg shadow">
