@@ -266,7 +266,7 @@ export default function App() {
                                 </div>
                                 <div className="flex-1">
                                     <label className="block text-sm font-medium text-slate-700">End</label>
-                                    <input type="time" className="w-full p-2 border border-slate-300 rounded ttext-white" value={end} onChange={e => setEnd(e.target.value)} />
+                                    <input type="time" className="w-full p-2 border border-slate-300 rounded text-white" value={end} onChange={e => setEnd(e.target.value)} />
                                 </div>
                             </div>
 
