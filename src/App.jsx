@@ -37,7 +37,7 @@ function timeToMinutes(t) {
 
 function AvailabilityGrid({ day, members, availabilities }) {
     const timeSlots = [];
-    const gridStartHour = 17; // 5 PM
+    const gridStartHour = 12; // 5 PM
     const gridEndHour = 24;   // Midnight
 
     for (let hour = gridStartHour; hour < gridEndHour; hour++) {
@@ -94,8 +94,8 @@ export default function App() {
     const [selectedMember, setSelectedMember] = React.useState(DEFAULT_MEMBERS[0]);
     const [availabilities, setAvailabilities] = React.useState({});
     const [day, setDay] = React.useState(DAYS[0]);
-    const [start, setStart] = React.useState('18:00');
-    const [end, setEnd] = React.useState('22:00');
+    const [start, setStart] = React.useState('12:00');
+    const [end, setEnd] = React.useState('23:30');
 
     React.useEffect(() => {
         const availabilitiesCol = collection(db, 'availabilities');
