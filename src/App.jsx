@@ -2,11 +2,10 @@
 Syrix Team Availability - Single-file React prototype - FIREBASE VERSION
 - This version uses a real-time Firebase Firestore backend instead of localStorage.
 - Data is now shared between all users in real-time.
-- ACCESSIBILITY UPDATE: Improved color contrast for better readability.
+- ACCESSIBILITY UPDATE: Improved color contrast and fixed dropdown text visibility.
 */
 
-import React, { useEffect, useState } from 'react';
-// Import Firebase modules
+import React, 'react';
 import { initializeApp } from 'firebase/app';
 import { getFirestore, collection, onSnapshot, doc, setDoc, deleteDoc } from 'firebase/firestore';
 
@@ -45,7 +44,7 @@ function timeToMinutes(t) {
 
 function AvailabilityGrid({ day, members, availabilities }) {
     const timeSlots = [];
-    const gridStartHour = 17; // 5 PM
+    const gridStartHour = 12; // 12 AM
     const gridEndHour = 24;   // Midnight
 
     for (let hour = gridStartHour; hour < gridEndHour; hour++) {
@@ -66,7 +65,6 @@ function AvailabilityGrid({ day, members, availabilities }) {
 
     return (
         <div className="overflow-x-auto rounded-lg">
-            {/* CHANGED: Improved contrast on table headers and cells */}
             <table className="min-w-full border-collapse text-center text-xs">
                 <thead>
                     <tr className="bg-slate-200">
@@ -83,7 +81,6 @@ function AvailabilityGrid({ day, members, availabilities }) {
                             {timeSlots.map(time => (
                                 <td
                                     key={`${member}-${time}`}
-                                    // CHANGED: Using emerald/rose for better, more accessible colors
                                     className={`${isMemberAvailable(member, time) ? 'bg-emerald-500' : 'bg-rose-500'}`}
                                     title={`${member} - ${time} - ${isMemberAvailable(member, time) ? 'Available' : 'Unavailable'}`}
                                 >
@@ -100,14 +97,14 @@ function AvailabilityGrid({ day, members, availabilities }) {
 
 
 export default function App() {
-    const [members, setMembers] = useState(DEFAULT_MEMBERS);
-    const [selectedMember, setSelectedMember] = useState(DEFAULT_MEMBERS[0]);
-    const [availabilities, setAvailabilities] = useState({});
-    const [day, setDay] = useState(DAYS[0]);
-    const [start, setStart] = useState('18:00');
-    const [end, setEnd] = useState('22:00');
+    const [members, setMembers] = React.useState(DEFAULT_MEMBERS);
+    const [selectedMember, setSelectedMember] = React.useState(DEFAULT_MEMBERS[0]);
+    const [availabilities, setAvailabilities] = React.useState({});
+    const [day, setDay] = React.useState(DAYS[0]);
+    const [start, setStart] = React.useState('18:00');
+    const [end, setEnd] = React.useState('22:00');
 
-    useEffect(() => {
+    React.useEffect(() => {
         const availabilitiesCol = collection(db, 'availabilities');
         const unsubscribe = onSnapshot(availabilitiesCol, (snapshot) => {
             const newAvailabilities = {};
@@ -138,11 +135,9 @@ export default function App() {
     }
 
     return (
-        // CHANGED: Using slate colors for better base contrast
         <div className="min-h-screen bg-slate-100 text-slate-800 p-6">
             <div className="max-w-7xl mx-auto">
                 <header className="flex items-center justify-between mb-6">
-                    {/* CHANGED: Darker text for header */}
                     <h1 className="text-2xl font-bold text-slate-900">Syrix — Team Availability (GMT)</h1>
                     <div className="text-sm text-slate-600">Real-time version powered by Firebase</div>
                 </header>
@@ -150,29 +145,31 @@ export default function App() {
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                     <div className="bg-white p-4 rounded-lg shadow">
                         <h2 className="font-semibold text-slate-900 mb-2">Member — Add Availability</h2>
-                        {/* CHANGED: Increased font weight on labels for clarity */}
                         <label className="block text-sm font-medium text-slate-700">Profile</label>
-                        <select className="w-full p-2 border border-slate-300 rounded mb-3" value={selectedMember} onChange={e => setSelectedMember(e.target.value)}>
+                        {/* ADDED: text-slate-900 to ensure visibility */}
+                        <select className="w-full p-2 border border-slate-300 rounded mb-3 text-slate-900" value={selectedMember} onChange={e => setSelectedMember(e.target.value)}>
                             {members.map(m => <option key={m} value={m}>{m}</option>)}
                         </select>
 
                         <label className="block text-sm font-medium text-slate-700">Day</label>
-                        <select className="w-full p-2 border border-slate-300 rounded mb-3" value={day} onChange={e => setDay(e.target.value)}>
+                        {/* ADDED: text-slate-900 to ensure visibility */}
+                        <select className="w-full p-2 border border-slate-300 rounded mb-3 text-slate-900" value={day} onChange={e => setDay(e.target.value)}>
                             {DAYS.map(d => <option key={d} value={d}>{d}</option>)}
                         </select>
 
                         <div className="flex gap-2 mb-3">
                             <div className="flex-1">
                                 <label className="block text-sm font-medium text-slate-700">Start</label>
-                                <input type="time" className="w-full p-2 border border-slate-300 rounded" value={start} onChange={e => setStart(e.target.value)} />
+                                {/* ADDED: text-slate-900 to ensure visibility */}
+                                <input type="time" className="w-full p-2 border border-slate-300 rounded text-slate-900" value={start} onChange={e => setStart(e.target.value)} />
                             </div>
                             <div className="flex-1">
                                 <label className="block text-sm font-medium text-slate-700">End</label>
-                                <input type="time" className="w-full p-2 border border-slate-300 rounded" value={end} onChange={e => setEnd(e.target.value)} />
+                                {/* ADDED: text-slate-900 to ensure visibility */}
+                                <input type="time" className="w-full p-2 border border-slate-300 rounded text-slate-900" value={end} onChange={e => setEnd(e.target.value)} />
                             </div>
                         </div>
 
-                        {/* CHANGED: Button colors and styles for better contrast and feedback */}
                         <button className="bg-blue-600 hover:bg-blue-700 text-white font-bold px-4 py-2 rounded-md" onClick={addAvailability}>Save Availability</button>
                         <button className="ml-2 bg-slate-200 hover:bg-slate-300 text-slate-800 font-bold px-3 py-2 rounded-md" onClick={() => clearMember(selectedMember)}>Clear My Availability</button>
                     </div>
