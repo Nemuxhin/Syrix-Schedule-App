@@ -2,7 +2,7 @@
 Syrix Team Availability - Single-file React prototype - FIREBASE VERSION
 - This version uses a real-time Firebase Firestore backend instead of localStorage.
 - Data is now shared between all users in real-time.
-- UPDATE: Re-implemented Discord webhook integration.
+- UPDATE: Hardcoded Discord webhook and removed settings panel from UI.
 */
 
 import React from 'react';
@@ -25,6 +25,8 @@ const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
 // --- End of Firebase Configuration ---
 
+// --- Hardcoded Webhook URL ---
+const discordWebhookUrl = "https://discord.com/api/webhooks/1427426922228351042/lqw36ZxOPEnC3qK45b3vnqZvbkaYhzIxqb-uS1tex6CGOvmLYs19OwKZvslOVABdpHnD";
 
 const DEFAULT_MEMBERS = ["Tawz", "Nemuxhin", "Aries", "Cat", "Nicky"];
 const DAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
@@ -37,18 +39,19 @@ const timezones = [
 
 const getAbsDateForDay = (dayString) => {
     const today = new Date();
-    const todayDayIndex = (today.getDay() + 6) % 7;
+    const todayDayIndex = (today.getUTCDay() === 0) ? 6 : today.getUTCDay() - 1;
     const targetDayIndex = DAYS.indexOf(dayString);
     const dayDifference = targetDayIndex - todayDayIndex;
-    const targetDate = new Date();
-    targetDate.setDate(today.getDate() + dayDifference);
+
+    const targetDate = new Date(today);
+    targetDate.setUTCDate(today.getUTCDate() + dayDifference);
     return targetDate;
 };
 
-const convertToGMT = (day, time, timezone) => {
-    const [hours, minutes] = time.split(':').map(Number);
-    const localDate = getAbsDateForDay(day);
-    localDate.setHours(hours, minutes, 0, 0);
+const convertToGMT = (day, time) => {
+    const date = getAbsDateForDay(day);
+    const dateString = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}T${time}:00`;
+    const localDate = new Date(dateString);
 
     const gmtFormatter = new Intl.DateTimeFormat('en-GB', {
         timeZone: 'UTC',
@@ -65,7 +68,7 @@ const convertToGMT = (day, time, timezone) => {
 
     return {
         day: gmtDateParts.weekday,
-        time: `${gmtDateParts.hour}:${gmtDateParts.minute}`
+        time: `${gmtDateParts.hour.replace('24', '00')}:${gmtDateParts.minute}`
     };
 };
 
@@ -90,7 +93,7 @@ const convertFromGMT = (day, time, timezone) => {
 
     return {
         day: localDateParts.weekday,
-        time: `${localDateParts.hour}:${localDateParts.minute}`
+        time: `${localDateParts.hour.replace('24', '00')}:${localDateParts.minute}`
     };
 };
 
@@ -115,7 +118,7 @@ function AvailableNowIndicator({ availabilities, members, userTimezone }) {
     }, []);
 
     const dayIndex = now.getUTCDay();
-    const currentGMTDay = DAYS[(dayIndex + 6) % 7];
+    const currentGMTDay = DAYS[(dayIndex === 0 ? 6 : dayIndex - 1)];
     const currentGMTMinutes = now.getUTCHours() * 60 + now.getUTCMinutes();
 
     const isAvailable = (member) => {
@@ -148,9 +151,8 @@ function AvailableNowIndicator({ availabilities, members, userTimezone }) {
     );
 }
 
-// --- UPDATED: BestTimesDisplay now includes post button and logic ---
 function BestTimesDisplay({ availabilities, members, postToDiscord, userTimezone }) {
-    const [postingStatus, setPostingStatus] = React.useState({}); // Tracks status per slot
+    const [postingStatus, setPostingStatus] = React.useState({});
     const activeMembers = members.filter(member => availabilities[member] && availabilities[member].length > 0);
 
     const handlePost = async (day, slot) => {
@@ -172,7 +174,7 @@ function BestTimesDisplay({ availabilities, members, postToDiscord, userTimezone
                     const startMinute = timeToMinutes(slot.start);
                     const endMinute = timeToMinutes(slot.end);
                     const startBucket = Math.floor(startMinute / bucketSize);
-                    const endBucket = Math.ceil(endMinute / bucketSize);
+                    const endBucket = endMinute === 1440 ? 48 : Math.floor(endMinute / bucketSize);
                     for (let i = startBucket; i < endBucket; i++) {
                         buckets[i]++;
                     }
@@ -269,8 +271,14 @@ function AvailabilityGrid({ day, members, availabilities }) {
         const memberSlots = availabilities[member]?.filter(slot => slot.day === day) || [];
         const minutes = timeToMinutes(time);
         for (const slot of memberSlots) {
-            if (minutes >= timeToMinutes(slot.start) && minutes < timeToMinutes(slot.end)) {
-                return true;
+            const startMinutes = timeToMinutes(slot.start);
+            let endMinutes = timeToMinutes(slot.end);
+            if (endMinutes === 0) endMinutes = 1440; // Treat 00:00 as end of day
+
+            if (startMinutes < endMinutes) {
+                if (minutes >= startMinutes && minutes < endMinutes) return true;
+            } else {
+                if (minutes >= startMinutes || minutes < endMinutes) return true;
             }
         }
         return false;
@@ -312,7 +320,8 @@ function NextSteps() {
     return (
         <footer className="mt-6 bg-white dark:bg-slate-800 p-4 rounded-lg shadow">
             <h2 className="font-semibold text-slate-900 dark:text-slate-100 mb-3">What's Next?</h2>
-            <p className="text-sm text-slate-600 dark:text-slate-400 mb-4">   
+            <p className="text-sm text-slate-600 dark:text-slate-400 mb-4">
+               
             </p>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
                 <div>
@@ -337,7 +346,7 @@ function NextSteps() {
 }
 
 export default function App() {
-    const [members, setMembers] = React.useState(DEFAULT_MEMBERS);
+    const [members] = React.useState(DEFAULT_MEMBERS);
     const [selectedMember, setSelectedMember] = React.useState(DEFAULT_MEMBERS[0]);
     const [availabilities, setAvailabilities] = React.useState({});
     const [day, setDay] = React.useState(DAYS[0]);
@@ -346,8 +355,6 @@ export default function App() {
     const [isDarkMode, setIsDarkMode] = React.useState(false);
     const [saveStatus, setSaveStatus] = React.useState('idle');
     const [userTimezone, setUserTimezone] = React.useState(Intl.DateTimeFormat().resolvedOptions().timeZone);
-    // --- NEW STATE for webhook URL ---
-    const [webhookUrl, setWebhookUrl] = React.useState('');
 
     React.useEffect(() => {
         const availabilitiesCol = collection(db, 'availabilities');
@@ -367,10 +374,6 @@ export default function App() {
 
         const savedTimezone = localStorage.getItem('timezone');
         if (savedTimezone && timezones.includes(savedTimezone)) setUserTimezone(savedTimezone);
-
-        // --- NEW: Load webhook URL from localStorage ---
-        const savedWebhook = localStorage.getItem('webhookUrl');
-        if (savedWebhook) setWebhookUrl(savedWebhook);
     }, []);
 
     React.useEffect(() => {
@@ -383,25 +386,16 @@ export default function App() {
         }
     }, [isDarkMode]);
 
-    // --- NEW: Save webhook URL to localStorage ---
-    const handleWebhookChange = (url) => {
-        setWebhookUrl(url);
-        localStorage.setItem('webhookUrl', url);
-    };
-
     const handleTimezoneChange = (tz) => {
         setUserTimezone(tz);
         localStorage.setItem('timezone', tz);
     }
 
     async function addAvailability() {
-        if (timeToMinutes(end) <= timeToMinutes(start)) {
-            alert('End time must be after start time');
-            return;
-        }
         setSaveStatus('saving');
         const gmtStart = convertToGMT(day, start, userTimezone);
         const gmtEnd = convertToGMT(day, end, userTimezone);
+
         const newEntry = { day: gmtStart.day, start: gmtStart.time, end: gmtEnd.time };
         const currentSlots = availabilities[selectedMember] || [];
         const updatedSlots = [...currentSlots, newEntry];
@@ -423,14 +417,11 @@ export default function App() {
         const localSelectedDay = day;
         const currentSlots = availabilities[member] || [];
         if (currentSlots.length === 0) return;
-
         const updatedSlots = currentSlots.filter(slot => {
-            const localSlotDay = convertFromGMT(slot.day, slot.start, userTimezone).day;
-            return localSlotDay !== localSelectedDay;
+            const localSlotStart = convertFromGMT(slot.day, slot.start, userTimezone);
+            return localSlotStart.day !== localSelectedDay;
         });
-
         const memberDocRef = doc(db, 'availabilities', member);
-
         if (updatedSlots.length === 0) {
             await deleteDoc(memberDocRef);
         } else {
@@ -443,30 +434,20 @@ export default function App() {
         await deleteDoc(memberDocRef);
     }
 
-    // --- NEW: Function to handle posting to Discord ---
     async function postToDiscord(day, slot, tz) {
-        if (!webhookUrl) {
-            alert('Please add a Discord webhook URL in the Settings section first.');
-            return false;
-        }
-
         const activeMembersCount = members.filter(member => availabilities[member] && availabilities[member].length > 0).length;
-
         const content = `**Team Availability Alert!**\n\n**Best Time Found:**\n> **When:** ${day}, ${minutesToTime(slot.start)} - ${minutesToTime(slot.end)} (${tz})\n> **Who:** ${slot.count} / ${activeMembersCount} players available.\n\nLet's get a game in!`;
-
         try {
-            const response = await fetch(webhookUrl, {
+            const response = await fetch(discordWebhookUrl, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ content: content }),
             });
-            if (!response.ok) {
-                throw new Error(`Webhook returned status ${response.status}`);
-            }
+            if (!response.ok) throw new Error(`Webhook returned status ${response.status}`);
             return true;
         } catch (error) {
             console.error('Failed to post to Discord:', error);
-            alert('Failed to post to Discord. Check the webhook URL and your console for errors.');
+            alert('Failed to post to Discord. Check your console for errors.');
             return false;
         }
     }
@@ -474,10 +455,20 @@ export default function App() {
     const displayAvailabilities = React.useMemo(() => {
         const converted = {};
         for (const member in availabilities) {
-            converted[member] = availabilities[member].map(slot => {
+            converted[member] = [];
+            availabilities[member].forEach(slot => {
                 const localStart = convertFromGMT(slot.day, slot.start, userTimezone);
                 const localEnd = convertFromGMT(slot.day, slot.end, userTimezone);
-                return { day: localStart.day, start: localStart.time, end: localEnd.time };
+                if (localStart.day === localEnd.day) {
+                    if (timeToMinutes(localStart.time) < timeToMinutes(localEnd.time)) {
+                        converted[member].push({ day: localStart.day, start: localStart.time, end: localEnd.time });
+                    }
+                } else {
+                    converted[member].push({ day: localStart.day, start: localStart.time, end: '24:00' });
+                    if (timeToMinutes(localEnd.time) > 0) {
+                        converted[member].push({ day: localEnd.day, start: '00:00', end: localEnd.time });
+                    }
+                }
             });
         }
         return converted;
@@ -584,25 +575,6 @@ export default function App() {
                                 </div>
                             </div>
                         </div>
-                    </div>
-                </div>
-
-                {/* --- NEW: Settings section for Discord Webhook --- */}
-                <div className="mt-6 bg-white dark:bg-slate-800 p-4 rounded-lg shadow">
-                    <h2 className="font-semibold text-slate-900 dark:text-slate-100 mb-2">Settings</h2>
-                    <div>
-                        <label htmlFor="webhook-url" className="block text-sm font-medium text-slate-700 dark:text-slate-300">Discord Webhook URL</label>
-                        <input
-                            id="webhook-url"
-                            type="password"
-                            value={webhookUrl}
-                            onChange={e => handleWebhookChange(e.target.value)}
-                            placeholder="Paste your Discord webhook URL here"
-                            className="w-full p-2 mt-1 border border-slate-300 dark:border-slate-600 rounded text-slate-900 dark:text-slate-200 bg-white dark:bg-slate-700"
-                        />
-                        <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-                            Your webhook is saved in your browser and is not shared. Get this from Server Settings &gt; Integrations &gt; Webhooks.
-                        </p>
                     </div>
                 </div>
 
