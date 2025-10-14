@@ -8,7 +8,7 @@ Syrix Team Availability - Single-file React prototype - FIREBASE VERSION
 import React from 'react';
 import { initializeApp } from 'firebase/app';
 import { getFirestore, collection, onSnapshot, doc, setDoc, deleteDoc } from 'firebase/firestore';
-import { getAuth, onAuthStateChanged, signInWithPopup, signOut, OAuthProvider } from 'firebase/auth';
+import { getAuth, onAuthStateChanged, signInWithRedirect, signOut, OAuthProvider } from 'firebase/auth';
 
 // --- Firebase Configuration ---
 const firebaseConfig = {
@@ -331,7 +331,7 @@ export default function App() {
         provider.addScope('identify');
         provider.addScope('email');
         try {
-            await signInWithPopup(auth, provider);
+            await signInWithRedirect(auth, provider);
         } catch (error) {
             console.error("Error signing in with Discord", error);
         }
