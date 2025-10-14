@@ -90,10 +90,212 @@ function Modal({ isOpen, onClose, onConfirm, title, children }) {
     );
 }
 
-// --- (Other components remain the same) ---
-function AvailableNowIndicator({ availabilities, members, userTimezone }) { /* ... */ }
-function BestTimesDisplay({ availabilities, members, postToDiscord, userTimezone }) { /* ... */ }
-function AvailabilityGrid({ day, members, availabilities }) { /* ... */ }
+// --- FIXED: Restored full component definitions ---
+function AvailableNowIndicator({ availabilities, members, userTimezone }) {
+    const [now, setNow] = React.useState(new Date());
+
+    React.useEffect(() => {
+        const timer = setInterval(() => setNow(new Date()), 60000);
+        return () => clearInterval(timer);
+    }, []);
+
+    const dayIndex = now.getUTCDay();
+    const currentGMTDay = DAYS[(dayIndex === 0 ? 6 : dayIndex - 1)];
+    const currentGMTMinutes = now.getUTCHours() * 60 + now.getUTCMinutes();
+
+    const isAvailable = (member) => {
+        const memberSlots = availabilities[member] || [];
+        for (const slot of memberSlots) {
+            if (slot.day === currentGMTDay && currentGMTMinutes >= timeToMinutes(slot.start) && currentGMTMinutes < timeToMinutes(slot.end)) {
+                return true;
+            }
+        }
+        return false;
+    };
+
+    const availableMembers = members.filter(member => availabilities[member] && isAvailable(member));
+
+    return (
+        <div className="bg-white dark:bg-slate-800 p-4 rounded-lg shadow mb-6">
+            <h2 className="font-semibold text-slate-900 dark:text-slate-100 mb-2">Who's Available Now? <span className="text-sm font-normal text-slate-500 dark:text-slate-400">({userTimezone})</span></h2>
+            {availableMembers.length > 0 ? (
+                <div className="flex flex-wrap gap-2">
+                    {availableMembers.map(member => (
+                        <span key={member} className="px-3 py-1 bg-emerald-100 dark:bg-emerald-900/50 text-emerald-800 dark:text-emerald-200 text-sm font-medium rounded-full">
+                            {member}
+                        </span>
+                    ))}
+                </div>
+            ) : (
+                <p className="text-slate-500 dark:text-slate-400 text-sm">No one is currently available.</p>
+            )}
+        </div>
+    );
+}
+
+function BestTimesDisplay({ availabilities, members, postToDiscord, userTimezone }) {
+    const [postingStatus, setPostingStatus] = React.useState({});
+    const activeMembers = members.filter(member => availabilities[member] && availabilities[member].length > 0);
+
+    const handlePost = async (day, slot) => {
+        const slotId = `${day}-${slot.start}-${slot.end}`;
+        setPostingStatus(prev => ({ ...prev, [slotId]: 'posting' }));
+        const success = await postToDiscord(day, slot, userTimezone);
+        setPostingStatus(prev => ({ ...prev, [slotId]: success ? 'success' : 'idle' }));
+        setTimeout(() => setPostingStatus(prev => ({ ...prev, [slotId]: 'idle' })), 2000);
+    };
+
+    const calculateBestTimes = () => {
+        const bucketSize = 30;
+        const results = {};
+        for (const day of DAYS) {
+            const buckets = new Array((24 * 60) / bucketSize).fill(0);
+            for (const member of activeMembers) {
+                const memberSlots = availabilities[member]?.filter(slot => slot.day === day) || [];
+                for (const slot of memberSlots) {
+                    const startMinute = timeToMinutes(slot.start);
+                    const endMinute = timeToMinutes(slot.end);
+                    const startBucket = Math.floor(startMinute / bucketSize);
+                    const endBucket = endMinute === 1440 ? 48 : Math.floor(endMinute / bucketSize);
+                    for (let i = startBucket; i < endBucket; i++) {
+                        buckets[i]++;
+                    }
+                }
+            }
+            const ranges = [];
+            let currentRange = null;
+            for (let i = 0; i < buckets.length; i++) {
+                const count = buckets[i];
+                if (count > 1) {
+                    const startTime = i * bucketSize;
+                    if (currentRange && currentRange.count === count && currentRange.end === startTime) {
+                        currentRange.end = (i + 1) * bucketSize;
+                    } else {
+                        if (currentRange) ranges.push(currentRange);
+                        currentRange = { start: startTime, end: (i + 1) * bucketSize, count: count };
+                    }
+                } else {
+                    if (currentRange) ranges.push(currentRange);
+                    currentRange = null;
+                }
+            }
+            if (currentRange) ranges.push(currentRange);
+            if (ranges.length > 0) results[day] = ranges;
+        }
+        return results;
+    };
+
+    const bestTimes = calculateBestTimes();
+    const daysWithSlots = Object.keys(bestTimes);
+
+    if (activeMembers.length < 2 || daysWithSlots.length === 0) {
+        return <p className="text-slate-500 dark:text-slate-400 text-sm">Waiting for more players to submit their availability...</p>;
+    }
+
+    return (
+        <div className="space-y-4">
+            {daysWithSlots.map(day => (
+                <div key={day}>
+                    <h4 className="font-semibold text-slate-800 dark:text-slate-200 mb-2">{day}</h4>
+                    <div className="space-y-2">
+                        {bestTimes[day]
+                            .sort((a, b) => b.count - a.count)
+                            .map((slot, i) => {
+                                const slotId = `${day}-${slot.start}-${slot.end}`;
+                                const status = postingStatus[slotId] || 'idle';
+                                return (
+                                    <div key={i} className={`p-2 rounded-md border ${slot.count === activeMembers.length ? 'bg-emerald-100 border-emerald-300 dark:bg-emerald-900/50 dark:border-emerald-700' : 'bg-slate-50 border-slate-200 dark:bg-slate-700/50 dark:border-slate-600'}`}>
+                                        <div className="flex justify-between items-center text-sm">
+                                            <span className="font-medium text-slate-700 dark:text-slate-300">
+                                                {minutesToTime(slot.start)} – {minutesToTime(slot.end)}
+                                            </span>
+                                            <div className="flex items-center gap-2">
+                                                <span className={`font-bold px-2 py-1 rounded-full text-xs ${slot.count === activeMembers.length ? 'bg-emerald-500 text-white' : 'bg-slate-300 text-slate-800 dark:bg-slate-600 dark:text-slate-200'}`}>
+                                                    {slot.count} / {activeMembers.length} players
+                                                </span>
+                                                <button
+                                                    onClick={() => handlePost(day, slot)}
+                                                    disabled={status !== 'idle'}
+                                                    className={`w-24 text-center text-xs font-semibold py-1 px-2 rounded-md transition-all ${status === 'idle' ? 'bg-blue-500 hover:bg-blue-600 text-white' : ''
+                                                        } ${status === 'posting' ? 'bg-slate-400 text-white' : ''
+                                                        } ${status === 'success' ? 'bg-emerald-500 text-white' : ''
+                                                        }`}
+                                                >
+                                                    {status === 'idle' && 'Post to Discord'}
+                                                    {status === 'posting' && 'Posting...'}
+                                                    {status === 'success' && 'Posted!'}
+                                                </button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                )
+                            })
+                        }
+                    </div>
+                </div>
+            ))}
+        </div>
+    );
+}
+
+function AvailabilityGrid({ day, members, availabilities }) {
+    const timeSlots = [];
+    const gridStartHour = 12;
+    const gridEndHour = 24;
+
+    for (let hour = gridStartHour; hour < gridEndHour; hour++) {
+        timeSlots.push(`${String(hour).padStart(2, '0')}:00`);
+        timeSlots.push(`${String(hour).padStart(2, '0')}:30`);
+    }
+
+    function isMemberAvailable(member, time) {
+        const memberSlots = availabilities[member]?.filter(slot => slot.day === day) || [];
+        const minutes = timeToMinutes(time);
+        for (const slot of memberSlots) {
+            const startMinutes = timeToMinutes(slot.start);
+            let endMinutes = timeToMinutes(slot.end);
+            if (endMinutes === 0) endMinutes = 1440;
+
+            if (startMinutes < endMinutes) {
+                if (minutes >= startMinutes && minutes < endMinutes) return true;
+            } else {
+                if (minutes >= startMinutes || minutes < endMinutes) return true;
+            }
+        }
+        return false;
+    }
+
+    return (
+        <div className="overflow-x-auto rounded-lg">
+            <table className="min-w-full border-collapse text-center text-xs">
+                <thead>
+                    <tr className="bg-slate-200 dark:bg-slate-700">
+                        <th className="border-b border-slate-300 dark:border-slate-600 p-2 font-semibold text-slate-800 dark:text-slate-200 text-left">Member</th>
+                        {timeSlots.map(time => (
+                            <th key={time} className="border-b border-slate-300 dark:border-slate-600 p-2 font-semibold min-w-[3rem] text-slate-800 dark:text-slate-200">{time}</th>
+                        ))}
+                    </tr>
+                </thead>
+                <tbody>
+                    {members.map(member => (
+                        <tr key={member} className="border-b border-slate-200 dark:border-slate-700">
+                            <td className="p-2 font-semibold bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-200 text-left sticky left-0">{member}</td>
+                            {timeSlots.map(time => (
+                                <td
+                                    key={`${member}-${time}`}
+                                    className={`${isMemberAvailable(member, time) ? 'bg-emerald-500' : 'bg-rose-500'}`}
+                                    title={`${member} - ${time} - ${isMemberAvailable(member, time) ? 'Available' : 'Unavailable'}`}
+                                >
+                                    &nbsp;
+                                </td>
+                            ))}
+                        </tr>
+                    ))}
+                </tbody>
+            </table>
+        </div>
+    );
+}
 
 function NextSteps() {
     return (
@@ -132,7 +334,6 @@ export default function App() {
     const [saveStatus, setSaveStatus] = React.useState('idle');
     const [userTimezone, setUserTimezone] = React.useState(Intl.DateTimeFormat().resolvedOptions().timeZone);
     const [authLoading, setAuthLoading] = React.useState(true);
-    // --- NEW: Modal State ---
     const [isModalOpen, setIsModalOpen] = React.useState(false);
     const [modalContent, setModalContent] = React.useState({ title: '', message: '', onConfirm: () => { } });
 
@@ -195,7 +396,6 @@ export default function App() {
         localStorage.setItem('timezone', tz);
     };
 
-    // --- NEW: Modal helper function ---
     const openModal = (title, message, onConfirm) => {
         setModalContent({ title, message, onConfirm });
         setIsModalOpen(true);
