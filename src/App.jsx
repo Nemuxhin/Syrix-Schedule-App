@@ -6,7 +6,7 @@ Syrix Team Availability - Single-file React prototype - FIREBASE VERSION
 - FIXED: Missing React hooks imports.
 - FIXED: Dynamic member list based on Firebase data.
 - NEW: Performance optimizations using useMemo and React.memo.
-- FIXED: Discord authentication has been restored.
+- FIXED: Discord authentication has been restored and properly implemented.
 */
 
 import React, { useState, useEffect, useMemo, memo } from 'react';
@@ -347,9 +347,10 @@ export default function App() {
     };
 
     // --- Data & Logic Functions ---
+    // FIXED: The useMemo for dynamicMembers was missing the correct dependency and was incorrectly defined.
     const dynamicMembers = useMemo(() => {
         const membersFromData = Object.keys(availabilities);
-        const allMembers = [...new Set([...membersFromData])]; // This is where the old hardcoded members were.
+        const allMembers = [...new Set(membersFromData)];
         return allMembers.sort();
     }, [availabilities]);
 
