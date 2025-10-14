@@ -2,7 +2,7 @@
 Syrix Team Availability - Single-file React prototype - FIREBASE VERSION
 - This version uses a real-time Firebase Firestore backend instead of localStorage.
 - Data is now shared between all users in real-time.
-- UPDATE: Fixed authentication redirect loop by adding a loading state and getRedirectResult.
+- UPDATE: The member list is now fully dynamic and based on signed-in users.
 */
 
 import React from 'react';
@@ -309,6 +309,7 @@ function LoginScreen({ signIn }) {
     );
 }
 
+// ADDED: LoadingScreen component definition
 function LoadingScreen() {
     return (
         <div className="min-h-screen bg-slate-100 dark:bg-slate-900 flex items-center justify-center">
@@ -338,14 +339,11 @@ export default function App() {
             setAuthLoading(false);
         });
 
-        // --- NEW: Handle the redirect result ---
         getRedirectResult(auth)
             .then((result) => {
                 if (result) {
-                    // This means the user has just signed in.
-                    // onAuthStateChanged will handle setting the user.
-                } else {
-                    // User is not coming from a redirect.
+                    // This will be handled by onAuthStateChanged
+                } else if (auth.currentUser === null) {
                     setAuthLoading(false);
                 }
             })
