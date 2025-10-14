@@ -339,7 +339,7 @@ export default function App() {
     }, []);
 
     const signIn = async () => {
-        const provider = new OAuthProvider('oidc.Discord');
+        const provider = new OAuthProvider('oidc.discord');
         // --- ADDED: Request necessary permissions from Discord ---
         provider.addScope('identify');
         provider.addScope('email');
