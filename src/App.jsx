@@ -2,13 +2,13 @@
 Syrix Team Availability - Single-file React prototype - FIREBASE VERSION
 - This version uses a real-time Firebase Firestore backend instead of localStorage.
 - Data is now shared between all users in real-time.
-- UPDATE: Fixed authentication redirect loop by adding a loading state.
+- UPDATE: Fixed authentication redirect loop by adding a loading state and getRedirectResult.
 */
 
 import React from 'react';
 import { initializeApp } from 'firebase/app';
 import { getFirestore, collection, onSnapshot, doc, setDoc, deleteDoc } from 'firebase/firestore';
-import { getAuth, onAuthStateChanged, signInWithRedirect, signOut, OAuthProvider } from 'firebase/auth';
+import { getAuth, onAuthStateChanged, signInWithRedirect, signOut, OAuthProvider, getRedirectResult } from 'firebase/auth';
 
 // --- Firebase Configuration ---
 const firebaseConfig = {
@@ -309,7 +309,6 @@ function LoginScreen({ signIn }) {
     );
 }
 
-// --- NEW: Loading Screen Component ---
 function LoadingScreen() {
     return (
         <div className="min-h-screen bg-slate-100 dark:bg-slate-900 flex items-center justify-center">
@@ -331,14 +330,30 @@ export default function App() {
     const [isDarkMode, setIsDarkMode] = React.useState(false);
     const [saveStatus, setSaveStatus] = React.useState('idle');
     const [userTimezone, setUserTimezone] = React.useState(Intl.DateTimeFormat().resolvedOptions().timeZone);
-    // --- NEW: Auth loading state ---
     const [authLoading, setAuthLoading] = React.useState(true);
 
     React.useEffect(() => {
         const unsubscribe = onAuthStateChanged(auth, user => {
             setCurrentUser(user);
-            setAuthLoading(false); // Auth state is now known
+            setAuthLoading(false);
         });
+
+        // --- NEW: Handle the redirect result ---
+        getRedirectResult(auth)
+            .then((result) => {
+                if (result) {
+                    // This means the user has just signed in.
+                    // onAuthStateChanged will handle setting the user.
+                } else {
+                    // User is not coming from a redirect.
+                    setAuthLoading(false);
+                }
+            })
+            .catch(error => {
+                console.error("Error getting redirect result:", error);
+                setAuthLoading(false);
+            });
+
         return unsubscribe;
     }, []);
 
@@ -357,7 +372,6 @@ export default function App() {
         await signOut(auth);
     };
 
-    // --- UPDATED: The member list is now fully dynamic from the database ---
     const dynamicMembers = React.useMemo(() => {
         return Object.keys(availabilities).sort();
     }, [availabilities]);
@@ -481,7 +495,6 @@ export default function App() {
         return converted;
     }, [availabilities, userTimezone]);
 
-    // --- NEW: Handle loading state ---
     if (authLoading) {
         return <LoadingScreen />;
     }
