@@ -2,7 +2,7 @@
 Syrix Team Availability - Single-file React prototype - FIREBASE VERSION
 - This version uses a real-time Firebase Firestore backend instead of localStorage.
 - Data is now shared between all users in real-time.
-- UPDATE: The member list is now fully dynamic and based on signed-in users.
+- UPDATE: Fixed authentication redirect loop by adding a loading state.
 */
 
 import React from 'react';
@@ -309,6 +309,19 @@ function LoginScreen({ signIn }) {
     );
 }
 
+// --- NEW: Loading Screen Component ---
+function LoadingScreen() {
+    return (
+        <div className="min-h-screen bg-slate-100 dark:bg-slate-900 flex items-center justify-center">
+            <svg className="animate-spin h-8 w-8 text-blue-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+            </svg>
+        </div>
+    );
+}
+
+
 export default function App() {
     const [currentUser, setCurrentUser] = React.useState(null);
     const [availabilities, setAvailabilities] = React.useState({});
@@ -318,16 +331,19 @@ export default function App() {
     const [isDarkMode, setIsDarkMode] = React.useState(false);
     const [saveStatus, setSaveStatus] = React.useState('idle');
     const [userTimezone, setUserTimezone] = React.useState(Intl.DateTimeFormat().resolvedOptions().timeZone);
+    // --- NEW: Auth loading state ---
+    const [authLoading, setAuthLoading] = React.useState(true);
 
     React.useEffect(() => {
         const unsubscribe = onAuthStateChanged(auth, user => {
             setCurrentUser(user);
+            setAuthLoading(false); // Auth state is now known
         });
         return unsubscribe;
     }, []);
 
     const signIn = async () => {
-        const provider = new OAuthProvider('oidc.discord');
+        const provider = new OAuthProvider('oidc.Discord');
         provider.addScope('identify');
         provider.addScope('email');
         try {
@@ -464,6 +480,11 @@ export default function App() {
         }
         return converted;
     }, [availabilities, userTimezone]);
+
+    // --- NEW: Handle loading state ---
+    if (authLoading) {
+        return <LoadingScreen />;
+    }
 
     if (!currentUser) {
         return <LoginScreen signIn={signIn} />;
