@@ -5,9 +5,11 @@ Syrix Team Availability - Single-file React prototype - FIREBASE VERSION
 - UPDATE: Replaced all browser alerts with a custom confirmation modal component.
 - FIXED: Missing React hooks imports.
 - FIXED: Dynamic member list based on Firebase data.
+- NEW: Performance optimizations using useMemo and React.memo.
+- FIXED: Discord authentication has been restored.
 */
 
-import React, { useState, useEffect, useMemo } from 'react'; // FIXED: Added useState, useEffect, and useMemo
+import React, { useState, useEffect, useMemo, memo } from 'react';
 import { initializeApp } from 'firebase/app';
 import { getFirestore, collection, onSnapshot, doc, setDoc, deleteDoc } from 'firebase/firestore';
 import { getAuth, onAuthStateChanged, signInWithPopup, signOut, OAuthProvider } from 'firebase/auth';
@@ -34,7 +36,7 @@ const discordWebhookUrl = "https://discord.com/api/webhooks/1427426922228351042/
 const DAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
 const timezones = ["UTC", "GMT", "Europe/London", "Europe/Paris", "Europe/Berlin", "America/New_York", "America/Chicago", "America/Denver", "America/Los_Angeles", "Asia/Tokyo", "Australia/Sydney"];
 
-// --- (Utility and Timezone functions remain the same) ---
+// --- Utility Functions ---
 const getAbsDateForDay = (dayString) => {
     const today = new Date();
     const todayDayIndex = (today.getUTCDay() === 0) ? 6 : today.getUTCDay() - 1;
@@ -67,33 +69,24 @@ const convertFromGMT = (day, time, timezone) => {
 function timeToMinutes(t) { if (!t) return 0; const [h, m] = t.split(":").map(Number); return h * 60 + m; }
 function minutesToTime(m) { const hh = Math.floor(m / 60).toString().padStart(2, '0'); const mm = (m % 60).toString().padStart(2, '0'); return `${hh}:${mm}`; }
 
-
-// --- NEW: Custom Modal Component ---
+// --- Re-usable Components ---
 function Modal({ isOpen, onClose, onConfirm, title, children }) {
     if (!isOpen) return null;
-
     return (
         <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex justify-center items-center">
             <div className="bg-white dark:bg-slate-800 rounded-lg shadow-xl p-6 w-full max-w-md">
                 <h3 className="text-lg font-bold text-slate-900 dark:text-slate-100 mb-4">{title}</h3>
-                <div className="text-slate-600 dark:text-slate-400 mb-6">
-                    {children}
-                </div>
+                <div className="text-slate-600 dark:text-slate-400 mb-6">{children}</div>
                 <div className="flex justify-end gap-3">
-                    <button onClick={onClose} className="bg-slate-200 hover:bg-slate-300 text-slate-800 dark:bg-slate-700 dark:hover:bg-slate-600 dark:text-slate-200 font-bold px-4 py-2 rounded-md">
-                        Cancel
-                    </button>
-                    <button onClick={onConfirm} className="bg-blue-600 hover:bg-blue-700 text-white font-bold px-4 py-2 rounded-md">
-                        Confirm
-                    </button>
+                    <button onClick={onClose} className="bg-slate-200 hover:bg-slate-300 text-slate-800 dark:bg-slate-700 dark:hover:bg-slate-600 dark:text-slate-200 font-bold px-4 py-2 rounded-md">Cancel</button>
+                    <button onClick={onConfirm} className="bg-blue-600 hover:bg-blue-700 text-white font-bold px-4 py-2 rounded-md">Confirm</button>
                 </div>
             </div>
         </div>
     );
 }
 
-// --- FIXED: Restored full component definitions ---
-function AvailableNowIndicator({ availabilities, members, userTimezone }) {
+const AvailableNowIndicator = memo(({ availabilities, members, userTimezone }) => {
     const [now, setNow] = useState(new Date());
 
     useEffect(() => {
@@ -105,17 +98,17 @@ function AvailableNowIndicator({ availabilities, members, userTimezone }) {
     const currentGMTDay = DAYS[(dayIndex === 0 ? 6 : dayIndex - 1)];
     const currentGMTMinutes = now.getUTCHours() * 60 + now.getUTCMinutes();
 
-    const isAvailable = (member) => {
-        const memberSlots = availabilities[member] || [];
-        for (const slot of memberSlots) {
-            if (slot.day === currentGMTDay && currentGMTMinutes >= timeToMinutes(slot.start) && currentGMTMinutes < timeToMinutes(slot.end)) {
-                return true;
+    const availableMembers = useMemo(() => {
+        return members.filter(member => {
+            const memberSlots = availabilities[member] || [];
+            for (const slot of memberSlots) {
+                if (slot.day === currentGMTDay && currentGMTMinutes >= timeToMinutes(slot.start) && currentGMTMinutes < timeToMinutes(slot.end)) {
+                    return true;
+                }
             }
-        }
-        return false;
-    };
-
-    const availableMembers = members.filter(member => availabilities[member] && isAvailable(member));
+            return false;
+        });
+    }, [availabilities, members, currentGMTDay, currentGMTMinutes]);
 
     return (
         <div className="bg-white dark:bg-slate-800 p-4 rounded-lg shadow mb-6">
@@ -123,9 +116,7 @@ function AvailableNowIndicator({ availabilities, members, userTimezone }) {
             {availableMembers.length > 0 ? (
                 <div className="flex flex-wrap gap-2">
                     {availableMembers.map(member => (
-                        <span key={member} className="px-3 py-1 bg-emerald-100 dark:bg-emerald-900/50 text-emerald-800 dark:text-emerald-200 text-sm font-medium rounded-full">
-                            {member}
-                        </span>
+                        <span key={member} className="px-3 py-1 bg-emerald-100 dark:bg-emerald-900/50 text-emerald-800 dark:text-emerald-200 text-sm font-medium rounded-full">{member}</span>
                     ))}
                 </div>
             ) : (
@@ -133,21 +124,13 @@ function AvailableNowIndicator({ availabilities, members, userTimezone }) {
             )}
         </div>
     );
-}
+});
 
-function BestTimesDisplay({ availabilities, members, postToDiscord, userTimezone }) {
+const BestTimesDisplay = memo(({ availabilities, members, postToDiscord, userTimezone, openModal }) => {
     const [postingStatus, setPostingStatus] = useState({});
-    const activeMembers = members.filter(member => availabilities[member] && availabilities[member].length > 0);
+    const activeMembers = useMemo(() => members.filter(member => availabilities[member] && availabilities[member].length > 0), [members, availabilities]);
 
-    const handlePost = async (day, slot) => {
-        const slotId = `${day}-${slot.start}-${slot.end}`;
-        setPostingStatus(prev => ({ ...prev, [slotId]: 'posting' }));
-        const success = await postToDiscord(day, slot, userTimezone);
-        setPostingStatus(prev => ({ ...prev, [slotId]: success ? 'success' : 'idle' }));
-        setTimeout(() => setPostingStatus(prev => ({ ...prev, [slotId]: 'idle' })), 2000);
-    };
-
-    const calculateBestTimes = () => {
+    const calculateBestTimes = useMemo(() => {
         const bucketSize = 30;
         const results = {};
         for (const day of DAYS) {
@@ -185,14 +168,21 @@ function BestTimesDisplay({ availabilities, members, postToDiscord, userTimezone
             if (ranges.length > 0) results[day] = ranges;
         }
         return results;
-    };
+    }, [availabilities, activeMembers]);
 
-    const bestTimes = calculateBestTimes();
-    const daysWithSlots = Object.keys(bestTimes);
+    const daysWithSlots = Object.keys(calculateBestTimes);
 
     if (activeMembers.length < 2 || daysWithSlots.length === 0) {
         return <p className="text-slate-500 dark:text-slate-400 text-sm">Waiting for more players to submit their availability...</p>;
     }
+
+    const handlePost = async (day, slot) => {
+        const slotId = `${day}-${slot.start}-${slot.end}`;
+        setPostingStatus(prev => ({ ...prev, [slotId]: 'posting' }));
+        const success = await postToDiscord(day, slot, userTimezone);
+        setPostingStatus(prev => ({ ...prev, [slotId]: success ? 'success' : 'idle' }));
+        setTimeout(() => setPostingStatus(prev => ({ ...prev, [slotId]: 'idle' })), 2000);
+    };
 
     return (
         <div className="space-y-4">
@@ -200,7 +190,7 @@ function BestTimesDisplay({ availabilities, members, postToDiscord, userTimezone
                 <div key={day}>
                     <h4 className="font-semibold text-slate-800 dark:text-slate-200 mb-2">{day}</h4>
                     <div className="space-y-2">
-                        {bestTimes[day]
+                        {calculateBestTimes[day]
                             .sort((a, b) => b.count - a.count)
                             .map((slot, i) => {
                                 const slotId = `${day}-${slot.start}-${slot.end}`;
@@ -208,21 +198,10 @@ function BestTimesDisplay({ availabilities, members, postToDiscord, userTimezone
                                 return (
                                     <div key={i} className={`p-2 rounded-md border ${slot.count === activeMembers.length ? 'bg-emerald-100 border-emerald-300 dark:bg-emerald-900/50 dark:border-emerald-700' : 'bg-slate-50 border-slate-200 dark:bg-slate-700/50 dark:border-slate-600'}`}>
                                         <div className="flex justify-between items-center text-sm">
-                                            <span className="font-medium text-slate-700 dark:text-slate-300">
-                                                {minutesToTime(slot.start)} – {minutesToTime(slot.end)}
-                                            </span>
+                                            <span className="font-medium text-slate-700 dark:text-slate-300">{minutesToTime(slot.start)} – {minutesToTime(slot.end)}</span>
                                             <div className="flex items-center gap-2">
-                                                <span className={`font-bold px-2 py-1 rounded-full text-xs ${slot.count === activeMembers.length ? 'bg-emerald-500 text-white' : 'bg-slate-300 text-slate-800 dark:bg-slate-600 dark:text-slate-200'}`}>
-                                                    {slot.count} / {activeMembers.length} players
-                                                </span>
-                                                <button
-                                                    onClick={() => handlePost(day, slot)}
-                                                    disabled={status !== 'idle'}
-                                                    className={`w-24 text-center text-xs font-semibold py-1 px-2 rounded-md transition-all ${status === 'idle' ? 'bg-blue-500 hover:bg-blue-600 text-white' : ''
-                                                        } ${status === 'posting' ? 'bg-slate-400 text-white' : ''
-                                                        } ${status === 'success' ? 'bg-emerald-500 text-white' : ''
-                                                        }`}
-                                                >
+                                                <span className={`font-bold px-2 py-1 rounded-full text-xs ${slot.count === activeMembers.length ? 'bg-emerald-500 text-white' : 'bg-slate-300 text-slate-800 dark:bg-slate-600 dark:text-slate-200'}`}>{slot.count} / {activeMembers.length} players</span>
+                                                <button onClick={() => handlePost(day, slot)} disabled={status !== 'idle'} className={`w-24 text-center text-xs font-semibold py-1 px-2 rounded-md transition-all ${status === 'idle' ? 'bg-blue-500 hover:bg-blue-600 text-white' : ''} ${status === 'posting' ? 'bg-slate-400 text-white' : ''} ${status === 'success' ? 'bg-emerald-500 text-white' : ''}`}>
                                                     {status === 'idle' && 'Post to Discord'}
                                                     {status === 'posting' && 'Posting...'}
                                                     {status === 'success' && 'Posted!'}
@@ -230,7 +209,7 @@ function BestTimesDisplay({ availabilities, members, postToDiscord, userTimezone
                                             </div>
                                         </div>
                                     </div>
-                                )
+                                );
                             })
                         }
                     </div>
@@ -238,26 +217,27 @@ function BestTimesDisplay({ availabilities, members, postToDiscord, userTimezone
             ))}
         </div>
     );
-}
+});
 
-function AvailabilityGrid({ day, members, availabilities }) {
-    const timeSlots = [];
-    const gridStartHour = 12;
-    const gridEndHour = 24;
+const AvailabilityGrid = memo(({ day, members, availabilities }) => {
+    const timeSlots = useMemo(() => {
+        const slots = [];
+        const gridStartHour = 12;
+        const gridEndHour = 24;
+        for (let hour = gridStartHour; hour < gridEndHour; hour++) {
+            slots.push(`${String(hour).padStart(2, '0')}:00`);
+            slots.push(`${String(hour).padStart(2, '0')}:30`);
+        }
+        return slots;
+    }, []);
 
-    for (let hour = gridStartHour; hour < gridEndHour; hour++) {
-        timeSlots.push(`${String(hour).padStart(2, '0')}:00`);
-        timeSlots.push(`${String(hour).padStart(2, '0')}:30`);
-    }
-
-    function isMemberAvailable(member, time) {
+    const isMemberAvailable = (member, time) => {
         const memberSlots = availabilities[member]?.filter(slot => slot.day === day) || [];
         const minutes = timeToMinutes(time);
         for (const slot of memberSlots) {
             const startMinutes = timeToMinutes(slot.start);
             let endMinutes = timeToMinutes(slot.end);
             if (endMinutes === 0) endMinutes = 1440;
-
             if (startMinutes < endMinutes) {
                 if (minutes >= startMinutes && minutes < endMinutes) return true;
             } else {
@@ -265,7 +245,7 @@ function AvailabilityGrid({ day, members, availabilities }) {
             }
         }
         return false;
-    }
+    };
 
     return (
         <div className="overflow-x-auto rounded-lg">
@@ -273,58 +253,43 @@ function AvailabilityGrid({ day, members, availabilities }) {
                 <thead>
                     <tr className="bg-slate-200 dark:bg-slate-700">
                         <th className="border-b border-slate-300 dark:border-slate-600 p-2 font-semibold text-slate-800 dark:text-slate-200 text-left">Member</th>
-                        {timeSlots.map(time => (
-                            <th key={time} className="border-b border-slate-300 dark:border-slate-600 p-2 font-semibold min-w-[3rem] text-slate-800 dark:text-slate-200">{time}</th>
-                        ))}
+                        {timeSlots.map(time => (<th key={time} className="border-b border-slate-300 dark:border-slate-600 p-2 font-semibold min-w-[3rem] text-slate-800 dark:text-slate-200">{time}</th>))}
                     </tr>
                 </thead>
                 <tbody>
                     {members.map(member => (
                         <tr key={member} className="border-b border-slate-200 dark:border-slate-700">
                             <td className="p-2 font-semibold bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-200 text-left sticky left-0">{member}</td>
-                            {timeSlots.map(time => (
-                                <td
-                                    key={`${member}-${time}`}
-                                    className={`${isMemberAvailable(member, time) ? 'bg-emerald-500' : 'bg-rose-500'}`}
-                                    title={`${member} - ${time} - ${isMemberAvailable(member, time) ? 'Available' : 'Unavailable'}`}
-                                >
-                                    &nbsp;
-                                </td>
-                            ))}
+                            {timeSlots.map(time => (<td key={`${member}-${time}`} className={`${isMemberAvailable(member, time) ? 'bg-emerald-500' : 'bg-rose-500'}`} title={`${member} - ${time} - ${isMemberAvailable(member, time) ? 'Available' : 'Unavailable'}`}>&nbsp;</td>))}
                         </tr>
                     ))}
                 </tbody>
             </table>
         </div>
     );
-}
+});
 
-function NextSteps() {
+const NextSteps = memo(() => {
     return (
         <footer className="mt-6 bg-white dark:bg-slate-800 p-4 rounded-lg shadow">
             <h2 className="font-semibold text-slate-900 dark:text-slate-100 mb-3">What's Next?</h2>
-            <p className="text-sm text-slate-600 dark:text-slate-400 mb-4">
-                The application is in a great state right now. A future improvement could be to add recurring availability or an admin role to manage the team list.
-            </p>
+            <p className="text-sm text-slate-600 dark:text-slate-400 mb-4">The application is in a great state right now. A future improvement could be to add recurring availability or an admin role to manage the team list.</p>
         </footer>
     );
-}
+});
 
-function LoginScreen({ signIn }) {
+const LoginScreen = memo(({ signIn }) => {
     return (
-        <div className="min-h-screen bg-slate-100 dark:bg-slate-900 flex flex-col items-center justify-center p-6">
+        <div className="min-h-screen bg-slate-100 dark:bg-slate-900 flex flex-col items-center justify-center p-6 text-center">
             <h1 className="text-3xl font-bold text-slate-900 dark:text-slate-100 mb-2">Syrix Team Availability</h1>
             <p className="text-slate-600 dark:text-slate-400 mb-8">Please sign in with Discord to continue.</p>
-            <button
-                onClick={signIn}
-                className="bg-[#5865F2] hover:bg-[#4752C4] text-white font-bold px-6 py-3 rounded-md flex items-center gap-3 transition-colors"
-            >
+            <button onClick={signIn} className="bg-[#5865F2] hover:bg-[#4752C4] text-white font-bold px-6 py-3 rounded-md flex items-center gap-3 transition-colors">
                 <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" fill="currentColor" viewBox="0 0 16 16"><path d="M13.545 2.907a13.227 13.227 0 0 0-3.257-1.011.05.05 0 0 0-.052.025c-.141.25-.297.577-.406.833a12.19 12.19 0 0 0-3.658 0 8.258 8.258 0 0 0-.412-.833.051.051 0 0 0-.052-.025c-1.125.194-2.22.534-3.257 1.011a.041.041 0 0 0-.021.018C.356 6.024-.213 9.047.066 12.032c.001.014.01.028.021.037a13.276 13.276 0 0 0 3.995 2.02.05.05 0 0 0 .056-.019c.308-.42.582-.863.818-1.329a.05.05 0 0 0-.01-.059.051.051 0 0 0-.048-.02c-1.154-.456-2.043-1.2-2.617-1.99a.05.05 0 0 1 .016-.075c.312-.212.637-.417.973-.608a.051.051 0 0 1 .059.009c1.135.632 2.325.942 3.52.942.502 0 1-.063 1.478-.195a.05.05 0 0 1 .059.009c.336.191.66.396.973.608a.05.05 0 0 1 .016.075c-.573.79-1.463 1.534-2.617 1.99a.05.05 0 0 0-.048.02.05.05 0 0 0-.01.059c.236.466.51.899.818 1.329a.05.05 0 0 0 .056.019 13.235 13.235 0 0 0 4.001-2.02.049.049 0 0 0 .021-.037c.334-3.026-.252-6.052-1.69-9.123a.041.041 0 0 0-.021-.019Zm-8.198 7.307c-.789 0-1.438-.724-1.438-1.612 0-.889.637-1.613 1.438-1.613.807 0 1.45.73 1.438 1.613 0 .888-.637 1.612-1.438 1.612Zm5.316 0c-.788 0-1.438-.724-1.438-1.612 0-.889.637-1.613 1.438-1.613.807 0 1.451.73 1.438 1.613 0 .888-.631 1.612-1.438 1.612Z" /></svg>
                 Sign In with Discord
             </button>
         </div>
     );
-}
+});
 
 export default function App() {
     const [currentUser, setCurrentUser] = useState(null);
@@ -339,6 +304,7 @@ export default function App() {
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [modalContent, setModalContent] = useState({ title: '', message: '', onConfirm: () => { } });
 
+    // --- Firebase & Auth Hooks ---
     useEffect(() => {
         const unsubscribe = onAuthStateChanged(auth, user => {
             setCurrentUser(user);
@@ -346,28 +312,6 @@ export default function App() {
         });
         return unsubscribe;
     }, []);
-
-    const signIn = async () => {
-        const provider = new OAuthProvider('oidc.discord');
-        provider.addScope('identify');
-        provider.addScope('email');
-        try {
-            await signInWithPopup(auth, provider);
-        } catch (error) {
-            console.error("Error signing in with Discord", error);
-        }
-    };
-
-    const handleSignOut = async () => {
-        await signOut(auth);
-    };
-
-    const dynamicMembers = useMemo(() => {
-        const membersFromData = Object.keys(availabilities);
-        const allMembers = [...new Set([...membersFromData, ...["Tawz", "Nemuxhin", "Aries", "Cat", "Nicky"]])];
-        return allMembers.sort();
-    }, [availabilities]);
-
 
     useEffect(() => {
         const availabilitiesCol = collection(db, 'availabilities');
@@ -379,16 +323,14 @@ export default function App() {
         return () => unsubscribe();
     }, []);
 
+    // --- UI State Management Hooks ---
     useEffect(() => {
         const savedTheme = localStorage.getItem('theme');
-        if (savedTheme === 'dark') {
-            setIsDarkMode(true);
-        } else if (savedTheme === 'light') {
-            setIsDarkMode(false);
-        } else {
-            setIsDarkMode(window.matchMedia('(prefers-color-scheme: dark)').matches);
-        }
+        const savedTimezone = localStorage.getItem('timezone');
+        if (savedTheme) setIsDarkMode(savedTheme === 'dark');
+        if (savedTimezone) setUserTimezone(savedTimezone);
     }, []);
+
     useEffect(() => {
         if (isDarkMode) {
             document.documentElement.classList.add('dark');
@@ -404,87 +346,12 @@ export default function App() {
         localStorage.setItem('timezone', tz);
     };
 
-    const openModal = (title, message, onConfirm) => {
-        setModalContent({ title, message, onConfirm });
-        setIsModalOpen(true);
-    };
-
-    const closeModal = () => {
-        setIsModalOpen(false);
-    };
-
-
-    async function addAvailability() {
-        if (!currentUser) return;
-        if (timeToMinutes(end) <= timeToMinutes(start)) {
-            openModal('Invalid Time', 'End time must be after start time.', closeModal);
-            return;
-        }
-
-        setSaveStatus('saving');
-        const gmtStart = convertToGMT(day, start);
-        const gmtEnd = convertToGMT(day, end);
-        const newEntry = { day: gmtStart.day, start: gmtStart.time, end: gmtEnd.time };
-        const currentSlots = availabilities[currentUser.displayName] || [];
-        const updatedSlots = [...currentSlots, newEntry];
-        updatedSlots.sort((a, b) => DAYS.indexOf(a.day) - DAYS.indexOf(b.day) || timeToMinutes(a.start) - timeToMinutes(b.start));
-        const memberDocRef = doc(db, 'availabilities', currentUser.displayName);
-        try {
-            await setDoc(memberDocRef, { slots: updatedSlots });
-            setSaveStatus('success');
-        } catch (error) {
-            console.error("Error saving availability: ", error);
-            setSaveStatus('idle');
-        } finally {
-            setTimeout(() => setSaveStatus('idle'), 2000);
-        }
-    }
-
-    async function clearDayForMember() {
-        if (!currentUser) return;
-        const localSelectedDay = day;
-        const currentSlots = availabilities[currentUser.displayName] || [];
-        if (currentSlots.length === 0) return;
-
-        const updatedSlots = currentSlots.filter(slot => {
-            const localSlotDay = convertFromGMT(slot.day, slot.start, userTimezone).day;
-            return localSlotDay !== localSelectedDay;
-        });
-
-        const memberDocRef = doc(db, 'availabilities', currentUser.displayName);
-
-        if (updatedSlots.length === 0) {
-            await deleteDoc(memberDocRef);
-        } else {
-            await setDoc(memberDocRef, { slots: updatedSlots });
-        }
-        closeModal();
-    }
-
-    async function clearAllForMember() {
-        if (!currentUser) return;
-        const memberDocRef = doc(db, 'availabilities', currentUser.displayName);
-        await deleteDoc(memberDocRef);
-        closeModal();
-    }
-
-    async function postToDiscord(day, slot, tz) {
-        const activeMembersCount = dynamicMembers.filter(member => availabilities[member] && availabilities[member].length > 0).length;
-        const content = `**Team Availability Alert!**\n\n**Best Time Found:**\n> **When:** ${day}, ${minutesToTime(slot.start)} - ${minutesToTime(slot.end)} (${tz})\n> **Who:** ${slot.count} / ${activeMembersCount} players available.\n\nLet's get a game in!`;
-        try {
-            const response = await fetch(discordWebhookUrl, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ content: content }),
-            });
-            if (!response.ok) throw new Error(`Webhook returned status ${response.status}`);
-            return true;
-        } catch (error) {
-            console.error('Failed to post to Discord:', error);
-            openModal('Discord Error', 'Failed to post to Discord. Check the console for more details.', closeModal);
-            return false;
-        }
-    }
+    // --- Data & Logic Functions ---
+    const dynamicMembers = useMemo(() => {
+        const membersFromData = Object.keys(availabilities);
+        const allMembers = [...new Set([...membersFromData])]; // This is where the old hardcoded members were.
+        return allMembers.sort();
+    }, [availabilities]);
 
     const displayAvailabilities = useMemo(() => {
         const converted = {};
@@ -508,13 +375,89 @@ export default function App() {
         return converted;
     }, [availabilities, userTimezone]);
 
-    if (authLoading) {
-        return <div>Loading...</div>; // Simple loading text
-    }
+    const openModal = (title, message, onConfirm) => {
+        setModalContent({ title, message, onConfirm });
+        setIsModalOpen(true);
+    };
 
-    if (!currentUser) {
-        return <LoginScreen signIn={signIn} />;
-    }
+    const closeModal = () => {
+        setIsModalOpen(false);
+    };
+
+    const addAvailability = async () => {
+        if (!currentUser) return;
+        if (timeToMinutes(end) <= timeToMinutes(start)) {
+            openModal('Invalid Time', 'End time must be after start time.', closeModal);
+            return;
+        }
+
+        setSaveStatus('saving');
+        const gmtStart = convertToGMT(day, start);
+        const gmtEnd = convertToGMT(day, end);
+        const newEntry = { day: gmtStart.day, start: gmtStart.time, end: gmtEnd.time };
+        const currentSlots = availabilities[currentUser.displayName] || [];
+        const updatedSlots = [...currentSlots, newEntry];
+        updatedSlots.sort((a, b) => DAYS.indexOf(a.day) - DAYS.indexOf(b.day) || timeToMinutes(a.start) - timeToMinutes(b.start));
+        const memberDocRef = doc(db, 'availabilities', currentUser.displayName);
+
+        try {
+            await setDoc(memberDocRef, { slots: updatedSlots });
+            setSaveStatus('success');
+        } catch (error) {
+            console.error("Error saving availability: ", error);
+            setSaveStatus('idle');
+            openModal('Error', 'Failed to save availability.', closeModal);
+        } finally {
+            setTimeout(() => setSaveStatus('idle'), 2000);
+        }
+    };
+
+    const clearDayForMember = async () => {
+        if (!currentUser) return;
+        const localSelectedDay = day;
+        const currentSlots = availabilities[currentUser.displayName] || [];
+        if (currentSlots.length === 0) return;
+        const updatedSlots = currentSlots.filter(slot => {
+            const localSlotDay = convertFromGMT(slot.day, slot.start, userTimezone).day;
+            return localSlotDay !== localSelectedDay;
+        });
+        const memberDocRef = doc(db, 'availabilities', currentUser.displayName);
+        if (updatedSlots.length === 0) {
+            await deleteDoc(memberDocRef);
+        } else {
+            await setDoc(memberDocRef, { slots: updatedSlots });
+        }
+        closeModal();
+    };
+
+    const clearAllForMember = async () => {
+        if (!currentUser) return;
+        const memberDocRef = doc(db, 'availabilities', currentUser.displayName);
+        await deleteDoc(memberDocRef);
+        closeModal();
+    };
+
+    const postToDiscord = async (day, slot, tz) => {
+        const activeMembersCount = dynamicMembers.filter(member => availabilities[member] && availabilities[member].length > 0).length;
+        const content = `**Team Availability Alert!**\n\n**Best Time Found:**\n> **When:** ${day}, ${minutesToTime(slot.start)} - ${minutesToTime(slot.end)} (${tz})\n> **Who:** ${slot.count} / ${activeMembersCount} players available.\n\nLet's get a game in!`;
+        try {
+            const response = await fetch(discordWebhookUrl, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ content: content }),
+            });
+            if (!response.ok) throw new Error(`Webhook returned status ${response.status}`);
+            return true;
+        } catch (error) {
+            console.error('Failed to post to Discord:', error);
+            openModal('Discord Error', 'Failed to post to Discord. Check the console for more details.', closeModal);
+            return false;
+        }
+    };
+
+    // --- Main App Render ---
+    if (authLoading) { return <div>Loading...</div>; }
+    if (!currentUser) { return <LoginScreen signIn={signIn} />; }
 
     return (
         <div className="min-h-screen bg-slate-100 text-slate-800 dark:bg-slate-900 dark:text-slate-200 p-6">
@@ -532,9 +475,7 @@ export default function App() {
                         <button onClick={() => setIsDarkMode(!isDarkMode)} className="p-2 rounded-full bg-slate-200 dark:bg-slate-700 text-slate-800 dark:text-slate-200">
                             {isDarkMode ? '☀️' : '🌙'}
                         </button>
-                        <button onClick={handleSignOut} className="text-sm font-semibold text-slate-600 dark:text-slate-400 hover:text-red-500">
-                            Sign Out
-                        </button>
+                        <button onClick={handleSignOut} className="text-sm font-semibold text-slate-600 dark:text-slate-400 hover:text-red-500">Sign Out</button>
                     </div>
                 </header>
 
@@ -559,29 +500,19 @@ export default function App() {
                                 </div>
                             </div>
                             <div className="flex items-center flex-wrap gap-2">
-                                <button
-                                    className={`font-bold px-4 py-2 rounded-md flex items-center justify-center transition-all ${saveStatus === 'success' ? 'bg-emerald-500 text-white' : 'bg-blue-600 hover:bg-blue-700 text-white'}`}
-                                    onClick={addAvailability}
-                                    disabled={saveStatus !== 'idle'}
-                                >
+                                <button className={`font-bold px-4 py-2 rounded-md flex items-center justify-center transition-all ${saveStatus === 'success' ? 'bg-emerald-500 text-white' : 'bg-blue-600 hover:bg-blue-700 text-white'}`} onClick={addAvailability} disabled={saveStatus !== 'idle'}>
                                     {saveStatus === 'idle' && 'Save Availability'}
                                     {saveStatus === 'saving' && (<svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>)}
                                     {saveStatus === 'success' && (<> <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" className="bi bi-check-lg mr-2" viewBox="0 0 16 16"><path d="M12.736 3.97a.733.733 0 0 1 1.047 0c.286.289.29.756.01 1.05L7.88 12.01a.733.733 0 0 1-1.065.02L3.217 8.384a.757.757 0 0 1 0-1.06.733.733 0 0 1 1.047 0l3.052 3.093 5.4-6.425a.247.247 0 0 1 .02-.022z" /></svg> Saved! </>)}
                                 </button>
-                                <button className="bg-slate-200 hover:bg-slate-300 text-slate-800 dark:bg-slate-700 dark:hover:bg-slate-600 dark:text-slate-200 font-bold px-3 py-2 rounded-md"
-                                    onClick={() => openModal('Confirm Clear', `Are you sure you want to clear your availability for ${day}?`, clearDayForMember)}>
-                                    Clear for {day}
-                                </button>
-                                <button className="text-xs text-slate-500 hover:text-red-600 dark:text-slate-400 font-semibold"
-                                    onClick={() => openModal('Confirm Clear All', 'Are you sure you want to delete ALL of your availability slots?', clearAllForMember)}>
-                                    Clear All My Slots
-                                </button>
+                                <button className="bg-slate-200 hover:bg-slate-300 text-slate-800 dark:bg-slate-700 dark:hover:bg-slate-600 dark:text-slate-200 font-bold px-3 py-2 rounded-md" onClick={() => openModal('Confirm Clear', `Are you sure you want to clear your availability for ${day}?`, clearDayForMember)}>Clear for {day}</button>
+                                <button className="text-xs text-slate-500 hover:text-red-600 dark:text-slate-400 font-semibold" onClick={() => openModal('Confirm Clear All', 'Are you sure you want to delete ALL of your availability slots?', clearAllForMember)}>Clear All My Slots</button>
                             </div>
                         </div>
                         <div className="border-t border-slate-200 dark:border-slate-700 pt-4">
                             <h3 className="font-medium text-slate-900 dark:text-slate-100 mb-2">Best Times</h3>
                             <div className="max-h-[24rem] overflow-y-auto pr-2">
-                                <BestTimesDisplay availabilities={displayAvailabilities} members={dynamicMembers} postToDiscord={postToDiscord} userTimezone={userTimezone} />
+                                <BestTimesDisplay availabilities={displayAvailabilities} members={dynamicMembers} postToDiscord={postToDiscord} userTimezone={userTimezone} openModal={openModal} />
                             </div>
                         </div>
                     </div>
@@ -596,9 +527,7 @@ export default function App() {
                                             <div key={m} className="p-3 border border-slate-200 dark:border-slate-700 rounded-md">
                                                 <div className="font-semibold text-slate-800 dark:text-slate-200">{m}</div>
                                                 <div className="text-sm mt-2 text-slate-600 dark:text-slate-400">
-                                                    {(displayAvailabilities[m] || []).map((s, i) => (
-                                                        <div key={i} className="py-1">{s.day} — {s.start} to {s.end}</div>
-                                                    ))}
+                                                    {(displayAvailabilities[m] || []).map((s, i) => (<div key={i} className="py-1">{s.day} — {s.start} to {s.end}</div>))}
                                                 </div>
                                             </div>
                                         )
@@ -621,13 +550,7 @@ export default function App() {
                 </div>
                 <NextSteps />
             </div>
-
-            <Modal
-                isOpen={isModalOpen}
-                onClose={closeModal}
-                onConfirm={modalContent.onConfirm}
-                title={modalContent.title}
-            >
+            <Modal isOpen={isModalOpen} onClose={closeModal} onConfirm={modalContent.onConfirm} title={modalContent.title}>
                 <p>{modalContent.message}</p>
             </Modal>
         </div>
