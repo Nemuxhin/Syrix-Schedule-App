@@ -3,9 +3,11 @@ Syrix Team Availability - Single-file React prototype - FIREBASE VERSION
 - This version uses a real-time Firebase Firestore backend instead of localStorage.
 - Data is now shared between all users in real-time.
 - UPDATE: Replaced all browser alerts with a custom confirmation modal component.
+- FIXED: Missing React hooks imports.
+- FIXED: Dynamic member list based on Firebase data.
 */
 
-import React from 'react';
+import React, { useState, useEffect, useMemo } from 'react'; // FIXED: Added useState, useEffect, and useMemo
 import { initializeApp } from 'firebase/app';
 import { getFirestore, collection, onSnapshot, doc, setDoc, deleteDoc } from 'firebase/firestore';
 import { getAuth, onAuthStateChanged, signInWithPopup, signOut, OAuthProvider } from 'firebase/auth';
@@ -92,9 +94,9 @@ function Modal({ isOpen, onClose, onConfirm, title, children }) {
 
 // --- FIXED: Restored full component definitions ---
 function AvailableNowIndicator({ availabilities, members, userTimezone }) {
-    const [now, setNow] = React.useState(new Date());
+    const [now, setNow] = useState(new Date());
 
-    React.useEffect(() => {
+    useEffect(() => {
         const timer = setInterval(() => setNow(new Date()), 60000);
         return () => clearInterval(timer);
     }, []);
@@ -134,7 +136,7 @@ function AvailableNowIndicator({ availabilities, members, userTimezone }) {
 }
 
 function BestTimesDisplay({ availabilities, members, postToDiscord, userTimezone }) {
-    const [postingStatus, setPostingStatus] = React.useState({});
+    const [postingStatus, setPostingStatus] = useState({});
     const activeMembers = members.filter(member => availabilities[member] && availabilities[member].length > 0);
 
     const handlePost = async (day, slot) => {
@@ -325,19 +327,19 @@ function LoginScreen({ signIn }) {
 }
 
 export default function App() {
-    const [currentUser, setCurrentUser] = React.useState(null);
-    const [availabilities, setAvailabilities] = React.useState({});
-    const [day, setDay] = React.useState(DAYS[0]);
-    const [start, setStart] = React.useState('12:00');
-    const [end, setEnd] = React.useState('23:30');
-    const [isDarkMode, setIsDarkMode] = React.useState(false);
-    const [saveStatus, setSaveStatus] = React.useState('idle');
-    const [userTimezone, setUserTimezone] = React.useState(Intl.DateTimeFormat().resolvedOptions().timeZone);
-    const [authLoading, setAuthLoading] = React.useState(true);
-    const [isModalOpen, setIsModalOpen] = React.useState(false);
-    const [modalContent, setModalContent] = React.useState({ title: '', message: '', onConfirm: () => { } });
+    const [currentUser, setCurrentUser] = useState(null);
+    const [availabilities, setAvailabilities] = useState({});
+    const [day, setDay] = useState(DAYS[0]);
+    const [start, setStart] = useState('12:00');
+    const [end, setEnd] = useState('23:30');
+    const [isDarkMode, setIsDarkMode] = useState(false);
+    const [saveStatus, setSaveStatus] = useState('idle');
+    const [userTimezone, setUserTimezone] = useState(Intl.DateTimeFormat().resolvedOptions().timeZone);
+    const [authLoading, setAuthLoading] = useState(true);
+    const [isModalOpen, setIsModalOpen] = useState(false);
+    const [modalContent, setModalContent] = useState({ title: '', message: '', onConfirm: () => { } });
 
-    React.useEffect(() => {
+    useEffect(() => {
         const unsubscribe = onAuthStateChanged(auth, user => {
             setCurrentUser(user);
             setAuthLoading(false);
@@ -360,12 +362,14 @@ export default function App() {
         await signOut(auth);
     };
 
-    const dynamicMembers = React.useMemo(() => {
-        return Object.keys(availabilities).sort();
+    const dynamicMembers = useMemo(() => {
+        const membersFromData = Object.keys(availabilities);
+        const allMembers = [...new Set([...membersFromData, ...["Tawz", "Nemuxhin", "Aries", "Cat", "Nicky"]])];
+        return allMembers.sort();
     }, [availabilities]);
 
 
-    React.useEffect(() => {
+    useEffect(() => {
         const availabilitiesCol = collection(db, 'availabilities');
         const unsubscribe = onSnapshot(availabilitiesCol, (snapshot) => {
             const newAvailabilities = {};
@@ -375,13 +379,17 @@ export default function App() {
         return () => unsubscribe();
     }, []);
 
-    React.useEffect(() => {
+    useEffect(() => {
         const savedTheme = localStorage.getItem('theme');
         if (savedTheme === 'dark') {
             setIsDarkMode(true);
+        } else if (savedTheme === 'light') {
+            setIsDarkMode(false);
+        } else {
+            setIsDarkMode(window.matchMedia('(prefers-color-scheme: dark)').matches);
         }
     }, []);
-    React.useEffect(() => {
+    useEffect(() => {
         if (isDarkMode) {
             document.documentElement.classList.add('dark');
             localStorage.setItem('theme', 'dark');
@@ -478,7 +486,7 @@ export default function App() {
         }
     }
 
-    const displayAvailabilities = React.useMemo(() => {
+    const displayAvailabilities = useMemo(() => {
         const converted = {};
         for (const member in availabilities) {
             converted[member] = [];
@@ -625,4 +633,3 @@ export default function App() {
         </div>
     );
 }
-
