@@ -339,8 +339,10 @@ export default function App() {
     }, []);
 
     const signIn = async () => {
-        // --- FIXED: Use the correct OIDC provider ID ---
         const provider = new OAuthProvider('oidc.Discord');
+        // --- ADDED: Request necessary permissions from Discord ---
+        provider.addScope('identify');
+        provider.addScope('email');
         try {
             await signInWithPopup(auth, provider);
         } catch (error) {
