@@ -2,15 +2,13 @@
 Syrix Team Availability - Single-file React prototype - FIREBASE VERSION
 - This version uses a real-time Firebase Firestore backend instead of localStorage.
 - Data is now shared between all users in real-time.
-- UPDATE: Added Discord Authentication. Users now sign in to manage their own availability.
+- UPDATE: The member list is now fully dynamic and based on signed-in users.
 */
 
 import React from 'react';
 import { initializeApp } from 'firebase/app';
 import { getFirestore, collection, onSnapshot, doc, setDoc, deleteDoc } from 'firebase/firestore';
-// --- NEW: Firebase Auth imports ---
 import { getAuth, onAuthStateChanged, signInWithPopup, signOut, OAuthProvider } from 'firebase/auth';
-
 
 // --- Firebase Configuration ---
 const firebaseConfig = {
@@ -31,16 +29,10 @@ const auth = getAuth(app);
 
 const discordWebhookUrl = "https://discord.com/api/webhooks/1427426922228351042/lqw36ZxOPEnC3qK45b3vnqZvbkaYhzIxqb-uS1tex6CGOvmLYs19OwKZvslOVABdpHnD";
 
-const DEFAULT_MEMBERS = ["Tawz", "Nemuxhin", "Aries", "Cat", "Nicky"];
 const DAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
+const timezones = ["UTC", "GMT", "Europe/London", "Europe/Paris", "Europe/Berlin", "America/New_York", "America/Chicago", "America/Denver", "America/Los_Angeles", "Asia/Tokyo", "Australia/Sydney"];
 
-const timezones = [
-    "UTC", "GMT", "Europe/London", "Europe/Paris", "Europe/Berlin",
-    "America/New_York", "America/Chicago", "America/Denver", "America/Los_Angeles",
-    "Asia/Tokyo", "Australia/Sydney"
-];
-
-// --- (Timezone helpers and other utility functions remain the same) ---
+// --- (Utility and Timezone functions remain the same) ---
 const getAbsDateForDay = (dayString) => {
     const today = new Date();
     const todayDayIndex = (today.getUTCDay() === 0) ? 6 : today.getUTCDay() - 1;
@@ -73,8 +65,7 @@ const convertFromGMT = (day, time, timezone) => {
 function timeToMinutes(t) { if (!t) return 0; const [h, m] = t.split(":").map(Number); return h * 60 + m; }
 function minutesToTime(m) { const hh = Math.floor(m / 60).toString().padStart(2, '0'); const mm = (m % 60).toString().padStart(2, '0'); return `${hh}:${mm}`; }
 
-
-// --- FIXED: Full component definitions restored ---
+// --- (Components are restored and complete) ---
 function AvailableNowIndicator({ availabilities, members, userTimezone }) {
     const [now, setNow] = React.useState(new Date());
 
@@ -302,7 +293,6 @@ function NextSteps() {
     );
 }
 
-// --- NEW: Login Screen Component ---
 function LoginScreen({ signIn }) {
     return (
         <div className="min-h-screen bg-slate-100 dark:bg-slate-900 flex flex-col items-center justify-center p-6">
@@ -319,7 +309,6 @@ function LoginScreen({ signIn }) {
     );
 }
 
-
 export default function App() {
     const [currentUser, setCurrentUser] = React.useState(null);
     const [availabilities, setAvailabilities] = React.useState({});
@@ -330,7 +319,6 @@ export default function App() {
     const [saveStatus, setSaveStatus] = React.useState('idle');
     const [userTimezone, setUserTimezone] = React.useState(Intl.DateTimeFormat().resolvedOptions().timeZone);
 
-    // --- AUTH LOGIC ---
     React.useEffect(() => {
         const unsubscribe = onAuthStateChanged(auth, user => {
             setCurrentUser(user);
@@ -339,8 +327,7 @@ export default function App() {
     }, []);
 
     const signIn = async () => {
-        const provider = new OAuthProvider('oidc.discord');
-        // --- ADDED: Request necessary permissions from Discord ---
+        const provider = new OAuthProvider('oidc.Discord');
         provider.addScope('identify');
         provider.addScope('email');
         try {
@@ -354,15 +341,12 @@ export default function App() {
         await signOut(auth);
     };
 
-    // --- Dynamic member list ---
+    // --- UPDATED: The member list is now fully dynamic from the database ---
     const dynamicMembers = React.useMemo(() => {
-        const membersFromDb = Object.keys(availabilities);
-        const combined = new Set([...DEFAULT_MEMBERS, ...membersFromDb]);
-        return Array.from(combined);
+        return Object.keys(availabilities).sort();
     }, [availabilities]);
 
 
-    // --- (Data fetching and other effects remain largely the same) ---
     React.useEffect(() => {
         const availabilitiesCol = collection(db, 'availabilities');
         const unsubscribe = onSnapshot(availabilitiesCol, (snapshot) => {
@@ -481,7 +465,6 @@ export default function App() {
         return converted;
     }, [availabilities, userTimezone]);
 
-    // Show login screen if no user
     if (!currentUser) {
         return <LoginScreen signIn={signIn} />;
     }
@@ -491,7 +474,6 @@ export default function App() {
             <div className="">
                 <header className="flex items-center justify-between mb-6 flex-wrap gap-4">
                     <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-100">Syrix — Team Availability</h1>
-                    {/* --- NEW: User profile and sign out button --- */}
                     <div className="flex items-center gap-4">
                         <div className="flex items-center gap-2">
                             <img src={currentUser.photoURL} alt={currentUser.displayName} className="w-8 h-8 rounded-full" />
@@ -514,7 +496,6 @@ export default function App() {
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                     <div className="bg-white dark:bg-slate-800 p-4 rounded-lg shadow space-y-6">
                         <div>
-                            {/* --- UPDATED: No more profile selector --- */}
                             <h2 className="font-semibold text-slate-900 dark:text-slate-100 mb-2">My Availability ({currentUser.displayName})</h2>
                             <label className="block text-sm font-medium text-slate-700 dark:text-slate-300">Day</label>
                             <select className="w-full p-2 border border-slate-300 dark:border-slate-600 rounded mb-3 text-slate-900 dark:text-slate-200 bg-white dark:bg-slate-700" value={day} onChange={e => setDay(e.target.value)}>
