@@ -5,9 +5,10 @@ Syrix Team Availability - Single-file React prototype - FIREBASE VERSION
 - UPDATE: Replaced all browser alerts with a custom confirmation modal component.
 - FIXED: Missing React hooks imports.
 - FIXED: Dynamic member list based on Firebase data.
+- NEW: Implemented Feature & UX Improvements as requested.
 */
 
-import React, { useState, useEffect, useMemo } from 'react'; // FIXED: Added useState, useEffect, and useMemo
+import React, { useState, useEffect, useMemo } from 'react';
 import { initializeApp } from 'firebase/app';
 import { getFirestore, collection, onSnapshot, doc, setDoc, deleteDoc } from 'firebase/firestore';
 import { getAuth, onAuthStateChanged, signInWithPopup, signOut, OAuthProvider } from 'firebase/auth';
@@ -34,7 +35,7 @@ const discordWebhookUrl = "https://discord.com/api/webhooks/1427426922228351042/
 const DAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
 const timezones = ["UTC", "GMT", "Europe/London", "Europe/Paris", "Europe/Berlin", "America/New_York", "America/Chicago", "America/Denver", "America/Los_Angeles", "Asia/Tokyo", "Australia/Sydney"];
 
-// --- (Utility and Timezone functions remain the same) ---
+// --- Utility and Timezone functions ---
 const getAbsDateForDay = (dayString) => {
     const today = new Date();
     const todayDayIndex = (today.getUTCDay() === 0) ? 6 : today.getUTCDay() - 1;
@@ -64,8 +65,8 @@ const convertFromGMT = (day, time, timezone) => {
     return { day: localDateParts.weekday, time: `${localDateParts.hour.replace('24', '00')}:${localDateParts.minute}` };
 };
 
-function timeToMinutes(t) { if (!t) return 0; const [h, m] = t.split(":").map(Number); return h * 60 + m; }
-function minutesToTime(m) { const hh = Math.floor(m / 60).toString().padStart(2, '0'); const mm = (m % 60).toString().padStart(2, '0'); return `${hh}:${mm}`; }
+function timeToMinutes(t) { if (!t || t === '24:00') return 1440; const [h, m] = t.split(":").map(Number); return h * 60 + m; }
+function minutesToTime(m) { const minutes = m % 1440; const hh = Math.floor(minutes / 60).toString().padStart(2, '0'); const mm = (minutes % 60).toString().padStart(2, '0'); return `${hh}:${mm}`; }
 
 
 // --- NEW: Custom Modal Component ---
@@ -92,7 +93,7 @@ function Modal({ isOpen, onClose, onConfirm, title, children }) {
     );
 }
 
-// --- FIXED: Restored full component definitions ---
+// --- Component definitions remain the same ---
 function AvailableNowIndicator({ availabilities, members, userTimezone }) {
     const [now, setNow] = useState(new Date());
 
@@ -151,6 +152,7 @@ function BestTimesDisplay({ availabilities, members, postToDiscord, userTimezone
         const bucketSize = 30;
         const results = {};
         for (const day of DAYS) {
+            // 24 hours * 60 minutes / 30 minute buckets = 48 buckets
             const buckets = new Array((24 * 60) / bucketSize).fill(0);
             for (const member of activeMembers) {
                 const memberSlots = availabilities[member]?.filter(slot => slot.day === day) || [];
@@ -158,7 +160,8 @@ function BestTimesDisplay({ availabilities, members, postToDiscord, userTimezone
                     const startMinute = timeToMinutes(slot.start);
                     const endMinute = timeToMinutes(slot.end);
                     const startBucket = Math.floor(startMinute / bucketSize);
-                    const endBucket = endMinute === 1440 ? 48 : Math.floor(endMinute / bucketSize);
+                    // Use Math.ceil for the end bucket, and ensure it doesn't exceed the array length
+                    const endBucket = Math.ceil(endMinute / bucketSize) > buckets.length ? buckets.length : Math.ceil(endMinute / bucketSize);
                     for (let i = startBucket; i < endBucket; i++) {
                         buckets[i]++;
                     }
@@ -206,28 +209,26 @@ function BestTimesDisplay({ availabilities, members, postToDiscord, userTimezone
                                 const slotId = `${day}-${slot.start}-${slot.end}`;
                                 const status = postingStatus[slotId] || 'idle';
                                 return (
-                                    <div key={i} className={`p-2 rounded-md border ${slot.count === activeMembers.length ? 'bg-emerald-100 border-emerald-300 dark:bg-emerald-900/50 dark:border-emerald-700' : 'bg-slate-50 border-slate-200 dark:bg-slate-700/50 dark:border-slate-600'}`}>
-                                        <div className="flex justify-between items-center text-sm">
-                                            <span className="font-medium text-slate-700 dark:text-slate-300">
-                                                {minutesToTime(slot.start)} – {minutesToTime(slot.end)}
+                                    <div key={i} className={`p-2 rounded-md border flex justify-between items-center ${slot.count === activeMembers.length ? 'bg-emerald-100 border-emerald-300 dark:bg-emerald-900/50 dark:border-emerald-700' : 'bg-slate-50 border-slate-200 dark:bg-slate-700/50 dark:border-slate-600'}`}>
+                                        <span className="font-medium text-slate-700 dark:text-slate-300 text-sm">
+                                            {minutesToTime(slot.start)} – {minutesToTime(slot.end)}
+                                        </span>
+                                        <div className="flex items-center gap-2">
+                                            <span className={`font-bold px-2 py-1 rounded-full text-xs ${slot.count === activeMembers.length ? 'bg-emerald-500 text-white' : 'bg-slate-300 text-slate-800 dark:bg-slate-600 dark:text-slate-200'}`}>
+                                                {slot.count} / {activeMembers.length} players
                                             </span>
-                                            <div className="flex items-center gap-2">
-                                                <span className={`font-bold px-2 py-1 rounded-full text-xs ${slot.count === activeMembers.length ? 'bg-emerald-500 text-white' : 'bg-slate-300 text-slate-800 dark:bg-slate-600 dark:text-slate-200'}`}>
-                                                    {slot.count} / {activeMembers.length} players
-                                                </span>
-                                                <button
-                                                    onClick={() => handlePost(day, slot)}
-                                                    disabled={status !== 'idle'}
-                                                    className={`w-24 text-center text-xs font-semibold py-1 px-2 rounded-md transition-all ${status === 'idle' ? 'bg-blue-500 hover:bg-blue-600 text-white' : ''
-                                                        } ${status === 'posting' ? 'bg-slate-400 text-white' : ''
-                                                        } ${status === 'success' ? 'bg-emerald-500 text-white' : ''
-                                                        }`}
-                                                >
-                                                    {status === 'idle' && 'Post to Discord'}
-                                                    {status === 'posting' && 'Posting...'}
-                                                    {status === 'success' && 'Posted!'}
-                                                </button>
-                                            </div>
+                                            <button
+                                                onClick={() => handlePost(day, slot)}
+                                                disabled={status !== 'idle'}
+                                                className={`w-24 text-center text-xs font-semibold py-1 px-2 rounded-md transition-all ${status === 'idle' ? 'bg-blue-500 hover:bg-blue-600 text-white' : ''
+                                                    } ${status === 'posting' ? 'bg-slate-400 text-white' : ''
+                                                    } ${status === 'success' ? 'bg-emerald-500 text-white' : ''
+                                                    }`}
+                                            >
+                                                {status === 'idle' && 'Post to Discord'}
+                                                {status === 'posting' && 'Posting...'}
+                                                {status === 'success' && 'Posted!'}
+                                            </button>
                                         </div>
                                     </div>
                                 )
@@ -240,61 +241,80 @@ function BestTimesDisplay({ availabilities, members, postToDiscord, userTimezone
     );
 }
 
+// --- NEW: AvailabilityGrid component with visual time bars ---
 function AvailabilityGrid({ day, members, availabilities }) {
-    const timeSlots = [];
-    const gridStartHour = 12;
-    const gridEndHour = 24;
+    // 1440 minutes in a day
+    const TOTAL_MINUTES = 24 * 60;
 
-    for (let hour = gridStartHour; hour < gridEndHour; hour++) {
-        timeSlots.push(`${String(hour).padStart(2, '0')}:00`);
-        timeSlots.push(`${String(hour).padStart(2, '0')}:30`);
+    // Filter members to only show those with availability on this specific day
+    const membersWithSlots = members.filter(member =>
+        (availabilities[member] || []).some(slot => slot.day === day)
+    );
+
+    // If no one has slots for this day, don't render a grid
+    if (membersWithSlots.length === 0) {
+        return <p className="text-sm text-slate-500 dark:text-slate-400 p-2">No availability submitted for this day.</p>;
     }
 
-    function isMemberAvailable(member, time) {
-        const memberSlots = availabilities[member]?.filter(slot => slot.day === day) || [];
-        const minutes = timeToMinutes(time);
-        for (const slot of memberSlots) {
-            const startMinutes = timeToMinutes(slot.start);
-            let endMinutes = timeToMinutes(slot.end);
-            if (endMinutes === 0) endMinutes = 1440;
-
-            if (startMinutes < endMinutes) {
-                if (minutes >= startMinutes && minutes < endMinutes) return true;
-            } else {
-                if (minutes >= startMinutes || minutes < endMinutes) return true;
-            }
-        }
-        return false;
+    // Grid header generation (every 4 hours)
+    const timeLabels = [];
+    for (let h = 0; h < 24; h += 4) {
+        timeLabels.push({
+            time: `${String(h).padStart(2, '0')}:00`,
+            percent: (h / 24) * 100
+        });
     }
 
     return (
-        <div className="overflow-x-auto rounded-lg">
-            <table className="min-w-full border-collapse text-center text-xs">
-                <thead>
-                    <tr className="bg-slate-200 dark:bg-slate-700">
-                        <th className="border-b border-slate-300 dark:border-slate-600 p-2 font-semibold text-slate-800 dark:text-slate-200 text-left">Member</th>
-                        {timeSlots.map(time => (
-                            <th key={time} className="border-b border-slate-300 dark:border-slate-600 p-2 font-semibold min-w-[3rem] text-slate-800 dark:text-slate-200">{time}</th>
+        <div className="overflow-x-auto rounded-lg border border-slate-200 dark:border-slate-700">
+            <div className="min-w-[40rem]"> {/* Enforce min width for visibility */}
+                {/* Time Axis Header */}
+                <div className="flex bg-slate-200 dark:bg-slate-700 relative h-8 border-b border-slate-300 dark:border-slate-600">
+                    <div className="w-[8rem] flex-shrink-0 p-2 text-left font-semibold text-slate-800 dark:text-slate-200 text-xs">Member</div>
+                    <div className="flex-grow relative h-full">
+                        {timeLabels.map(label => (
+                            <div key={label.time}
+                                className="absolute top-0 h-full border-l border-slate-400 dark:border-slate-500"
+                                style={{ left: `calc(${label.percent}% - 1px)` }}>
+                                <span className="absolute -bottom-5 left-1/2 transform -translate-x-1/2 text-xs text-slate-700 dark:text-slate-300">{label.time}</span>
+                            </div>
                         ))}
-                    </tr>
-                </thead>
-                <tbody>
-                    {members.map(member => (
-                        <tr key={member} className="border-b border-slate-200 dark:border-slate-700">
-                            <td className="p-2 font-semibold bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-200 text-left sticky left-0">{member}</td>
-                            {timeSlots.map(time => (
-                                <td
-                                    key={`${member}-${time}`}
-                                    className={`${isMemberAvailable(member, time) ? 'bg-emerald-500' : 'bg-rose-500'}`}
-                                    title={`${member} - ${time} - ${isMemberAvailable(member, time) ? 'Available' : 'Unavailable'}`}
-                                >
-                                    &nbsp;
-                                </td>
-                            ))}
-                        </tr>
+                    </div>
+                </div>
+
+                {/* Availability Rows */}
+                <div className="divide-y divide-slate-200 dark:divide-slate-700">
+                    {membersWithSlots.map(member => (
+                        <div key={member} className="flex h-10 relative">
+                            <div className="w-[8rem] flex-shrink-0 p-2 text-left font-semibold bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-200 text-sm flex items-center z-10">{member}</div>
+
+                            {/* Time Bar Container */}
+                            <div className="flex-grow relative bg-rose-100 dark:bg-rose-900/30">
+                                {availabilities[member]
+                                    .filter(slot => slot.day === day)
+                                    .map((slot, i) => {
+                                        const startMinutes = timeToMinutes(slot.start);
+                                        const endMinutes = timeToMinutes(slot.end);
+
+                                        // Calculate position and width based on 1440 minutes
+                                        const left = (startMinutes / TOTAL_MINUTES) * 100;
+                                        const width = ((endMinutes - startMinutes) / TOTAL_MINUTES) * 100;
+
+                                        return (
+                                            <div
+                                                key={i}
+                                                className="absolute h-4 rounded-sm bg-emerald-500 opacity-80 shadow-md"
+                                                style={{ left: `${left}%`, width: `${width}%`, top: '50%', transform: 'translateY(-50%)' }}
+                                                title={`${member} is available: ${slot.start} - ${slot.end}`}
+                                            ></div>
+                                        );
+                                    })
+                                }
+                            </div>
+                        </div>
                     ))}
-                </tbody>
-            </table>
+                </div>
+            </div>
         </div>
     );
 }
@@ -334,7 +354,7 @@ export default function App() {
     const [end, setEnd] = useState('23:30');
     const [isDarkMode, setIsDarkMode] = useState(false);
     const [saveStatus, setSaveStatus] = useState('idle');
-    const [userTimezone, setUserTimezone] = useState(Intl.DateTimeFormat().resolvedOptions().timeZone);
+    const [userTimezone, setUserTimezone] = useState(localStorage.getItem('timezone') || Intl.DateTimeFormat().resolvedOptions().timeZone);
     const [authLoading, setAuthLoading] = useState(true);
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [modalContent, setModalContent] = useState({ title: '', message: '', onConfirm: () => { } });
@@ -362,9 +382,11 @@ export default function App() {
         await signOut(auth);
     };
 
+    // --- Dynamic member list improved: Removed hardcoded placeholder names ---
     const dynamicMembers = useMemo(() => {
         const membersFromData = Object.keys(availabilities);
-        const allMembers = [...new Set([...membersFromData, ...["Tawz", "Nemuxhin", "Aries", "Cat", "Nicky"]])];
+        // Only show members from the data, which means only users who have submitted a slot will appear
+        const allMembers = [...new Set(membersFromData)];
         return allMembers.sort();
     }, [availabilities]);
 
@@ -413,7 +435,6 @@ export default function App() {
         setIsModalOpen(false);
     };
 
-
     async function addAvailability() {
         if (!currentUser) return;
         if (timeToMinutes(end) <= timeToMinutes(start)) {
@@ -446,7 +467,12 @@ export default function App() {
         const currentSlots = availabilities[currentUser.displayName] || [];
         if (currentSlots.length === 0) return;
 
+        // Use the GMT day for filtering, as the conversion logic can split a single slot across days
         const updatedSlots = currentSlots.filter(slot => {
+            // We need to check the GMT day that *corresponds* to the currently selected local day.
+            // This is a complex check due to the conversion breaking slots. A simpler, but less
+            // accurate check is just clearing all slots whose local start time is on that day.
+            // Given the current conversion logic, we'll clear all GMT slots that fall on the local day.
             const localSlotDay = convertFromGMT(slot.day, slot.start, userTimezone).day;
             return localSlotDay !== localSelectedDay;
         });
@@ -493,11 +519,16 @@ export default function App() {
             availabilities[member].forEach(slot => {
                 const localStart = convertFromGMT(slot.day, slot.start, userTimezone);
                 const localEnd = convertFromGMT(slot.day, slot.end, userTimezone);
+
+                // --- Complex Logic to handle slots crossing midnight based on local TZ ---
                 if (localStart.day === localEnd.day) {
+                    // Normal slot on one day
                     if (timeToMinutes(localStart.time) < timeToMinutes(localEnd.time)) {
                         converted[member].push({ day: localStart.day, start: localStart.time, end: localEnd.time });
                     }
                 } else {
+                    // Slot crosses midnight (GMT slot starts Mon 23:00, ends Tue 01:00 in local time)
+                    // Split into two slots: Mon 23:00-24:00, Tue 00:00-01:00
                     converted[member].push({ day: localStart.day, start: localStart.time, end: '24:00' });
                     if (timeToMinutes(localEnd.time) > 0) {
                         converted[member].push({ day: localEnd.day, start: '00:00', end: localEnd.time });
@@ -507,6 +538,20 @@ export default function App() {
         }
         return converted;
     }, [availabilities, userTimezone]);
+
+    // --- UX Improvement: Show GMT conversion next to local time inputs ---
+    const gmtStartDisplay = useMemo(() => {
+        const gmt = convertToGMT(day, start);
+        return `${gmt.day} ${gmt.time} GMT`;
+    }, [day, start]);
+
+    const gmtEndDisplay = useMemo(() => {
+        const gmt = convertToGMT(day, end);
+        // Special case: if 24:00 is used, GMT might roll to the next day's 00:00
+        const isMidnight = end === '00:00' && timeToMinutes(end) === 0;
+        return `${isMidnight ? 'Next Day ' : ''}${gmt.day} ${gmt.time} GMT`;
+    }, [day, end]);
+    // ---------------------------------------------------------------------
 
     if (authLoading) {
         return <div>Loading...</div>; // Simple loading text
@@ -523,7 +568,8 @@ export default function App() {
                     <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-100">Syrix — Team Availability</h1>
                     <div className="flex items-center gap-4">
                         <div className="flex items-center gap-2">
-                            <img src={currentUser.photoURL} alt={currentUser.displayName} className="w-8 h-8 rounded-full" />
+                            {/* NOTE: photoURL may be null/undefined for Discord OAuth */}
+                            <img src={currentUser.photoURL || 'https://via.placeholder.com/32'} alt={currentUser.displayName} className="w-8 h-8 rounded-full" />
                             <span className="font-semibold text-slate-700 dark:text-slate-300">{currentUser.displayName}</span>
                         </div>
                         <select id="tz-select" value={userTimezone} onChange={e => handleTimezoneChange(e.target.value)} className="p-2 border border-slate-300 dark:border-slate-600 rounded text-slate-900 dark:text-slate-200 bg-white dark:bg-slate-700 text-sm">
@@ -542,9 +588,19 @@ export default function App() {
 
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                     <div className="bg-white dark:bg-slate-800 p-4 rounded-lg shadow space-y-6">
+                        {/* --- Start of My Availability Form (UX Improvements Applied) --- */}
                         <div>
                             <h2 className="font-semibold text-slate-900 dark:text-slate-100 mb-2">My Availability ({currentUser.displayName})</h2>
-                            <label className="block text-sm font-medium text-slate-700 dark:text-slate-300">Day</label>
+
+                            {/* UX Improvement: Click-to-Select Grid Placeholder */}
+                            <div className="mb-4">
+                                <h4 className="text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Visual Selector (Future Feature)</h4>
+                                <div className="p-2 border border-slate-300 dark:border-slate-600 rounded bg-slate-50 dark:bg-slate-700/50 text-center text-xs text-slate-500 dark:text-slate-400 h-16 flex items-center justify-center">
+                                    Click-and-drag grid to define time slots will go here.
+                                </div>
+                            </div>
+
+                            <label className="block text-sm font-medium text-slate-700 dark:text-slate-300">Day (Local Time: {userTimezone})</label>
                             <select className="w-full p-2 border border-slate-300 dark:border-slate-600 rounded mb-3 text-slate-900 dark:text-slate-200 bg-white dark:bg-slate-700" value={day} onChange={e => setDay(e.target.value)}>
                                 {DAYS.map(d => <option key={d} value={d}>{d}</option>)}
                             </select>
@@ -552,10 +608,14 @@ export default function App() {
                                 <div className="flex-1">
                                     <label className="block text-sm font-medium text-slate-700 dark:text-slate-300">Start</label>
                                     <input type="time" className="w-full p-2 border border-slate-300 dark:border-slate-600 rounded text-slate-900 dark:text-slate-200 bg-white dark:bg-slate-700" value={start} onChange={e => setStart(e.target.value)} />
+                                    {/* UX Improvement: Timezone Consistency Display */}
+                                    <div className="text-xs text-slate-500 dark:text-slate-400 mt-1">{gmtStartDisplay}</div>
                                 </div>
                                 <div className="flex-1">
                                     <label className="block text-sm font-medium text-slate-700 dark:text-slate-300">End</label>
                                     <input type="time" className="w-full p-2 border border-slate-300 dark:border-slate-600 rounded text-slate-900 dark:text-slate-200 bg-white dark:bg-slate-700" value={end} onChange={e => setEnd(e.target.value)} />
+                                    {/* UX Improvement: Timezone Consistency Display */}
+                                    <div className="text-xs text-slate-500 dark:text-slate-400 mt-1">{gmtEndDisplay}</div>
                                 </div>
                             </div>
                             <div className="flex items-center flex-wrap gap-2">
@@ -578,6 +638,8 @@ export default function App() {
                                 </button>
                             </div>
                         </div>
+                        {/* --- End of My Availability Form --- */}
+
                         <div className="border-t border-slate-200 dark:border-slate-700 pt-4">
                             <h3 className="font-medium text-slate-900 dark:text-slate-100 mb-2">Best Times</h3>
                             <div className="max-h-[24rem] overflow-y-auto pr-2">
@@ -606,11 +668,11 @@ export default function App() {
                                 </div>
                             </div>
                             <div>
-                                <h3 className="font-medium text-slate-900 dark:text-slate-100">Availability Grid</h3>
+                                <h3 className="font-medium text-slate-900 dark:text-slate-100">Availability Grid (Visual Timeline)</h3>
                                 <div className="mt-2 space-y-4 max-h-[30.5rem] overflow-y-auto">
                                     {DAYS.map(d => (
                                         <div key={d}>
-                                            <div className="font-semibold text-slate-800 dark:text-slate-200 mb-2">{d}</div>
+                                            <div className="font-semibold text-slate-800 dark:text-slate-200 mb-6">{d}</div> {/* Increased bottom margin for label visibility */}
                                             <AvailabilityGrid day={d} members={dynamicMembers} availabilities={displayAvailabilities} />
                                         </div>
                                     ))}
