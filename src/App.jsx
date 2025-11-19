@@ -1,12 +1,11 @@
 ﻿/*
 Syrix Team Availability - Single-file React prototype - FIREBASE VERSION
-- Fallback Code USED.
-- NEW: Added Availability Heatmap Component (Condensed view of best times).
+- FIXED: Restored full functionality for Save/Clear and Dark Mode from stable version.
+- NEW: Added Condensed Availability Heatmap component.
 */
 
 import React, { useState, useEffect, useMemo } from 'react';
 import { initializeApp } from 'firebase/app';
-// NOTE: Added serverTimestamp for Stale Data check (just in case we use it later)
 import { getFirestore, collection, onSnapshot, doc, setDoc, deleteDoc } from 'firebase/firestore';
 import { getAuth, onAuthStateChanged, signInWithPopup, signOut, OAuthProvider } from 'firebase/auth';
 
@@ -237,7 +236,7 @@ function BestTimesDisplay({ availabilities, members, postToDiscord, userTimezone
     );
 }
 
-// --- AvailabilityGrid (Update with Visuals) ---
+// --- AvailabilityGrid (Visuals Restored) ---
 function AvailabilityGrid({ day, members, availabilities }) {
     const TOTAL_MINUTES = 24 * 60;
 
@@ -387,7 +386,6 @@ function AvailabilityHeatmap({ availabilities, members }) {
 }
 
 function NextSteps() {
-    // ... (omitted for brevity)
     return (
         <footer className="mt-6 bg-white dark:bg-slate-800 p-4 rounded-lg shadow">
             <h2 className="font-semibold text-slate-900 dark:text-slate-100 mb-3">What's Next?</h2>
@@ -399,7 +397,6 @@ function NextSteps() {
 }
 
 function LoginScreen({ signIn }) {
-    // ... (omitted for brevity)
     return (
         <div className="min-h-screen bg-slate-100 dark:bg-slate-900 flex flex-col items-center justify-center p-6">
             <h1 className="text-3xl font-bold text-slate-900 dark:text-slate-100 mb-2">Syrix Team Availability</h1>
@@ -436,10 +433,21 @@ export default function App() {
         return unsubscribe;
     }, []);
 
-    const signIn = async () => { /* ... (omitted) ... */ };
-    const handleSignOut = async () => { await signOut(auth); };
+    const signIn = async () => {
+        const provider = new OAuthProvider('oidc.discord');
+        provider.addScope('identify');
+        provider.addScope('email');
+        try {
+            await signInWithPopup(auth, provider);
+        } catch (error) {
+            console.error("Error signing in with Discord", error);
+        }
+    };
 
-    // --- Dynamic member list improved: Removed hardcoded placeholder names ---
+    const handleSignOut = async () => {
+        await signOut(auth);
+    };
+
     const dynamicMembers = useMemo(() => {
         const membersFromData = Object.keys(availabilities);
         const allMembers = [...new Set(membersFromData)];
@@ -457,21 +465,116 @@ export default function App() {
         return () => unsubscribe();
     }, []);
 
-    useEffect(() => { /* ... (Dark Mode Logic) ... */ }, []);
-    useEffect(() => { /* ... (Dark Mode Class Update) ... */ }, [isDarkMode]);
+    // FIX: Restored Dark Mode Logic 1
+    useEffect(() => {
+        const savedTheme = localStorage.getItem('theme');
+        if (savedTheme === 'dark') {
+            setIsDarkMode(true);
+        } else if (savedTheme === 'light') {
+            setIsDarkMode(false);
+        } else {
+            setIsDarkMode(window.matchMedia('(prefers-color-scheme: dark)').matches);
+        }
+    }, []);
+    // FIX: Restored Dark Mode Logic 2
+    useEffect(() => {
+        if (isDarkMode) {
+            document.documentElement.classList.add('dark');
+            localStorage.setItem('theme', 'dark');
+        } else {
+            document.documentElement.classList.remove('dark');
+            localStorage.setItem('theme', 'light');
+        }
+    }, [isDarkMode]);
 
     const handleTimezoneChange = (tz) => {
         setUserTimezone(tz);
         localStorage.setItem('timezone', tz);
     };
 
-    const openModal = (title, message, onConfirm) => { /* ... (omitted) ... */ };
-    const closeModal = () => { /* ... (omitted) ... */ };
+    const openModal = (title, message, onConfirm) => {
+        setModalContent({ title, message, onConfirm });
+        setIsModalOpen(true);
+    };
 
-    async function addAvailability() { /* ... (omitted) ... */ }
-    async function clearDayForMember() { /* ... (omitted) ... */ }
-    async function clearAllForMember() { /* ... (omitted) ... */ }
-    async function postToDiscord(day, slot, tz) { /* ... (omitted) ... */ }
+    const closeModal = () => {
+        setIsModalOpen(false);
+    };
+
+    // FIX: Restored Save Logic
+    async function addAvailability() {
+        if (!currentUser) return;
+        if (timeToMinutes(end) <= timeToMinutes(start)) {
+            openModal('Invalid Time', 'End time must be after start time.', closeModal);
+            return;
+        }
+
+        setSaveStatus('saving');
+        const gmtStart = convertToGMT(day, start);
+        const gmtEnd = convertToGMT(day, end);
+        const newEntry = { day: gmtStart.day, start: gmtStart.time, end: gmtEnd.time };
+        const currentSlots = availabilities[currentUser.displayName] || [];
+        const updatedSlots = [...currentSlots, newEntry];
+        updatedSlots.sort((a, b) => DAYS.indexOf(a.day) - DAYS.indexOf(b.day) || timeToMinutes(a.start) - timeToMinutes(b.start));
+        const memberDocRef = doc(db, 'availabilities', currentUser.displayName);
+        try {
+            await setDoc(memberDocRef, { slots: updatedSlots });
+            setSaveStatus('success');
+        } catch (error) {
+            console.error("Error saving availability: ", error);
+            setSaveStatus('idle');
+        } finally {
+            setTimeout(() => setSaveStatus('idle'), 2000);
+        }
+    }
+
+    // FIX: Restored Clear Day Logic
+    async function clearDayForMember() {
+        if (!currentUser) return;
+        const localSelectedDay = day;
+        const currentSlots = availabilities[currentUser.displayName] || [];
+        if (currentSlots.length === 0) return;
+
+        const updatedSlots = currentSlots.filter(slot => {
+            const localSlotDay = convertFromGMT(slot.day, slot.start, userTimezone).day;
+            return localSlotDay !== localSelectedDay;
+        });
+
+        const memberDocRef = doc(db, 'availabilities', currentUser.displayName);
+
+        if (updatedSlots.length === 0) {
+            await deleteDoc(memberDocRef);
+        } else {
+            await setDoc(memberDocRef, { slots: updatedSlots });
+        }
+        closeModal();
+    }
+
+    // FIX: Restored Clear All Logic
+    async function clearAllForMember() {
+        if (!currentUser) return;
+        const memberDocRef = doc(db, 'availabilities', currentUser.displayName);
+        await deleteDoc(memberDocRef);
+        closeModal();
+    }
+
+    async function postToDiscord(day, slot, tz) {
+        const activeMembersCount = dynamicMembers.filter(member => availabilities[member] && availabilities[member].length > 0).length;
+        const content = `**Team Availability Alert!**\n\n**Best Time Found:**\n> **When:** ${day}, ${minutesToTime(slot.start)} - ${minutesToTime(slot.end)} (${tz})\n> **Who:** ${slot.count} / ${activeMembersCount} players available.\n\nLet's get a game in!`;
+        try {
+            const response = await fetch(discordWebhookUrl, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ content: content }),
+            });
+            if (!response.ok) throw new Error(`Webhook returned status ${response.status}`);
+            return true;
+        } catch (error) {
+            console.error('Failed to post to Discord:', error);
+            openModal('Discord Error', 'Failed to post to Discord. Check the console for more details.', closeModal);
+            return false;
+        }
+    }
 
     const displayAvailabilities = useMemo(() => {
         const converted = {};
@@ -636,7 +739,7 @@ export default function App() {
                                 <div className="mt-2 space-y-4 max-h-[30.5rem] overflow-y-auto">
                                     {DAYS.map(d => (
                                         <div key={d}>
-                                            <div className="font-semibold text-slate-800 dark:text-slate-200 mb-6">{d}</div> {/* Increased bottom margin for label visibility */}
+                                            <div className="font-semibold text-slate-800 dark:text-slate-200 mb-6">{d}</div>
                                             <AvailabilityGrid day={d} members={dynamicMembers} availabilities={displayAvailabilities} />
                                         </div>
                                     ))}
