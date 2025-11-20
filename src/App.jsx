@@ -1,9 +1,8 @@
 ﻿/*
-Syrix Team Availability - Single-file React prototype - FINAL AESTHETIC PASS
-- REMOVED: Visual Selector placeholder element.
-- FIXED: Restored Save/Clear/Dark Mode functionality.
-- NEW: Added Condensed Availability Heatmap component.
-- Applied secondary round of aesthetic updates for a cleaner dashboard look.
+Syrix Team Availability - Single-file React prototype - FINAL PROFESSIONAL PASS
+- Applied minimalist, enterprise-grade aesthetic (cleaner colors, enhanced spacing, refined typography).
+- Confirmed stable functionality (Save/Clear/Dark Mode).
+- Includes Visual Grid and Heatmap.
 */
 
 import React, { useState, useEffect, useMemo } from 'react';
@@ -67,13 +66,13 @@ function timeToMinutes(t) { if (!t || t === '24:00') return 1440; const [h, m] =
 function minutesToTime(m) { const minutes = m % 1440; const hh = Math.floor(minutes / 60).toString().padStart(2, '0'); const mm = (minutes % 60).toString().padStart(2, '0'); return `${hh}:${mm}`; }
 
 
-// --- Custom Modal Component (Aesthetic updates) ---
+// --- Custom Modal Component ---
 function Modal({ isOpen, onClose, onConfirm, title, children }) {
     if (!isOpen) return null;
 
     return (
         <div className="fixed inset-0 bg-black bg-opacity-60 z-50 flex justify-center items-center backdrop-blur-sm">
-            <div className="bg-white dark:bg-slate-800 rounded-xl shadow-xl p-6 w-full max-w-md transition-all duration-300 transform scale-100">
+            <div className="bg-white dark:bg-slate-800 rounded-xl shadow-2xl p-6 w-full max-w-md transition-all duration-300 transform scale-100">
                 <h3 className="text-xl font-extrabold text-slate-900 dark:text-slate-100 mb-4 border-b pb-2 border-slate-200 dark:border-slate-700">{title}</h3>
                 <div className="text-slate-600 dark:text-slate-400 mb-6">
                     {children}
@@ -91,7 +90,7 @@ function Modal({ isOpen, onClose, onConfirm, title, children }) {
     );
 }
 
-// --- AvailableNowIndicator (Aesthetic updates) ---
+// --- AvailableNowIndicator ---
 function AvailableNowIndicator({ availabilities, members, userTimezone }) {
     const [now, setNow] = useState(new Date());
 
@@ -117,15 +116,15 @@ function AvailableNowIndicator({ availabilities, members, userTimezone }) {
     const availableMembers = members.filter(member => availabilities[member] && isAvailable(member));
 
     return (
-        <div className="bg-white dark:bg-slate-800 p-5 rounded-xl shadow-lg mb-8">
+        <div className="bg-white dark:bg-slate-800 p-5 rounded-xl shadow-xl mb-8 border border-slate-100 dark:border-slate-700">
             <h2 className="text-xl font-bold text-slate-900 dark:text-slate-100 mb-3 flex items-center">
-                🟢 Who's Available Now?
+                🟢 Live Status
                 <span className="text-sm font-normal text-slate-500 dark:text-slate-400 ml-3">({userTimezone})</span>
             </h2>
             {availableMembers.length > 0 ? (
                 <div className="flex flex-wrap gap-3">
                     {availableMembers.map(member => (
-                        <span key={member} className="px-4 py-1.5 bg-emerald-500 dark:bg-emerald-600 text-white text-base font-medium rounded-full shadow-md transition-transform transform hover:scale-[1.02]">
+                        <span key={member} className="px-4 py-1.5 bg-emerald-500 dark:bg-emerald-600 text-white text-base font-medium rounded-full shadow-md transition-transform transform hover:scale-[1.02] hover:shadow-lg">
                             {member}
                         </span>
                     ))}
@@ -137,7 +136,7 @@ function AvailableNowIndicator({ availabilities, members, userTimezone }) {
     );
 }
 
-// --- BestTimesDisplay (Aesthetic updates) ---
+// --- BestTimesDisplay (Professional Look) ---
 function BestTimesDisplay({ availabilities, members, postToDiscord, userTimezone }) {
     const [postingStatus, setPostingStatus] = useState({});
     const activeMembers = members.filter(member => availabilities[member] && availabilities[member].length > 0);
@@ -194,33 +193,35 @@ function BestTimesDisplay({ availabilities, members, postToDiscord, userTimezone
     const daysWithSlots = Object.keys(bestTimes);
 
     if (activeMembers.length < 2 || daysWithSlots.length === 0) {
-        return <p className="text-slate-500 dark:text-slate-400 text-sm">Waiting for more players to submit their availability...</p>;
+        return <p className="text-slate-500 dark:text-slate-400 text-base py-3">Waiting for enough members to submit their schedule...</p>;
     }
 
     return (
-        <div className="space-y-3">
+        <div className="space-y-4">
             {daysWithSlots.map(day => (
                 <div key={day}>
-                    <h4 className="font-semibold text-slate-800 dark:text-slate-200 mb-2 border-b border-slate-100 dark:border-slate-700 pb-1">{day}</h4>
+                    <h4 className="font-bold text-slate-800 dark:text-slate-200 mb-2 border-b border-slate-200 dark:border-slate-700 pb-1">{day}</h4>
                     <div className="space-y-2">
                         {bestTimes[day]
                             .sort((a, b) => b.count - a.count)
                             .map((slot, i) => {
                                 const slotId = `${day}-${slot.start}-${slot.end}`;
                                 const status = postingStatus[slotId] || 'idle';
+                                const isMax = slot.count === activeMembers.length;
+
                                 return (
-                                    <div key={i} className={`p-3 rounded-xl border-2 transition-all duration-200 flex justify-between items-center ${slot.count === activeMembers.length ? 'bg-emerald-50 border-emerald-400 dark:bg-emerald-900/40 dark:border-emerald-700' : 'bg-slate-50 border-slate-200 dark:bg-slate-700/40 dark:border-slate-600'}`}>
-                                        <span className="font-medium text-slate-700 dark:text-slate-300 text-sm">
+                                    <div key={i} className={`p-3 rounded-xl border transition-all duration-200 flex justify-between items-center shadow-sm ${isMax ? 'bg-emerald-50 border-emerald-400 dark:bg-emerald-900/40 dark:border-emerald-700' : 'bg-slate-50 border-slate-200 dark:bg-slate-700/40 dark:border-slate-600'}`}>
+                                        <span className={`font-semibold text-base ${isMax ? 'text-emerald-800 dark:text-emerald-200' : 'text-slate-700 dark:text-slate-300'}`}>
                                             {minutesToTime(slot.start)} – {minutesToTime(slot.end)}
                                         </span>
                                         <div className="flex items-center gap-3">
-                                            <span className={`font-bold px-2 py-1 rounded-full text-xs shadow-sm ${slot.count === activeMembers.length ? 'bg-emerald-600 text-white' : 'bg-slate-300 text-slate-800 dark:bg-slate-600 dark:text-slate-200'}`}>
-                                                {slot.count} / {activeMembers.length} players
+                                            <span className={`font-extrabold px-3 py-1 rounded-full text-xs shadow-md ${isMax ? 'bg-emerald-600 text-white' : 'bg-slate-300 text-slate-800 dark:bg-slate-600 dark:text-slate-200'}`}>
+                                                {slot.count} / {activeMembers.length}
                                             </span>
                                             <button
                                                 onClick={() => handlePost(day, slot)}
                                                 disabled={status !== 'idle'}
-                                                className={`w-28 text-center text-xs font-semibold py-1.5 px-3 rounded-full transition-all duration-150 ${status === 'idle' ? 'bg-blue-600 hover:bg-blue-700 text-white shadow-md' : ''
+                                                className={`w-32 text-center text-sm font-semibold py-1.5 px-3 rounded-full transition-all duration-150 shadow-md ${status === 'idle' ? 'bg-blue-600 hover:bg-blue-700 text-white' : ''
                                                     } ${status === 'posting' ? 'bg-slate-400 text-white' : ''
                                                     } ${status === 'success' ? 'bg-emerald-600 text-white' : ''
                                                     }`}
@@ -262,7 +263,7 @@ function AvailabilityGrid({ day, members, availabilities }) {
     }
 
     return (
-        <div className="overflow-x-auto rounded-xl border border-slate-300 dark:border-slate-700 shadow-md">
+        <div className="overflow-x-auto rounded-xl border border-slate-300 dark:border-slate-700 shadow-xl">
             <div className="min-w-[40rem]">
                 {/* Time Axis Header */}
                 <div className="flex bg-slate-100 dark:bg-slate-700 relative h-8 border-b border-slate-300 dark:border-slate-600">
@@ -272,7 +273,7 @@ function AvailabilityGrid({ day, members, availabilities }) {
                             <div key={label.time}
                                 className="absolute top-0 h-full border-l border-slate-400 dark:border-slate-500"
                                 style={{ left: `calc(${label.percent}% - 1px)` }}>
-                                <span className="absolute -bottom-5 left-1/2 transform -translate-x-1/2 text-xs text-slate-700 dark:text-slate-300">{label.time}</span>
+                                <span className="absolute -bottom-5 left-1/2 transform -translate-x-1/2 text-xs font-semibold text-slate-700 dark:text-slate-300">{label.time}</span>
                             </div>
                         ))}
                     </div>
@@ -281,10 +282,10 @@ function AvailabilityGrid({ day, members, availabilities }) {
                 {/* Availability Rows */}
                 <div className="divide-y divide-slate-200 dark:divide-slate-700">
                     {membersWithSlots.map(member => (
-                        <div key={member} className="flex h-10 relative">
-                            <div className="w-[8rem] flex-shrink-0 p-2 text-left font-semibold bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-200 text-sm flex items-center z-10">{member}</div>
+                        <div key={member} className="flex h-12 relative hover:bg-slate-50 dark:hover:bg-slate-700/50 transition-colors duration-150">
+                            <div className="w-[8rem] flex-shrink-0 p-3 text-left font-semibold bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-200 text-sm flex items-center z-10 sticky left-0 border-r dark:border-slate-700">{member}</div>
 
-                            <div className="flex-grow relative bg-rose-50 dark:bg-rose-900/20">
+                            <div className="flex-grow relative bg-rose-50 dark:bg-slate-900/10">
                                 {availabilities[member]
                                     .filter(slot => slot.day === day)
                                     .map((slot, i) => {
@@ -297,7 +298,7 @@ function AvailabilityGrid({ day, members, availabilities }) {
                                         return (
                                             <div
                                                 key={i}
-                                                className="absolute h-6 rounded-sm bg-emerald-600 opacity-90 shadow-md transition-all duration-300"
+                                                className="absolute h-8 rounded-md bg-emerald-600 opacity-95 shadow-md transition-all duration-300"
                                                 style={{ left: `${left}%`, width: `${width}%`, top: '50%', transform: 'translateY(-50%)' }}
                                                 title={`${member} is available: ${slot.start} - ${slot.end}`}
                                             ></div>
@@ -313,7 +314,7 @@ function AvailabilityGrid({ day, members, availabilities }) {
     );
 }
 
-// --- FEATURE: Condensed Availability Heatmap Component (New) ---
+// --- FEATURE: Condensed Availability Heatmap Component ---
 function AvailabilityHeatmap({ availabilities, members }) {
     const TOTAL_MINUTES = 24 * 60;
     const bucketSize = 60; // 1 hour buckets for condensation
@@ -347,6 +348,7 @@ function AvailabilityHeatmap({ availabilities, members }) {
     const getColorClass = (count, max) => {
         if (max === 0) return 'bg-slate-100 dark:bg-slate-700/50';
         const percent = count / max;
+        // Use color intensity (darker green means more available)
         if (percent === 1) return 'bg-emerald-600 hover:bg-emerald-700';
         if (percent >= 0.75) return 'bg-emerald-500 hover:bg-emerald-600';
         if (percent >= 0.50) return 'bg-emerald-400 hover:bg-emerald-500';
@@ -378,7 +380,8 @@ function AvailabilityHeatmap({ availabilities, members }) {
                                     className={`p-0 h-8 ${getColorClass(count, maxCount)} transition-colors duration-150 border-x border-slate-100 dark:border-slate-800`}
                                     title={`${day}, ${timeLabels[i]} - ${timeLabels[i + 1] || '00:00'}: ${count}/${maxCount} Available`}
                                 >
-                                    {count > 0 && <span className="text-[10px] text-slate-900 dark:text-slate-900 font-bold">{count}</span>}
+                                    {/* Display count if available */}
+                                    {count > 0 && <span className="text-[10px] font-extrabold text-slate-900 dark:text-slate-900">{count}</span>}
                                 </td>
                             ))}
                         </tr>
@@ -391,10 +394,10 @@ function AvailabilityHeatmap({ availabilities, members }) {
 
 function NextSteps() {
     return (
-        <footer className="mt-6 bg-white dark:bg-slate-800 p-4 rounded-xl shadow-lg">
-            <h2 className="font-semibold text-slate-900 dark:text-slate-100 mb-3">What's Next?</h2>
+        <footer className="mt-6 bg-white dark:bg-slate-800 p-4 rounded-xl shadow-lg border border-slate-100 dark:border-slate-700">
+            <h2 className="font-bold text-slate-900 dark:text-slate-100 mb-3">Future Enhancements</h2>
             <p className="text-sm text-slate-600 dark:text-slate-400 mb-4">
-                The application is in a great state right now. A future improvement could be to add recurring availability or an admin role to manage the team list.
+                The application is now a professional coordination tool. Next steps could include recurring availability rules or a proper admin panel.
             </p>
         </footer>
     );
@@ -663,7 +666,7 @@ export default function App() {
                         <div>
                             <h2 className="text-xl font-bold text-slate-900 dark:text-slate-100 mb-4 border-b border-slate-200 dark:border-slate-700 pb-2">My Availability</h2>
 
-                            <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300">Day (Local Time: {userTimezone})</label>
+                            <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300">Select Day</label>
                             <select className="w-full p-2.5 border border-slate-300 dark:border-slate-600 rounded-lg mb-4 text-slate-900 dark:text-slate-200 bg-white dark:bg-slate-700 shadow-sm transition-colors" value={day} onChange={e => setDay(e.target.value)}>
                                 {DAYS.map(d => <option key={d} value={d}>{d}</option>)}
                             </select>
@@ -671,13 +674,13 @@ export default function App() {
                             {/* Primary Time Inputs */}
                             <div className="flex gap-3 mb-4">
                                 <div className="flex-1">
-                                    <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300">Start</label>
+                                    <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300">Start Time</label>
                                     <input type="time" className="w-full p-2.5 border border-slate-300 dark:border-slate-600 rounded-lg text-slate-900 dark:text-slate-200 bg-white dark:bg-slate-700 shadow-sm transition-colors" value={start} onChange={e => setStart(e.target.value)} />
                                     {/* UX Improvement: Timezone Consistency Display */}
                                     <div className="text-xs text-slate-500 dark:text-slate-400 mt-1">{gmtStartDisplay}</div>
                                 </div>
                                 <div className="flex-1">
-                                    <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300">End</label>
+                                    <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300">End Time</label>
                                     <input type="time" className="w-full p-2.5 border border-slate-300 dark:border-slate-600 rounded-lg text-slate-900 dark:text-slate-200 bg-white dark:bg-slate-700 shadow-sm transition-colors" value={end} onChange={e => setEnd(e.target.value)} />
                                     {/* UX Improvement: Timezone Consistency Display */}
                                     <div className="text-xs text-slate-500 dark:text-slate-400 mt-1">{gmtEndDisplay}</div>
@@ -696,11 +699,11 @@ export default function App() {
                                 </button>
                                 <button className="transition-colors bg-slate-200 hover:bg-slate-300 text-slate-800 dark:bg-slate-700 dark:hover:bg-slate-600 dark:text-slate-200 font-semibold px-3 py-2.5 rounded-xl shadow-md"
                                     onClick={() => openModal('Confirm Clear', `Are you sure you want to clear your availability for ${day}?`, clearDayForMember)}>
-                                    Clear for {day}
+                                    Clear Day
                                 </button>
                                 <button className="text-xs text-slate-500 dark:text-slate-400 hover:text-red-600 dark:hover:text-red-400 font-semibold transition-colors"
                                     onClick={() => openModal('Confirm Clear All', 'Are you sure you want to delete ALL of your availability slots?', clearAllForMember)}>
-                                    Clear All My Slots
+                                    Clear All Slots
                                 </button>
                             </div>
                         </div>
@@ -714,7 +717,7 @@ export default function App() {
                         </div>
                     </div>
                     <div className="md:col-span-2 bg-white dark:bg-slate-800 p-5 rounded-xl shadow-lg">
-                        <h2 className="text-xl font-bold text-slate-900 dark:text-slate-100 mb-2">Manager Dashboard</h2>
+                        <h2 className="text-xl font-bold text-slate-900 dark:text-slate-100 mb-2">Team Dashboard</h2>
 
                         {/* FEATURE: Heatmap Integration */}
                         <h3 className="text-lg font-bold text-slate-900 dark:text-slate-100 mt-4 mb-3 border-b border-slate-200 dark:border-slate-700 pb-2">Weekly Availability Heatmap ({userTimezone})</h3>
@@ -729,7 +732,7 @@ export default function App() {
                                     {dynamicMembers.map(m => (
                                         (displayAvailabilities[m] && displayAvailabilities[m].length > 0) && (
                                             <div key={m} className="p-3 border border-slate-300 dark:border-slate-700 rounded-xl bg-slate-50 dark:bg-slate-700/50 shadow-sm">
-                                                <div className="font-semibold text-slate-800 dark:text-slate-200">{m}</div>
+                                                <div className="font-bold text-slate-800 dark:text-slate-200">{m}</div>
                                                 <div className="text-sm mt-2 text-slate-600 dark:text-slate-400">
                                                     {(displayAvailabilities[m] || []).map((s, i) => (
                                                         <div key={i} className="py-1">{s.day} — **{s.start}** to **{s.end}**</div>
@@ -745,7 +748,7 @@ export default function App() {
                                 <div className="mt-2 space-y-4 max-h-[30.5rem] overflow-y-auto">
                                     {DAYS.map(d => (
                                         <div key={d}>
-                                            <div className="font-semibold text-slate-800 dark:text-slate-200 mb-4 mt-2">{d}</div>
+                                            <div className="font-bold text-slate-800 dark:text-slate-200 mb-4 mt-2">{d}</div>
                                             <AvailabilityGrid day={d} members={dynamicMembers} availabilities={displayAvailabilities} />
                                         </div>
                                     ))}
