@@ -1,8 +1,9 @@
 ﻿/*
-Syrix Team Availability - Single-file React prototype - FINAL FIX
-- Restored Save/Clear/Dark Mode functionality.
-- Added Aesthetic updates.
-- Added Availability Heatmap.
+Syrix Team Availability - Single-file React prototype - FINAL AESTHETIC PASS
+- REMOVED: Visual Selector placeholder element.
+- FIXED: Restored Save/Clear/Dark Mode functionality.
+- NEW: Added Condensed Availability Heatmap component.
+- Applied secondary round of aesthetic updates for a cleaner dashboard look.
 */
 
 import React, { useState, useEffect, useMemo } from 'react';
@@ -620,7 +621,6 @@ export default function App() {
 
     // Check 1: Is authentication loading? If so, show loading screen.
     if (authLoading) {
-        // Simple loading screen to prevent render errors while fetching user state
         return (
             <div className="min-h-screen flex items-center justify-center bg-slate-50 dark:bg-slate-900">
                 <p className="text-xl font-semibold text-slate-800 dark:text-slate-200">Loading Authentication...</p>
@@ -663,18 +663,12 @@ export default function App() {
                         <div>
                             <h2 className="text-xl font-bold text-slate-900 dark:text-slate-100 mb-4 border-b border-slate-200 dark:border-slate-700 pb-2">My Availability</h2>
 
-                            {/* NEW FEATURE: Daily Time Selector placeholder */}
-                            <div className="mb-4">
-                                <h4 className="text-sm font-semibold text-slate-700 dark:text-slate-300 mb-1">Enter Slot</h4>
-                                <div className="p-2 border border-slate-300 dark:border-slate-600 rounded-lg bg-slate-100 dark:bg-slate-700/50 text-center text-xs text-slate-500 dark:text-slate-400 h-16 flex items-center justify-center shadow-inner">
-                                    Visual Selector (Future Feature)
-                                </div>
-                            </div>
-
                             <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300">Day (Local Time: {userTimezone})</label>
-                            <select className="w-full p-2.5 border border-slate-300 dark:border-slate-600 rounded-lg mb-3 text-slate-900 dark:text-slate-200 bg-white dark:bg-slate-700 shadow-sm transition-colors" value={day} onChange={e => setDay(e.target.value)}>
+                            <select className="w-full p-2.5 border border-slate-300 dark:border-slate-600 rounded-lg mb-4 text-slate-900 dark:text-slate-200 bg-white dark:bg-slate-700 shadow-sm transition-colors" value={day} onChange={e => setDay(e.target.value)}>
                                 {DAYS.map(d => <option key={d} value={d}>{d}</option>)}
                             </select>
+
+                            {/* Primary Time Inputs */}
                             <div className="flex gap-3 mb-4">
                                 <div className="flex-1">
                                     <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300">Start</label>
@@ -689,6 +683,7 @@ export default function App() {
                                     <div className="text-xs text-slate-500 dark:text-slate-400 mt-1">{gmtEndDisplay}</div>
                                 </div>
                             </div>
+
                             <div className="flex items-center flex-wrap gap-3">
                                 <button
                                     className={`font-bold px-4 py-2.5 rounded-xl flex items-center justify-center transition-all duration-200 shadow-md ${saveStatus === 'success' ? 'bg-emerald-600 text-white hover:bg-emerald-700' : 'bg-blue-600 hover:bg-blue-700 text-white'}`}
