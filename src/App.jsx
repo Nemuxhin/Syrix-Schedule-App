@@ -1,7 +1,8 @@
 ﻿/*
 Syrix Team Availability - Single-file React prototype - FIREBASE VERSION
 - Aesthetic and UI improvements applied (Color, Shadow, Typography).
-- Fixed previous functionality bugs (Save/Clear/Dark Mode logic).
+- Fixed previous functionality bugs (Save/Clear/Dark Mode logic restored).
+- NEW: Added Condensed Availability Heatmap component.
 - Includes Visual Availability Grid and Timezone Consistency Display.
 */
 
@@ -240,7 +241,7 @@ function BestTimesDisplay({ availabilities, members, postToDiscord, userTimezone
     );
 }
 
-// --- AvailabilityGrid (Aesthetic updates) ---
+// --- AvailabilityGrid (Visuals & Aesthetic updates) ---
 function AvailabilityGrid({ day, members, availabilities }) {
     const TOTAL_MINUTES = 24 * 60;
 
@@ -312,7 +313,7 @@ function AvailabilityGrid({ day, members, availabilities }) {
     );
 }
 
-// --- FEATURE: Condensed Availability Heatmap Component ---
+// --- FEATURE: Condensed Availability Heatmap Component (New) ---
 function AvailabilityHeatmap({ availabilities, members }) {
     const TOTAL_MINUTES = 24 * 60;
     const bucketSize = 60; // 1 hour buckets for condensation
@@ -657,9 +658,9 @@ export default function App() {
 
                             {/* UX Improvement: Click-to-Select Grid Placeholder */}
                             <div className="mb-4">
-                                <h4 className="text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Visual Selector (Future Feature)</h4>
+                                <h4 className="text-sm font-semibold text-slate-700 dark:text-slate-300 mb-1">Enter Slot</h4>
                                 <div className="p-2 border border-slate-300 dark:border-slate-600 rounded-lg bg-slate-100 dark:bg-slate-700/50 text-center text-xs text-slate-500 dark:text-slate-400 h-16 flex items-center justify-center shadow-inner">
-                                    Click-and-drag grid to define time slots will go here.
+                                    Visual Selector (Future Feature)
                                 </div>
                             </div>
 
