@@ -1,15 +1,14 @@
 ﻿/*
-Syrix Team Availability - FINAL PREMIUM BUILD
-- FIXED: Deep-search for Discord PFP in providerData.
-- NEW: "Event Operations" module for scheduling Scrims/Matches.
-- NEW: Automated Discord notifications for new events.
-- NEW: Live "Upcoming Events" feed.
-- DESIGN: Maintained "Fancy/Glassmorphism" aesthetic.
+Syrix Team Availability - FINAL PREMIUM BUILD (FIXED)
+- FIXED: "Monday writes Tuesday" bug (improved Timezone/Date math).
+- FIXED: Events not showing (Removed complex Firestore query requiring indexes).
+- FEATURE: Event Operations & Discord Automation active.
+- DESIGN: Premium "Glassmorphism" aesthetic maintained.
 */
 
 import React, { useState, useEffect, useMemo } from 'react';
 import { initializeApp } from 'firebase/app';
-import { getFirestore, collection, onSnapshot, doc, setDoc, deleteDoc, addDoc, orderBy, query } from 'firebase/firestore';
+import { getFirestore, collection, onSnapshot, doc, setDoc, deleteDoc, addDoc } from 'firebase/firestore';
 import { getAuth, onAuthStateChanged, signInWithPopup, signOut, OAuthProvider } from 'firebase/auth';
 
 // --- Firebase Configuration ---
@@ -36,36 +35,83 @@ const timezones = ["UTC", "GMT", "Europe/London", "Europe/Paris", "Europe/Berlin
 function timeToMinutes(t) { if (!t || t === '24:00') return 1440; const [h, m] = t.split(":").map(Number); return h * 60 + m; }
 function minutesToTime(m) { const minutes = m % 1440; const hh = Math.floor(minutes / 60).toString().padStart(2, '0'); const mm = (minutes % 60).toString().padStart(2, '0'); return `${hh}:${mm}`; }
 
-const convertToGMT = (day, time) => {
+// FIX: More robust date calculation that avoids "drift"
+const getNextDateForDay = (dayName) => {
+    const days = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+    const targetIndex = days.indexOf(dayName);
     const today = new Date();
-    const todayDayIndex = (today.getUTCDay() === 0) ? 6 : today.getUTCDay() - 1;
-    const targetDayIndex = DAYS.indexOf(day);
-    const dayDifference = targetDayIndex - todayDayIndex;
-    const targetDate = new Date(today);
-    targetDate.setUTCDate(today.getUTCDate() + dayDifference);
+    const currentDayIndex = today.getDay();
 
-    const dateString = `${targetDate.getFullYear()}-${String(targetDate.getMonth() + 1).padStart(2, '0')}-${String(targetDate.getDate()).padStart(2, '0')}T${time}:00`;
-    const localDate = new Date(dateString);
-    const gmtFormatter = new Intl.DateTimeFormat('en-GB', { timeZone: 'UTC', weekday: 'long', hour: '2-digit', minute: '2-digit', hour12: false });
-    const gmtDateParts = gmtFormatter.formatToParts(localDate).reduce((acc, part) => { acc[part.type] = part.value; return acc; }, {});
-    return { day: gmtDateParts.weekday, time: `${gmtDateParts.hour.replace('24', '00')}:${gmtDateParts.minute}` };
+    let distance = targetIndex - currentDayIndex;
+    // If the target day is today or in the past (within this week), we treat it as "this upcoming week" logic if needed,
+    // but for simple scheduling, we usually mean the closest instance.
+    // Let's assume "Monday" means the Monday of the CURRENT week to keep the grid stable.
+
+    // Adjustment: Calculate 'distance' to align with the current week's instance of that day.
+    const currentWeekMondayDiff = 1 - currentDayIndex; // Distance to this week's Monday
+    const targetDiff = days.indexOf(dayName) - 1; // Distance of target from Monday
+
+    // Actually, easiest way for a stable weekly grid:
+    // Anchor everything to "Today" and find the offset.
+    const d = new Date(today);
+    d.setDate(today.getDate() + distance);
+    return d;
+};
+
+const convertToGMT = (day, time) => {
+    // 1. Create a date object for the selected Day/Time in the user's LOCAL browser time
+    const targetDate = getNextDateForDay(day);
+    const [hours, minutes] = time.split(':').map(Number);
+    targetDate.setHours(hours, minutes, 0, 0);
+
+    // 2. Extract the parts in UTC (effectively converting Local -> GMT)
+    const utcDayIndex = targetDate.getUTCDay();
+    // Map JS getUTCDay (0=Sun, 1=Mon) back to our DAYS array names
+    const jsDays = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+    const gmtDay = jsDays[utcDayIndex];
+
+    const gmtHours = String(targetDate.getUTCHours()).padStart(2, '0');
+    const gmtMinutes = String(targetDate.getUTCMinutes()).padStart(2, '0');
+
+    return { day: gmtDay, time: `${gmtHours}:${gmtMinutes}` };
 };
 
 const convertFromGMT = (day, time, timezone) => {
     if (!day || !time) return { day: '', time: '' };
-    const [hours, minutes] = time.split(':').map(Number);
 
+    // 1. Create a UTC date object from the stored GMT Day/Time
+    const jsDays = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+    const targetIndex = jsDays.indexOf(day);
     const today = new Date();
-    const todayDayIndex = (today.getUTCDay() === 0) ? 6 : today.getUTCDay() - 1;
-    const targetDayIndex = DAYS.indexOf(day);
-    const dayDifference = targetDayIndex - todayDayIndex;
+    const currentDayIndex = today.getUTCDay();
+    const distance = targetIndex - currentDayIndex;
+
     const gmtDate = new Date(today);
-    gmtDate.setUTCDate(today.getUTCDate() + dayDifference);
+    gmtDate.setUTCDate(today.getUTCDate() + distance);
+
+    const [hours, minutes] = time.split(':').map(Number);
     gmtDate.setUTCHours(hours, minutes, 0, 0);
 
-    const formatter = new Intl.DateTimeFormat('en-GB', { timeZone: timezone, weekday: 'long', hour: '2-digit', minute: '2-digit', hour12: false });
-    const localDateParts = formatter.formatToParts(gmtDate).reduce((acc, part) => { acc[part.type] = part.value; return acc; }, {});
-    return { day: localDateParts.weekday, time: `${localDateParts.hour.replace('24', '00')}:${localDateParts.minute}` };
+    // 2. Format this UTC date into the target timezone
+    const formatter = new Intl.DateTimeFormat('en-US', {
+        timeZone: timezone,
+        weekday: 'long',
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: false
+    });
+
+    const parts = formatter.formatToParts(gmtDate);
+    const part = (type) => parts.find(p => p.type === type)?.value;
+
+    let localHours = part('hour');
+    // Fix: 24:00 handling or single digit handling
+    if (localHours === '24') localHours = '00';
+
+    return {
+        day: part('weekday'),
+        time: `${localHours}:${part('minute')}`
+    };
 };
 
 // --- Components ---
@@ -96,6 +142,7 @@ function ScrimScheduler({ onSchedule, userTimezone }) {
     const handleSubmit = async () => {
         if (!date || !time) return;
         setStatus('saving');
+        // Pass data up
         await onSchedule({ type, date, time, opponent, timezone: userTimezone });
         setStatus('success');
         setTimeout(() => { setStatus('idle'); setOpponent(''); setDate(''); setTime(''); }, 2000);
@@ -164,12 +211,6 @@ function AvailabilityHeatmap({ availabilities, members }) {
         return data;
     }, [availabilities, activeMembers, numBuckets]);
 
-    const getColor = (count) => {
-        if (count === 0) return 'bg-slate-700/30';
-        const alpha = Math.max(0.2, count / maxCount);
-        return `bg-emerald-500/${Math.floor(alpha * 100)}`;
-    };
-
     return (
         <div className="overflow-x-auto rounded-xl border border-slate-700 shadow-inner bg-slate-800/50">
             <div className="min-w-[600px]">
@@ -199,7 +240,7 @@ function AvailabilityHeatmap({ availabilities, members }) {
 export default function App() {
     const [currentUser, setCurrentUser] = useState(null);
     const [availabilities, setAvailabilities] = useState({});
-    const [events, setEvents] = useState([]); // NEW: Events State
+    const [events, setEvents] = useState([]);
     const [day, setDay] = useState(DAYS[0]);
     const [start, setStart] = useState('12:00');
     const [end, setEnd] = useState('23:30');
@@ -230,19 +271,22 @@ export default function App() {
 
     // Data Listeners
     useEffect(() => {
-        // Availabilities
+        // Availabilities Listener
         const unsubAvail = onSnapshot(collection(db, 'availabilities'), (snap) => {
             const data = {};
             snap.forEach(doc => data[doc.id] = doc.data().slots || []);
             setAvailabilities(data);
         });
 
-        // Events (NEW)
-        const q = query(collection(db, 'events'), orderBy('date'), orderBy('time'));
-        const unsubEvents = onSnapshot(q, (snap) => {
+        // FIX: Removed orderBy('date') to fix "Missing Index" error causing events to hide
+        // We will sort the events in the client (JavaScript) side instead
+        const unsubEvents = onSnapshot(collection(db, 'events'), (snap) => {
             const evs = [];
             snap.forEach(doc => evs.push({ id: doc.id, ...doc.data() }));
-            setEvents(evs.filter(e => new Date(e.date + 'T' + e.time) >= new Date())); // Only future events
+            // Sort by date/time in JS
+            evs.sort((a, b) => new Date(a.date + 'T' + a.time) - new Date(b.date + 'T' + b.time));
+            // Filter out old events
+            setEvents(evs.filter(e => new Date(e.date + 'T' + e.time) >= new Date()));
         });
 
         return () => { unsubAvail(); unsubEvents(); };
@@ -261,6 +305,7 @@ export default function App() {
             availabilities[member].forEach(slot => {
                 const localStart = convertFromGMT(slot.day, slot.start, userTimezone);
                 const localEnd = convertFromGMT(slot.day, slot.end, userTimezone);
+                // Simple mapping logic
                 if (localStart.day === localEnd.day) {
                     if (timeToMinutes(localStart.time) < timeToMinutes(localEnd.time)) converted[member].push({ day: localStart.day, start: localStart.time, end: localEnd.time });
                 } else {
@@ -272,14 +317,25 @@ export default function App() {
         return converted;
     }, [availabilities, userTimezone]);
 
-    // Discord PFP Fix
+    // Discord PFP Fix - Improved Fallback Logic
     const getAvatar = () => {
         if (!currentUser) return null;
-        // 1. Try direct photoURL
-        if (currentUser.photoURL) return currentUser.photoURL;
-        // 2. Try provider data (often deeper for Discord)
-        if (currentUser.providerData && currentUser.providerData[0]?.photoURL) return currentUser.providerData[0].photoURL;
-        // 3. Fallback
+
+        // 1. If photoURL is a full URL (rare for Discord auth), use it
+        if (currentUser.photoURL && currentUser.photoURL.startsWith('http')) return currentUser.photoURL;
+
+        // 2. Check providerData for raw Discord details
+        const discordData = currentUser.providerData.find(p => p.providerId === 'oidc.discord');
+        if (discordData && discordData.photoURL) {
+            return discordData.photoURL;
+        }
+
+        // 3. Construct manual URL if we have a hash but it wasn't a full URL
+        if (currentUser.photoURL) {
+            return `https://cdn.discordapp.com/avatars/${currentUser.uid}/${currentUser.photoURL}.png`;
+        }
+
+        // 4. Generic Fallback
         return `https://cdn.discordapp.com/embed/avatars/${Math.floor(Math.random() * 5)}.png`;
     };
 
@@ -289,11 +345,14 @@ export default function App() {
     const saveAvailability = async () => {
         if (timeToMinutes(end) <= timeToMinutes(start)) return openModal('Error', 'End time must be after start.', () => setIsModalOpen(false));
         setSaveStatus('saving');
+
+        // FIX: Use new robust converter
         const gmtStart = convertToGMT(day, start);
         const gmtEnd = convertToGMT(day, end);
 
         // Get existing slots excluding this day to avoid dupes/overlaps logic for now (simple add)
         const existing = availabilities[currentUser.displayName] || [];
+        // Clean up existing logic
         const others = existing.filter(s => convertFromGMT(s.day, s.start, userTimezone).day !== day);
         const newSlots = [...others, { day: gmtStart.day, start: gmtStart.time, end: gmtEnd.time }];
 
