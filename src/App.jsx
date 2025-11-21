@@ -1,7 +1,8 @@
 ﻿/*
-Syrix Team Availability - Single-file React prototype - FINAL FANCY PASS (Photo Fix)
-- FIX: Implemented logic to manually construct Discord avatar URL using user.uid.
-- Maintained premium, sleek, and visually engaging design.
+Syrix Team Availability - Final Stable Code
+- FIXED: Implemented reliable fallback for Discord profile pictures.
+- REMOVED: Future Enhancements section.
+- Maintained premium aesthetic and functional stability.
 */
 
 import React, { useState, useEffect, useMemo } from 'react';
@@ -31,7 +32,7 @@ const discordWebhookUrl = "https://discord.com/api/webhooks/1427426922228351042/
 const DAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
 const timezones = ["UTC", "GMT", "Europe/London", "Europe/Paris", "Europe/Berlin", "America/New_York", "America/Chicago", "America/Denver", "America/Los_Angeles", "Asia/Tokyo", "Australia/Sydney"];
 
-// --- Utility and Timezone functions (omitted for brevity) ---
+// --- Utility and Timezone functions ---
 const getAbsDateForDay = (dayString) => {
     const today = new Date();
     const todayDayIndex = (today.getUTCDay() === 0) ? 6 : today.getUTCDay() - 1;
@@ -394,12 +395,13 @@ function AvailabilityHeatmap({ availabilities, members }) {
     );
 }
 
+// --- NextSteps (Removed Future Enhancements Text) ---
 function NextSteps() {
     return (
         <footer className="mt-8 bg-slate-800 p-6 rounded-2xl shadow-2xl border border-slate-700/60">
-            <h2 className="font-bold text-slate-100 mb-3 text-xl">Future Enhancements</h2>
+            <h2 className="font-bold text-slate-100 mb-3 text-xl">About Syrix</h2>
             <p className="text-base text-slate-400 mb-4">
-                The application now offers a premium experience for team coordination. Further development could introduce recurring availability patterns, advanced filtering, or administrative controls for managing team members directly within the UI.
+                This application is a specialized coordination tool built for the Syrix team. Data is stored in real-time using Firebase Firestore and protected by Discord Authentication.
             </p>
         </footer>
     );
@@ -624,11 +626,13 @@ export default function App() {
     }, [day, end]);
     // ---------------------------------------------------------------------
 
-    // FIX: Manually construct Discord avatar URL using UID (Discord's ID)
-    const avatarUrl = currentUser ? `https://cdn.discordapp.com/avatars/${currentUser.uid}/${currentUser.photoURL}.png?size=64` : null;
-
-    // Fallback URL for users without a custom Discord avatar hash (e.g., if photoURL is null or generic)
-    const defaultAvatarUrl = 'https://discord.com/assets/f4453b3d840c6d2c49c719c8f2d59302.svg'; // A generic Discord logo/icon
+    // FIX: Manually construct Discord avatar URL using UID and general endpoint
+    // If photoURL contains an avatar hash (check for non-null/non-default value), use the CDN. Otherwise, use the generic default.
+    // NOTE: For Discord, the user.uid is the discord user ID, and photoURL is the avatar hash.
+    const hasCustomAvatar = currentUser?.photoURL && !currentUser.photoURL.startsWith('https://');
+    const avatarSource = hasCustomAvatar
+        ? `https://cdn.discordapp.com/avatars/${currentUser.uid}/${currentUser.photoURL}.png?size=64`
+        : `https://cdn.discordapp.com/embed/avatars/${currentUser?.uid % 5}.png?size=64`; // Discord uses discriminator % 5 for generic avatar hash. Assuming discriminator is 0 for non-legacy users, using UID % 5 as fallback.
 
 
     // Check 1: Is authentication loading? If so, show loading screen.
@@ -653,8 +657,7 @@ export default function App() {
                     <div className="flex items-center gap-4">
                         <div className="flex items-center gap-2 p-2 bg-slate-200/50 dark:bg-slate-700/50 rounded-full pr-4 border border-slate-300 dark:border-slate-700">
                             <img
-                                src={currentUser.photoURL ? avatarUrl : defaultAvatarUrl}
-                                onError={(e) => { e.target.onerror = null; e.target.src = defaultAvatarUrl }} // Fallback if constructed URL fails
+                                src={avatarSource}
                                 alt={currentUser.displayName}
                                 className="w-8 h-8 rounded-full shadow-inner"
                             />
@@ -686,15 +689,17 @@ export default function App() {
                             </select>
 
                             {/* Primary Time Inputs */}
-                            <div className="flex gap-4 mb-5">
+                            <div className="flex gap-3 mb-4">
                                 <div className="flex-1">
                                     <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300">Start Time</label>
                                     <input type="time" className="w-full p-3 border border-slate-300 dark:border-slate-600 rounded-xl text-slate-900 dark:text-slate-200 bg-slate-50 dark:bg-slate-700/50 shadow-inner transition-colors focus:border-blue-500" value={start} onChange={e => setStart(e.target.value)} />
+                                    {/* UX Improvement: Timezone Consistency Display */}
                                     <div className="text-xs text-slate-500 dark:text-slate-400 mt-1">{gmtStartDisplay}</div>
                                 </div>
                                 <div className="flex-1">
                                     <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300">End Time</label>
                                     <input type="time" className="w-full p-3 border border-slate-300 dark:border-slate-600 rounded-xl text-slate-900 dark:text-slate-200 bg-slate-50 dark:bg-slate-700/50 shadow-inner transition-colors focus:border-blue-500" value={end} onChange={e => setEnd(e.target.value)} />
+                                    {/* UX Improvement: Timezone Consistency Display */}
                                     <div className="text-xs text-slate-500 dark:text-slate-400 mt-1">{gmtEndDisplay}</div>
                                 </div>
                             </div>
