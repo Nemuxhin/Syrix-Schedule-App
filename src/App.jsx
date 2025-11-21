@@ -1,9 +1,8 @@
 ﻿/*
-Syrix Team Availability - FINAL PREMIUM BUILD (FIXED)
-- FIXED: "Monday writes Tuesday" bug (improved Timezone/Date math).
-- FIXED: Events not showing (Removed complex Firestore query requiring indexes).
-- FEATURE: Event Operations & Discord Automation active.
-- DESIGN: Premium "Glassmorphism" aesthetic maintained.
+Syrix Team Availability - TEAM RED & BLACK THEME
+- DESIGN: Full "Red & Black" Team Aesthetic overhaul.
+- FIXED: All previous logic (Date math, Discord PFP, Event Ops) preserved.
+- UI: Darker, "Gaming/Esports" style dashboard.
 */
 
 import React, { useState, useEffect, useMemo } from 'react';
@@ -43,15 +42,6 @@ const getNextDateForDay = (dayName) => {
     const currentDayIndex = today.getDay();
 
     let distance = targetIndex - currentDayIndex;
-    // If the target day is today or in the past (within this week), we treat it as "this upcoming week" logic if needed,
-    // but for simple scheduling, we usually mean the closest instance.
-    // Let's assume "Monday" means the Monday of the CURRENT week to keep the grid stable.
-
-    // Adjustment: Calculate 'distance' to align with the current week's instance of that day.
-    const currentWeekMondayDiff = 1 - currentDayIndex; // Distance to this week's Monday
-    const targetDiff = days.indexOf(dayName) - 1; // Distance of target from Monday
-
-    // Actually, easiest way for a stable weekly grid:
     // Anchor everything to "Today" and find the offset.
     const d = new Date(today);
     d.setDate(today.getDate() + distance);
@@ -119,13 +109,13 @@ const convertFromGMT = (day, time, timezone) => {
 function Modal({ isOpen, onClose, onConfirm, title, children }) {
     if (!isOpen) return null;
     return (
-        <div className="fixed inset-0 bg-black bg-opacity-70 z-50 flex justify-center items-center backdrop-blur-md p-4">
-            <div className="bg-slate-800 rounded-2xl shadow-3xl p-6 w-full max-w-md border border-slate-700 animate-fade-in-up">
-                <h3 className="text-2xl font-extrabold text-slate-100 mb-4 border-b pb-2 border-slate-600">{title}</h3>
-                <div className="text-slate-300 mb-6">{children}</div>
+        <div className="fixed inset-0 bg-black/90 z-50 flex justify-center items-center backdrop-blur-md p-4">
+            <div className="bg-neutral-900 rounded-2xl shadow-2xl shadow-red-900/20 p-6 w-full max-w-md border border-red-900/50 animate-fade-in-up">
+                <h3 className="text-2xl font-black text-white mb-4 border-b pb-2 border-red-900/50 uppercase tracking-wider">{title}</h3>
+                <div className="text-neutral-300 mb-6">{children}</div>
                 <div className="flex justify-end gap-4">
-                    <button onClick={onClose} className="bg-slate-700 hover:bg-slate-600 text-slate-200 font-semibold px-5 py-2 rounded-xl transition-all">Cancel</button>
-                    <button onClick={onConfirm} className="bg-emerald-600 hover:bg-emerald-500 text-white font-semibold px-5 py-2 rounded-xl shadow-lg transition-all">Confirm</button>
+                    <button onClick={onClose} className="bg-neutral-800 hover:bg-neutral-700 text-neutral-300 font-bold px-5 py-2 rounded-xl transition-all border border-neutral-700">Cancel</button>
+                    <button onClick={onConfirm} className="bg-red-600 hover:bg-red-500 text-white font-bold px-5 py-2 rounded-xl shadow-lg shadow-red-900/50 transition-all">Confirm</button>
                 </div>
             </div>
         </div>
@@ -152,8 +142,8 @@ function ScrimScheduler({ onSchedule, userTimezone }) {
         <div className="space-y-4">
             <div className="grid grid-cols-2 gap-4">
                 <div>
-                    <label className="block text-xs font-bold text-slate-400 mb-1 uppercase tracking-wider">Type</label>
-                    <select value={type} onChange={e => setType(e.target.value)} className="w-full p-2 bg-slate-700/50 border border-slate-600 rounded-lg text-slate-200 text-sm focus:ring-2 focus:ring-emerald-500 outline-none">
+                    <label className="block text-xs font-bold text-red-500 mb-1 uppercase tracking-wider">Type</label>
+                    <select value={type} onChange={e => setType(e.target.value)} className="w-full p-2 bg-black border border-neutral-800 rounded-lg text-white text-sm focus:border-red-600 focus:ring-1 focus:ring-red-600 outline-none transition-colors">
                         <option>Scrim</option>
                         <option>Tournament</option>
                         <option>Practice</option>
@@ -161,26 +151,26 @@ function ScrimScheduler({ onSchedule, userTimezone }) {
                     </select>
                 </div>
                 <div>
-                    <label className="block text-xs font-bold text-slate-400 mb-1 uppercase tracking-wider">Opponent / Notes</label>
-                    <input type="text" placeholder="e.g. Team Liquid" value={opponent} onChange={e => setOpponent(e.target.value)} className="w-full p-2 bg-slate-700/50 border border-slate-600 rounded-lg text-slate-200 text-sm focus:ring-2 focus:ring-emerald-500 outline-none" />
+                    <label className="block text-xs font-bold text-red-500 mb-1 uppercase tracking-wider">Opponent / Notes</label>
+                    <input type="text" placeholder="e.g. Team Liquid" value={opponent} onChange={e => setOpponent(e.target.value)} className="w-full p-2 bg-black border border-neutral-800 rounded-lg text-white text-sm focus:border-red-600 focus:ring-1 focus:ring-red-600 outline-none transition-colors placeholder-neutral-600" />
                 </div>
             </div>
             <div className="grid grid-cols-2 gap-4">
                 <div>
-                    <label className="block text-xs font-bold text-slate-400 mb-1 uppercase tracking-wider">Date</label>
-                    <input type="date" value={date} onChange={e => setDate(e.target.value)} className="w-full p-2 bg-slate-700/50 border border-slate-600 rounded-lg text-slate-200 text-sm focus:ring-2 focus:ring-emerald-500 outline-none" />
+                    <label className="block text-xs font-bold text-red-500 mb-1 uppercase tracking-wider">Date</label>
+                    <input type="date" value={date} onChange={e => setDate(e.target.value)} className="w-full p-2 bg-black border border-neutral-800 rounded-lg text-white text-sm focus:border-red-600 focus:ring-1 focus:ring-red-600 outline-none transition-colors [color-scheme:dark]" />
                 </div>
                 <div>
-                    <label className="block text-xs font-bold text-slate-400 mb-1 uppercase tracking-wider">Time ({userTimezone})</label>
-                    <input type="time" value={time} onChange={e => setTime(e.target.value)} className="w-full p-2 bg-slate-700/50 border border-slate-600 rounded-lg text-slate-200 text-sm focus:ring-2 focus:ring-emerald-500 outline-none" />
+                    <label className="block text-xs font-bold text-red-500 mb-1 uppercase tracking-wider">Time ({userTimezone})</label>
+                    <input type="time" value={time} onChange={e => setTime(e.target.value)} className="w-full p-2 bg-black border border-neutral-800 rounded-lg text-white text-sm focus:border-red-600 focus:ring-1 focus:ring-red-600 outline-none transition-colors [color-scheme:dark]" />
                 </div>
             </div>
             <button
                 onClick={handleSubmit}
                 disabled={status !== 'idle'}
-                className={`w-full py-3 rounded-xl font-bold shadow-lg transition-all transform active:scale-95 ${status === 'success' ? 'bg-emerald-500 text-white' : 'bg-blue-600 hover:bg-blue-500 text-white'}`}
+                className={`w-full py-3 rounded-xl font-black uppercase tracking-widest shadow-lg transition-all transform active:scale-95 ${status === 'success' ? 'bg-green-600 text-white' : 'bg-red-700 hover:bg-red-600 text-white shadow-red-900/30'}`}
             >
-                {status === 'idle' && '📅 Schedule & Post to Discord'}
+                {status === 'idle' && '📅 Schedule & Post'}
                 {status === 'saving' && 'Scheduling...'}
                 {status === 'success' && 'Event Scheduled!'}
             </button>
@@ -212,19 +202,19 @@ function AvailabilityHeatmap({ availabilities, members }) {
     }, [availabilities, activeMembers, numBuckets]);
 
     return (
-        <div className="overflow-x-auto rounded-xl border border-slate-700 shadow-inner bg-slate-800/50">
+        <div className="overflow-x-auto rounded-xl border border-neutral-800 shadow-inner bg-black">
             <div className="min-w-[600px]">
-                <div className="flex border-b border-slate-700">
-                    <div className="w-24 p-2 text-xs font-bold text-slate-400 bg-slate-800/80 sticky left-0">Day</div>
+                <div className="flex border-b border-neutral-800">
+                    <div className="w-24 p-2 text-xs font-bold text-red-500 bg-black sticky left-0 border-r border-neutral-800">DAY</div>
                     {Array.from({ length: 24 }).map((_, i) => (
-                        <div key={i} className="flex-1 text-[10px] text-center text-slate-500 border-l border-slate-700/50 py-1">{i}</div>
+                        <div key={i} className="flex-1 text-[10px] text-center text-neutral-500 border-l border-neutral-800/50 py-1">{i}</div>
                     ))}
                 </div>
                 {DAYS.map(day => (
-                    <div key={day} className="flex border-b border-slate-700/50 last:border-0">
-                        <div className="w-24 p-2 text-xs font-semibold text-slate-300 bg-slate-800/80 sticky left-0 border-r border-slate-700">{day}</div>
+                    <div key={day} className="flex border-b border-neutral-800/50 last:border-0">
+                        <div className="w-24 p-2 text-xs font-bold text-neutral-400 bg-black sticky left-0 border-r border-neutral-800">{day.substring(0, 3).toUpperCase()}</div>
                         {heatmapData[day]?.map((count, i) => (
-                            <div key={i} className={`flex-1 h-8 border-l border-slate-700/20 transition-all hover:brightness-125 relative group ${count > 0 ? 'bg-emerald-500' : ''}`} style={{ opacity: count > 0 ? count / maxCount : 1, backgroundColor: count === 0 ? 'transparent' : undefined }}>
+                            <div key={i} className={`flex-1 h-8 border-l border-neutral-800/30 transition-all hover:brightness-125 relative group ${count > 0 ? 'bg-red-600' : ''}`} style={{ opacity: count > 0 ? (count / maxCount) * 0.9 + 0.1 : 1, backgroundColor: count === 0 ? 'transparent' : undefined }}>
                                 {count > 0 && <span className="absolute inset-0 flex items-center justify-center text-[10px] font-bold text-white group-hover:scale-125 transition-transform">{count}</span>}
                             </div>
                         ))}
@@ -244,7 +234,6 @@ export default function App() {
     const [day, setDay] = useState(DAYS[0]);
     const [start, setStart] = useState('12:00');
     const [end, setEnd] = useState('23:30');
-    const [isDarkMode, setIsDarkMode] = useState(true); // Default to Dark
     const [saveStatus, setSaveStatus] = useState('idle');
     const [userTimezone, setUserTimezone] = useState(localStorage.getItem('timezone') || Intl.DateTimeFormat().resolvedOptions().timeZone);
     const [authLoading, setAuthLoading] = useState(true);
@@ -278,8 +267,7 @@ export default function App() {
             setAvailabilities(data);
         });
 
-        // FIX: Removed orderBy('date') to fix "Missing Index" error causing events to hide
-        // We will sort the events in the client (JavaScript) side instead
+        // Event Listener
         const unsubEvents = onSnapshot(collection(db, 'events'), (snap) => {
             const evs = [];
             snap.forEach(doc => evs.push({ id: doc.id, ...doc.data() }));
@@ -346,13 +334,10 @@ export default function App() {
         if (timeToMinutes(end) <= timeToMinutes(start)) return openModal('Error', 'End time must be after start.', () => setIsModalOpen(false));
         setSaveStatus('saving');
 
-        // FIX: Use new robust converter
         const gmtStart = convertToGMT(day, start);
         const gmtEnd = convertToGMT(day, end);
 
-        // Get existing slots excluding this day to avoid dupes/overlaps logic for now (simple add)
         const existing = availabilities[currentUser.displayName] || [];
-        // Clean up existing logic
         const others = existing.filter(s => convertFromGMT(s.day, s.start, userTimezone).day !== day);
         const newSlots = [...others, { day: gmtStart.day, start: gmtStart.time, end: gmtEnd.time }];
 
@@ -382,15 +367,15 @@ export default function App() {
         // 2. Post to Discord
         const content = {
             embeds: [{
-                title: `📅 New ${eventData.type} Scheduled!`,
-                color: 3066993, // Green
+                title: `🔴 New ${eventData.type} Scheduled!`,
+                color: 15158332, // RED Color Code for Discord
                 fields: [
                     { name: 'Type', value: eventData.type, inline: true },
                     { name: 'Opponent/Info', value: eventData.opponent || 'N/A', inline: true },
                     { name: 'When', value: `${eventData.date} at ${eventData.time} (${eventData.timezone})` },
                     { name: 'Scheduled By', value: currentUser.displayName }
                 ],
-                footer: { text: "Syrix Scheduler" },
+                footer: { text: "Syrix Hub" },
                 timestamp: new Date().toISOString()
             }]
         };
@@ -404,34 +389,37 @@ export default function App() {
         } catch (e) { console.error("Webhook failed", e); }
     };
 
-    if (authLoading) return <div className="min-h-screen bg-slate-900 flex items-center justify-center text-slate-200">Loading Syrix Hub...</div>;
+    if (authLoading) return <div className="min-h-screen bg-black flex items-center justify-center text-red-600 font-bold text-xl animate-pulse">LOADING SYRIX HUB...</div>;
     if (!currentUser) return (
-        <div className="min-h-screen bg-gradient-to-br from-slate-900 to-black flex items-center justify-center p-4">
-            <div className="text-center space-y-6">
-                <h1 className="text-6xl font-black text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-emerald-400 tracking-tighter">SYRIX</h1>
-                <p className="text-slate-400 text-lg">Team Coordination Hub</p>
-                <button onClick={signIn} className="bg-[#5865F2] hover:bg-[#4752C4] text-white px-8 py-4 rounded-2xl font-bold shadow-2xl transition-transform hover:scale-105 flex items-center gap-3 mx-auto">
-                    <span>Sign In with Discord</span>
+        <div className="min-h-screen bg-black flex items-center justify-center p-4 bg-[radial-gradient(ellipse_at_center,_var(--tw-gradient-stops))] from-red-900/20 via-black to-black">
+            <div className="text-center space-y-8 max-w-lg w-full p-10 rounded-3xl border border-red-900/30 bg-neutral-900/50 backdrop-blur-lg shadow-2xl shadow-red-900/20">
+                <div className="space-y-2">
+                    <h1 className="text-6xl font-black text-white tracking-tighter drop-shadow-lg">SYRIX</h1>
+                    <div className="h-1 w-32 bg-red-600 mx-auto rounded-full"></div>
+                    <p className="text-neutral-400 text-lg font-medium uppercase tracking-widest">Team Hub</p>
+                </div>
+                <button onClick={signIn} className="w-full bg-[#5865F2] hover:bg-[#4752C4] text-white py-4 rounded-xl font-bold shadow-lg transition-transform hover:scale-105 flex items-center justify-center gap-3">
+                    <span>Login with Discord</span>
                 </button>
             </div>
         </div>
     );
 
     return (
-        <div className="min-h-screen bg-slate-900 text-slate-200 p-4 sm:p-8 font-sans selection:bg-emerald-500/30">
+        <div className="min-h-screen bg-black text-neutral-200 p-4 sm:p-8 font-sans selection:bg-red-500/30">
             {/* Header */}
-            <header className="flex flex-col md:flex-row justify-between items-center mb-10 gap-4 border-b border-slate-800 pb-6">
+            <header className="flex flex-col md:flex-row justify-between items-center mb-10 gap-4 border-b border-red-900/30 pb-6">
                 <div>
-                    <h1 className="text-4xl font-black tracking-tighter text-white">SYRIX <span className="text-emerald-500">HUB</span></h1>
-                    <p className="text-slate-500 text-sm font-medium tracking-widest uppercase mt-1">Availability & Operations</p>
+                    <h1 className="text-4xl font-black tracking-tighter text-white">SYRIX <span className="text-red-600">HUB</span></h1>
+                    <p className="text-neutral-500 text-xs font-bold tracking-[0.2em] uppercase mt-1">Availability & Operations</p>
                 </div>
-                <div className="flex items-center gap-4 bg-slate-800/50 p-2 rounded-2xl border border-slate-700/50 backdrop-blur-sm">
-                    <img src={getAvatar()} className="w-10 h-10 rounded-full border-2 border-emerald-500/50" alt="Profile" />
-                    <div className="pr-4">
+                <div className="flex items-center gap-4 bg-neutral-900/80 p-2 rounded-2xl border border-neutral-800 backdrop-blur-sm shadow-lg">
+                    <img src={getAvatar()} className="w-10 h-10 rounded-full border-2 border-red-600 shadow-red-600/50 shadow-sm" alt="Profile" />
+                    <div className="pr-4 border-r border-neutral-700 mr-2">
                         <div className="text-sm font-bold text-white">{currentUser.displayName}</div>
-                        <button onClick={handleSignOut} className="text-xs text-slate-400 hover:text-red-400 transition-colors font-medium">Log Out</button>
+                        <button onClick={handleSignOut} className="text-[10px] text-neutral-400 hover:text-red-500 transition-colors font-bold uppercase tracking-wide">Log Out</button>
                     </div>
-                    <select value={userTimezone} onChange={e => { setUserTimezone(e.target.value); localStorage.setItem('timezone', e.target.value); }} className="bg-slate-900 border border-slate-700 text-xs rounded-lg p-2 text-slate-300 outline-none focus:border-emerald-500">
+                    <select value={userTimezone} onChange={e => { setUserTimezone(e.target.value); localStorage.setItem('timezone', e.target.value); }} className="bg-black border border-neutral-800 text-xs rounded-lg p-2 text-neutral-400 outline-none focus:border-red-600 transition-colors">
                         {timezones.map(t => <option key={t} value={t}>{t}</option>)}
                     </select>
                 </div>
@@ -443,48 +431,46 @@ export default function App() {
                 {/* Left Column: Inputs & Ops (4 cols) */}
                 <div className="lg:col-span-4 space-y-8">
                     {/* Availability Input */}
-                    <div className="bg-slate-800/40 p-6 rounded-3xl border border-slate-700/50 shadow-xl backdrop-blur-sm">
-                        <h2 className="text-xl font-bold text-white mb-6 flex items-center gap-2">
-                            <span className="w-2 h-6 bg-blue-500 rounded-full"></span>
+                    <div className="bg-neutral-900/50 p-6 rounded-3xl border border-neutral-800 shadow-xl backdrop-blur-sm relative overflow-hidden group">
+                        <div className="absolute top-0 left-0 w-1 h-full bg-red-600/50 group-hover:bg-red-600 transition-colors"></div>
+                        <h2 className="text-xl font-bold text-white mb-6 uppercase tracking-wide flex items-center gap-2">
                             Set Availability
                         </h2>
 
                         <div className="space-y-4">
                             <div>
-                                <label className="text-xs font-bold text-slate-500 uppercase mb-1 block">Day</label>
-                                <select value={day} onChange={e => setDay(e.target.value)} className="w-full p-3 bg-slate-900/50 border border-slate-700 rounded-xl text-white focus:ring-2 focus:ring-blue-500 outline-none transition-all">
+                                <label className="text-[10px] font-black text-red-500 uppercase mb-1 block">Day</label>
+                                <select value={day} onChange={e => setDay(e.target.value)} className="w-full p-3 bg-black border border-neutral-800 rounded-xl text-white focus:border-red-600 focus:ring-1 focus:ring-red-600 outline-none transition-all">
                                     {DAYS.map(d => <option key={d} value={d}>{d}</option>)}
                                 </select>
                             </div>
                             <div className="grid grid-cols-2 gap-3">
                                 <div>
-                                    <label className="text-xs font-bold text-slate-500 uppercase mb-1 block">Start</label>
-                                    <input type="time" value={start} onChange={e => setStart(e.target.value)} className="w-full p-3 bg-slate-900/50 border border-slate-700 rounded-xl text-white focus:ring-2 focus:ring-blue-500 outline-none" />
+                                    <label className="text-[10px] font-black text-red-500 uppercase mb-1 block">Start</label>
+                                    <input type="time" value={start} onChange={e => setStart(e.target.value)} className="w-full p-3 bg-black border border-neutral-800 rounded-xl text-white focus:border-red-600 focus:ring-1 focus:ring-red-600 outline-none [color-scheme:dark]" />
                                 </div>
                                 <div>
-                                    <label className="text-xs font-bold text-slate-500 uppercase mb-1 block">End</label>
-                                    <input type="time" value={end} onChange={e => setEnd(e.target.value)} className="w-full p-3 bg-slate-900/50 border border-slate-700 rounded-xl text-white focus:ring-2 focus:ring-blue-500 outline-none" />
+                                    <label className="text-[10px] font-black text-red-500 uppercase mb-1 block">End</label>
+                                    <input type="time" value={end} onChange={e => setEnd(e.target.value)} className="w-full p-3 bg-black border border-neutral-800 rounded-xl text-white focus:border-red-600 focus:ring-1 focus:ring-red-600 outline-none [color-scheme:dark]" />
                                 </div>
                             </div>
 
                             <div className="pt-2 flex gap-2">
-                                <button onClick={saveAvailability} disabled={saveStatus !== 'idle'} className={`flex-1 py-3 rounded-xl font-bold shadow-lg transition-all transform active:scale-95 ${saveStatus === 'success' ? 'bg-emerald-500 text-white' : 'bg-slate-100 text-slate-900 hover:bg-white'}`}>
+                                <button onClick={saveAvailability} disabled={saveStatus !== 'idle'} className={`flex-1 py-3 rounded-xl font-black uppercase tracking-wider shadow-lg transition-all transform active:scale-95 ${saveStatus === 'success' ? 'bg-green-600 text-white' : 'bg-red-700 hover:bg-red-600 text-white shadow-red-900/30'}`}>
                                     {saveStatus === 'idle' ? 'Save Slot' : saveStatus === 'saving' ? '...' : 'Saved!'}
                                 </button>
-                                <button onClick={() => openModal('Clear Day', `Clear all for ${day}?`, clearDay)} className="px-4 py-3 bg-slate-700 hover:bg-slate-600 rounded-xl text-slate-300 font-bold transition-colors">Clear</button>
+                                <button onClick={() => openModal('Clear Day', `Clear all for ${day}?`, clearDay)} className="px-4 py-3 bg-neutral-800 hover:bg-neutral-700 rounded-xl text-neutral-300 font-bold transition-colors border border-neutral-700">Clear</button>
                             </div>
-                            <div className="text-center">
-                                <button onClick={() => openModal('Reset', 'Delete ALL your data?', clearAll)} className="text-xs text-red-500/70 hover:text-red-400 font-medium transition-colors">Reset All My Data</button>
+                            <div className="text-center pt-2">
+                                <button onClick={() => openModal('Reset', 'Delete ALL your data?', clearAll)} className="text-[10px] text-neutral-500 hover:text-red-500 font-bold uppercase tracking-widest transition-colors">Reset All Data</button>
                             </div>
                         </div>
                     </div>
 
-                    {/* NEW: Event Operations Module */}
-                    <div className="bg-slate-800/40 p-6 rounded-3xl border border-slate-700/50 shadow-xl backdrop-blur-sm">
-                        <h2 className="text-xl font-bold text-white mb-6 flex items-center gap-2">
-                            <span className="w-2 h-6 bg-purple-500 rounded-full"></span>
-                            Event Operations
-                        </h2>
+                    {/* Event Operations Module */}
+                    <div className="bg-neutral-900/50 p-6 rounded-3xl border border-neutral-800 shadow-xl backdrop-blur-sm relative overflow-hidden group">
+                        <div className="absolute top-0 left-0 w-1 h-full bg-red-600/50 group-hover:bg-red-600 transition-colors"></div>
+                        <h2 className="text-xl font-bold text-white mb-6 uppercase tracking-wide">Event Operations</h2>
                         <ScrimScheduler onSchedule={scheduleEvent} userTimezone={userTimezone} />
                     </div>
                 </div>
@@ -495,38 +481,38 @@ export default function App() {
                     {/* Top Row: Heatmap & Upcoming */}
                     <div className="grid grid-cols-1 xl:grid-cols-2 gap-8">
                         {/* Upcoming Events Feed */}
-                        <div className="bg-gradient-to-br from-slate-800 to-slate-900 p-6 rounded-3xl border border-slate-700 shadow-2xl">
-                            <h2 className="text-lg font-bold text-white mb-4 flex justify-between items-center">
-                                <span>📅 Upcoming Events</span>
-                                <span className="text-xs bg-slate-700 px-2 py-1 rounded text-slate-300">{events.length} Scheduled</span>
+                        <div className="bg-neutral-900/80 p-6 rounded-3xl border border-neutral-800 shadow-2xl">
+                            <h2 className="text-lg font-bold text-white mb-4 flex justify-between items-center uppercase tracking-wide">
+                                <span>Upcoming Events</span>
+                                <span className="text-[10px] bg-red-900/30 text-red-400 border border-red-900/50 px-2 py-1 rounded font-bold">{events.length} ACTIVE</span>
                             </h2>
-                            <div className="space-y-3 max-h-64 overflow-y-auto pr-2 scrollbar-thin scrollbar-thumb-slate-600">
-                                {events.length === 0 ? <p className="text-slate-500 text-sm">No upcoming events.</p> : events.map(ev => (
-                                    <div key={ev.id} className="p-3 bg-slate-700/30 rounded-xl border border-slate-700/50 flex justify-between items-center">
+                            <div className="space-y-3 max-h-64 overflow-y-auto pr-2 scrollbar-thin scrollbar-thumb-neutral-700 scrollbar-track-transparent">
+                                {events.length === 0 ? <p className="text-neutral-600 text-sm italic p-4 text-center">No scheduled events.</p> : events.map(ev => (
+                                    <div key={ev.id} className="p-3 bg-black/40 rounded-xl border border-neutral-800 flex justify-between items-center group hover:border-red-900/50 transition-colors">
                                         <div>
-                                            <div className="font-bold text-emerald-400 text-sm">{ev.type} {ev.opponent && `vs ${ev.opponent}`}</div>
-                                            <div className="text-xs text-slate-400">{ev.date} @ {ev.time}</div>
+                                            <div className="font-bold text-white text-sm group-hover:text-red-400 transition-colors">{ev.type} <span className="text-neutral-500">vs</span> {ev.opponent || 'TBD'}</div>
+                                            <div className="text-xs text-neutral-400 mt-1">{ev.date} @ <span className="text-white font-mono">{ev.time}</span></div>
                                         </div>
-                                        <div className="text-[10px] bg-slate-800 px-2 py-1 rounded text-slate-500">By {ev.scheduledBy || 'Team'}</div>
+                                        <div className="text-[9px] bg-neutral-800 text-neutral-400 px-2 py-1 rounded uppercase font-bold tracking-wider">By {ev.scheduledBy || 'Admin'}</div>
                                     </div>
                                 ))}
                             </div>
                         </div>
 
                         {/* Heatmap Container */}
-                        <div className="bg-slate-800/40 p-6 rounded-3xl border border-slate-700/50">
-                            <h2 className="text-lg font-bold text-white mb-4">🔥 Availability Heatmap</h2>
+                        <div className="bg-neutral-900/50 p-6 rounded-3xl border border-neutral-800">
+                            <h2 className="text-lg font-bold text-white mb-4 uppercase tracking-wide">Availability Heatmap</h2>
                             <AvailabilityHeatmap availabilities={availabilities} members={dynamicMembers} />
                         </div>
                     </div>
 
                     {/* Detailed Grid */}
-                    <div className="bg-slate-800 p-6 rounded-3xl border border-slate-700 shadow-2xl">
-                        <h2 className="text-xl font-bold text-white mb-6">Detailed Timeline ({userTimezone})</h2>
+                    <div className="bg-neutral-900 p-6 rounded-3xl border border-neutral-800 shadow-2xl">
+                        <h2 className="text-xl font-bold text-white mb-6 uppercase tracking-wide">Detailed Timeline <span className="text-neutral-500 text-sm normal-case">({userTimezone})</span></h2>
                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                             {DAYS.map(d => (
-                                <div key={d} className="bg-slate-900/50 rounded-2xl p-4 border border-slate-700/50">
-                                    <h3 className="font-bold text-slate-400 mb-3 uppercase text-xs tracking-wider">{d}</h3>
+                                <div key={d} className="bg-black/40 rounded-2xl p-4 border border-neutral-800 hover:border-neutral-700 transition-colors">
+                                    <h3 className="font-black text-red-600 mb-3 uppercase text-xs tracking-widest border-b border-neutral-800 pb-2">{d.substring(0, 3)}</h3>
                                     <div className="space-y-2">
                                         {dynamicMembers.map(m => {
                                             const slots = (displayAvailabilities[m] || []).filter(s => s.day === d);
@@ -534,11 +520,11 @@ export default function App() {
                                             return (
                                                 <div key={m} className="text-sm">
                                                     <div className="flex justify-between items-baseline mb-1">
-                                                        <span className="font-bold text-slate-200">{m}</span>
+                                                        <span className="font-bold text-neutral-300">{m}</span>
                                                     </div>
                                                     <div className="flex flex-wrap gap-1">
                                                         {slots.map((s, i) => (
-                                                            <span key={i} className="bg-emerald-500/20 text-emerald-400 px-2 py-0.5 rounded text-xs border border-emerald-500/30">
+                                                            <span key={i} className="bg-red-900/20 text-red-400 px-2 py-0.5 rounded text-[10px] font-mono border border-red-900/30">
                                                                 {s.start}-{s.end}
                                                             </span>
                                                         ))}
@@ -547,7 +533,7 @@ export default function App() {
                                             );
                                         })}
                                         {!dynamicMembers.some(m => (displayAvailabilities[m] || []).some(s => s.day === d)) &&
-                                            <p className="text-xs text-slate-600 italic">No availability.</p>
+                                            <p className="text-[10px] text-neutral-700 uppercase tracking-widest font-bold py-2">No Data</p>
                                         }
                                     </div>
                                 </div>
