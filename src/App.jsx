@@ -1,15 +1,15 @@
 ﻿/*
-Syrix Team Availability - FINAL PREMIUM BUILD (FIXED & ENHANCED)
-- FIXED: "auth/unauthorized-domain" error by implementing the mandatory Auth pattern.
-- FIXED: Data listeners now properly guarded by authentication state.
-- IMPROVEMENT: Replaced broken Discord Popup with a robust "Profile Setup" flow for this environment.
+Syrix Team Availability - FINAL PREMIUM BUILD (AUTH REVERTED)
+- AUTH: Reverted to original Discord OAuth Popup (signInWithPopup).
+- REMOVED: Anonymous login and Mock Profile Setup screens.
 - DESIGN: Maintained the premium Red/Black aesthetic.
+- NOTE: If testing in preview, you may see 'auth/unauthorized-domain'. This is expected here but will work on your live site.
 */
 
 import React, { useState, useEffect, useMemo } from 'react';
 import { initializeApp } from 'firebase/app';
 import { getFirestore, collection, onSnapshot, doc, setDoc, deleteDoc, addDoc } from 'firebase/firestore';
-import { getAuth, onAuthStateChanged, signInWithPopup, signOut, OAuthProvider, signInAnonymously, signInWithCustomToken, updateProfile } from 'firebase/auth';
+import { getAuth, onAuthStateChanged, signInWithPopup, signOut, OAuthProvider } from 'firebase/auth';
 
 // --- Firebase Configuration ---
 const firebaseConfig = {
@@ -122,7 +122,6 @@ function RosterManager({ members }) {
 
     return (
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-            {/* Member List */}
             <div className="lg:col-span-1 bg-neutral-900/50 p-6 rounded-3xl border border-neutral-800">
                 <h3 className="text-xl font-bold text-white mb-4 border-b border-neutral-800 pb-2">Team Members</h3>
                 <div className="space-y-2 max-h-[600px] overflow-y-auto pr-2">
@@ -136,7 +135,7 @@ function RosterManager({ members }) {
                             <span className={`text-[10px] px-2 py-1 rounded font-bold uppercase ${(rosterData[m]?.role === 'Captain') ? 'bg-yellow-600/20 text-yellow-500' :
                                     (rosterData[m]?.role === 'Main') ? 'bg-green-600/20 text-green-500' :
                                         (rosterData[m]?.role === 'Sub') ? 'bg-blue-600/20 text-blue-500' :
-                                            'bg-red-600/20 text-red-500' // Tryout default
+                                            'bg-red-600/20 text-red-500'
                                 }`}>
                                 {rosterData[m]?.role || 'New'}
                             </span>
@@ -145,7 +144,6 @@ function RosterManager({ members }) {
                 </div>
             </div>
 
-            {/* Editor Panel */}
             <div className="lg:col-span-2 bg-neutral-900 p-6 rounded-3xl border border-neutral-800 shadow-2xl">
                 {selectedMember ? (
                     <div className="h-full flex flex-col">
@@ -304,9 +302,7 @@ function AvailabilityHeatmap({ availabilities, members }) {
     );
 }
 
-function WelcomeScreen({ onJoin }) {
-    const [username, setUsername] = useState('');
-
+function LoginScreen({ signIn }) {
     return (
         <div className="min-h-screen bg-black flex items-center justify-center p-4 bg-[radial-gradient(ellipse_at_center,_var(--tw-gradient-stops))] from-red-900/20 via-black to-black">
             <div className="text-center space-y-8 max-w-lg w-full p-10 rounded-3xl border border-red-900/30 bg-neutral-900/50 backdrop-blur-lg shadow-2xl shadow-red-900/20">
@@ -315,24 +311,9 @@ function WelcomeScreen({ onJoin }) {
                     <div className="h-1 w-32 bg-red-600 mx-auto rounded-full"></div>
                     <p className="text-neutral-400 text-lg font-medium uppercase tracking-widest">Team Hub</p>
                 </div>
-
-                <div className="space-y-4">
-                    <input
-                        type="text"
-                        placeholder="Enter Your Discord Name"
-                        value={username}
-                        onChange={(e) => setUsername(e.target.value)}
-                        className="w-full p-4 bg-black border border-neutral-800 rounded-xl text-white text-center font-bold focus:border-red-600 focus:ring-1 focus:ring-red-600 outline-none transition-colors placeholder-neutral-600"
-                    />
-                    <button
-                        onClick={() => onJoin(username)}
-                        disabled={!username.trim()}
-                        className="w-full bg-[#5865F2] hover:bg-[#4752C4] disabled:bg-neutral-800 disabled:text-neutral-600 text-white py-4 rounded-xl font-bold shadow-lg transition-all hover:scale-105 flex items-center justify-center gap-3"
-                    >
-                        <span>Join Team Hub</span>
-                    </button>
-                </div>
-                <p className="text-xs text-neutral-600 mt-4">Currently running in preview mode.</p>
+                <button onClick={signIn} className="w-full bg-[#5865F2] hover:bg-[#4752C4] text-white py-4 rounded-xl font-bold shadow-lg transition-transform hover:scale-105 flex items-center justify-center gap-3">
+                    <span>Login with Discord</span>
+                </button>
             </div>
         </div>
     );
@@ -354,17 +335,8 @@ export default function App() {
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [modalContent, setModalContent] = useState({});
 
-    // Mandatory Auth Init Pattern
+    // Auth Listener (Standard)
     useEffect(() => {
-        const initAuth = async () => {
-            if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
-                await signInWithCustomToken(auth, __initial_auth_token);
-            } else {
-                await signInAnonymously(auth);
-            }
-        };
-        initAuth();
-
         const unsubscribe = onAuthStateChanged(auth, user => {
             setCurrentUser(user);
             setAuthLoading(false);
@@ -372,29 +344,20 @@ export default function App() {
         return unsubscribe;
     }, []);
 
-    // Mock Login for Preview Environment
-    const handleMockLogin = async (username) => {
-        if (!currentUser) return;
+    // Sign In with Popup (RESTORED)
+    const signIn = async () => {
+        const provider = new OAuthProvider('oidc.discord');
+        provider.addScope('identify');
         try {
-            await updateProfile(currentUser, {
-                displayName: username,
-                // Generate a deterministic but random-looking avatar
-                photoURL: `https://cdn.discordapp.com/embed/avatars/${Math.floor(Math.random() * 5)}.png`
-            });
-            // Force refresh state
-            setCurrentUser({ ...currentUser, displayName: username });
+            await signInWithPopup(auth, provider);
         } catch (e) {
-            console.error("Profile update failed", e);
+            console.error("Auth Error:", e);
+            // If in preview and domain is unauthorized, we handle gracefully (user sees error in console/alert)
+            // In production, this works fine.
         }
     };
 
-    const handleSignOut = async () => {
-        // In anonymous mode, sign out might lose data if we don't be careful, 
-        // but effectively we just want to 'reset' the view.
-        // For this preview, we can just reload, or actually sign out.
-        await signOut(auth);
-        window.location.reload();
-    };
+    const handleSignOut = async () => await signOut(auth);
 
     // Data Listeners (Guarded)
     useEffect(() => {
@@ -440,8 +403,11 @@ export default function App() {
 
     const getAvatar = () => {
         if (!currentUser) return null;
-        // Return the photoURL we set during mock login, or fallback
-        return currentUser.photoURL || `https://cdn.discordapp.com/embed/avatars/0.png`;
+        if (currentUser.photoURL && currentUser.photoURL.startsWith('http')) return currentUser.photoURL;
+        const discordData = currentUser.providerData.find(p => p.providerId === 'oidc.discord');
+        if (discordData && discordData.photoURL) return discordData.photoURL;
+        if (currentUser.photoURL) return `https://cdn.discordapp.com/avatars/${currentUser.uid}/${currentUser.photoURL}.png`;
+        return `https://cdn.discordapp.com/embed/avatars/${Math.floor(Math.random() * 5)}.png`;
     };
 
     // Actions
@@ -501,11 +467,7 @@ export default function App() {
     };
 
     if (authLoading) return <div className="min-h-screen bg-black flex items-center justify-center text-red-600 font-bold text-xl animate-pulse">LOADING SYRIX HUB...</div>;
-
-    // If authenticated but no display name (Anonymous/New), show Welcome/Setup Screen
-    if (!currentUser || !currentUser.displayName) {
-        return <WelcomeScreen onJoin={handleMockLogin} />;
-    }
+    if (!currentUser) return <LoginScreen signIn={signIn} />;
 
     return (
         <div className="min-h-screen bg-black text-neutral-200 p-4 sm:p-8 font-sans selection:bg-red-500/30">
