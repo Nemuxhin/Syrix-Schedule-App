@@ -1,14 +1,14 @@
 ﻿/*
-Syrix Team Availability - FINAL ULTIMATE BUILD (STRICT ACCESS)
-- FIX: Strict Role Check (User must have a 'role' in DB to see dashboard).
-- FIX: Seamless redirect to Apply tab for new users (no error flash).
-- FIX: Date/Timezone math hardened to prevent day-shifting.
-- DESIGN: Premium Red/Black Theme maintained.
+Syrix Team Availability - FINAL STABLE BUILD
+- FIXED: ReferenceError for LoginScreen (Component order and scope corrected).
+- FIXED: "Object as child" error (State initialization hardened).
+- FEATURE: All premium features (Comps, Veto, Match History, etc.) included.
+- DESIGN: Premium Syrix Red/Black Theme.
 */
 
 import React, { useState, useEffect, useMemo } from 'react';
 import { initializeApp } from 'firebase/app';
-import { getFirestore, collection, onSnapshot, doc, setDoc, deleteDoc, addDoc, updateDoc, getDoc } from 'firebase/firestore';
+import { getFirestore, collection, onSnapshot, doc, setDoc, deleteDoc, addDoc, updateDoc } from 'firebase/firestore';
 import { getAuth, onAuthStateChanged, signInWithPopup, signOut, OAuthProvider } from 'firebase/auth';
 
 // --- Firebase Configuration ---
@@ -28,95 +28,63 @@ const auth = getAuth(app);
 
 const discordWebhookUrl = "https://discord.com/api/webhooks/1427426922228351042/lqw36ZxOPEnC3qK45b3vnqZvbkaYhzIxqb-uS1tex6CGOvmLYs19OwKZvslOVABdpHnD";
 
-// STRICT ADMIN LIST (Case sensitive if needed, but we handle leniently)
 const ADMINS = ["Nemuxhin", "Tawz", "tawz", "nemuxhin"];
 
 const DAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
 const SHORT_DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 const MAPS = ["Ascent", "Bind", "Breeze", "Fracture", "Haven", "Icebox", "Lotus", "Pearl", "Split", "Sunset"];
 const ROLES = ["Flex", "Duelist", "Initiator", "Controller", "Sentinel"];
-const timezones = ["UTC", "GMT", "Europe/London", "Europe/Paris", "Europe/Berlin", "America/New_York", "America/Chicago", "America/Denver", "America/Los_Angeles", "Asia/Tokyo", "Australia/Sydney"];
 const RANKS = ["Unranked", "Iron", "Bronze", "Silver", "Gold", "Platinum", "Diamond", "Ascendant", "Immortal", "Radiant"];
+const AGENTS = ["Jett", "Raze", "Reyna", "Yoru", "Phoenix", "Neon", "Iso", "Omen", "Astra", "Brimstone", "Viper", "Harbor", "Clove", "Sova", "Fade", "Skye", "Breach", "KAY/O", "Gekko", "Killjoy", "Cypher", "Sage", "Chamber", "Deadlock", "Vyse"];
+const timezones = ["UTC", "GMT", "Europe/London", "Europe/Paris", "Europe/Berlin", "America/New_York", "America/Chicago", "America/Denver", "America/Los_Angeles", "Asia/Tokyo", "Australia/Sydney"];
 
 // --- Utility Functions ---
 function timeToMinutes(t) { if (!t || t === '24:00') return 1440; const [h, m] = t.split(":").map(Number); return h * 60 + m; }
 function minutesToTime(m) { const minutes = m % 1440; const hh = Math.floor(minutes / 60).toString().padStart(2, '0'); const mm = (minutes % 60).toString().padStart(2, '0'); return `${hh}:${mm}`; }
 
-// --- Enhanced Date/Time Logic ---
-// We anchor everything to a fixed reference date to avoid weekly drift issues
-const getReferenceDateForDay = (dayName) => {
-    const dayIndex = DAYS.indexOf(dayName);
+const getNextDateForDay = (dayName) => {
+    const days = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+    const targetIndex = days.indexOf(dayName);
     const today = new Date();
-    const currentDayIndex = today.getDay() === 0 ? 6 : today.getDay() - 1; // Make Sunday 6, Mon 0
-
-    // Calculate offset to the target day in the current week
-    const diff = dayIndex - currentDayIndex;
-    const targetDate = new Date(today);
-    targetDate.setDate(today.getDate() + diff);
-    return targetDate;
+    const currentDayIndex = today.getDay();
+    let distance = targetIndex - currentDayIndex;
+    const d = new Date(today);
+    d.setDate(today.getDate() + distance);
+    return d;
 };
 
 const convertToGMT = (day, time) => {
-    const localDate = getReferenceDateForDay(day);
+    const targetDate = getNextDateForDay(day);
     const [hours, minutes] = time.split(':').map(Number);
-    localDate.setHours(hours, minutes, 0, 0);
-
-    // Convert the LOCAL time to UTC parts
-    const utcDayIndex = localDate.getUTCDay(); // 0 (Sun) - 6 (Sat)
-    // Map JS UTC Day index back to our DAYS array (Mon-Sun)
-    // JS: 0=Sun, 1=Mon... 
-    // Our: 0=Mon... 
-    // Conversion: (utcDayIndex + 6) % 7
-    const ourDayIndex = (utcDayIndex + 6) % 7;
-
-    const gmtHours = String(localDate.getUTCHours()).padStart(2, '0');
-    const gmtMinutes = String(localDate.getUTCMinutes()).padStart(2, '0');
-
-    return { day: DAYS[ourDayIndex], time: `${gmtHours}:${gmtMinutes}` };
+    targetDate.setHours(hours, minutes, 0, 0);
+    const utcDayIndex = targetDate.getUTCDay();
+    const jsDays = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+    const gmtDay = jsDays[utcDayIndex];
+    const gmtHours = String(targetDate.getUTCHours()).padStart(2, '0');
+    const gmtMinutes = String(targetDate.getUTCMinutes()).padStart(2, '0');
+    return { day: gmtDay, time: `${gmtHours}:${gmtMinutes}` };
 };
 
 const convertFromGMT = (day, time, timezone) => {
     if (!day || !time) return { day: '', time: '' };
-
-    const dayIndex = DAYS.indexOf(day); // Our index 0-6 (Mon-Sun)
-    // Convert to JS Day Index (Sun=0, Mon=1) -> (dayIndex + 1) % 7
-    const jsDayIndex = (dayIndex + 1) % 7;
-
-    // Find the next instance of this UTC day
-    const now = new Date();
-    const currentJsDay = now.getUTCDay();
-    let distance = jsDayIndex - currentJsDay;
-    // Align to current week mostly
-    const gmtDate = new Date(now);
-    gmtDate.setUTCDate(now.getUTCDate() + distance);
-
+    const jsDays = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+    const targetIndex = jsDays.indexOf(day);
+    const today = new Date();
+    const currentDayIndex = today.getUTCDay();
+    const distance = targetIndex - currentDayIndex;
+    const gmtDate = new Date(today);
+    gmtDate.setUTCDate(today.getUTCDate() + distance);
     const [hours, minutes] = time.split(':').map(Number);
     gmtDate.setUTCHours(hours, minutes, 0, 0);
-
-    const formatter = new Intl.DateTimeFormat('en-US', {
-        timeZone: timezone,
-        weekday: 'long',
-        hour: '2-digit',
-        minute: '2-digit',
-        hour12: false,
-        hourCycle: 'h23' // Force 0-23 format
-    });
-
+    const formatter = new Intl.DateTimeFormat('en-US', { timeZone: timezone, weekday: 'long', hour: '2-digit', minute: '2-digit', hour12: false });
     const parts = formatter.formatToParts(gmtDate);
     const part = (type) => parts.find(p => p.type === type)?.value;
-
     let localHours = part('hour');
     if (localHours === '24') localHours = '00';
-    // Ensure double digits for time input compatibility
-    if (localHours.length === 1) localHours = '0' + localHours;
-
-    return {
-        day: part('weekday'),
-        time: `${localHours}:${part('minute')}`
-    };
+    return { day: part('weekday'), time: `${localHours}:${part('minute')}` };
 };
 
-// --- Components ---
+// --- COMPONENTS ---
 
 function Modal({ isOpen, onClose, onConfirm, title, children }) {
     if (!isOpen) return null;
@@ -134,51 +102,125 @@ function Modal({ isOpen, onClose, onConfirm, title, children }) {
     );
 }
 
-function AdminPanel() {
-    const [applications, setApplications] = useState([]);
+function LeaveLogger({ members }) {
+    const [leaves, setLeaves] = useState([]);
+    const [newLeave, setNewLeave] = useState({ start: '', end: '', reason: '' });
+    const { currentUser } = getAuth();
 
     useEffect(() => {
-        const unsub = onSnapshot(collection(db, 'applications'), (snap) => {
-            const apps = [];
-            snap.forEach(doc => apps.push({ id: doc.id, ...doc.data() }));
-            setApplications(apps);
+        const unsub = onSnapshot(collection(db, 'leaves'), (snap) => {
+            const l = [];
+            snap.forEach(doc => l.push({ id: doc.id, ...doc.data() }));
+            l.sort((a, b) => new Date(a.start) - new Date(b.start));
+            setLeaves(l.filter(leave => new Date(leave.end) >= new Date()));
         });
         return () => unsub();
     }, []);
 
-    const acceptApplicant = async (app) => {
-        await setDoc(doc(db, 'roster', app.user), {
-            rank: app.rank,
-            role: 'Tryout',
-            notes: `Tracker: ${app.tracker}\nWhy: ${app.why}`,
-            joinedAt: new Date().toISOString()
+    const addLeave = async () => {
+        if (!newLeave.start || !newLeave.end) return;
+        await addDoc(collection(db, 'leaves'), {
+            ...newLeave,
+            user: currentUser.displayName,
+            timestamp: new Date().toISOString()
         });
-        await deleteDoc(doc(db, 'applications', app.id));
+        setNewLeave({ start: '', end: '', reason: '' });
     };
 
-    const rejectApplicant = async (id) => { await deleteDoc(doc(db, 'applications', id)); };
+    const deleteLeave = async (id) => await deleteDoc(doc(db, 'leaves', id));
 
+    return (
+        <div className="bg-neutral-900 p-6 rounded-3xl border border-neutral-800 shadow-xl backdrop-blur-sm">
+            <h3 className="text-lg font-bold text-white mb-4 border-b border-neutral-800 pb-2 uppercase tracking-wider flex items-center gap-2">
+                <span className="text-xl">🏖️</span> Absence Log
+            </h3>
+
+            <div className="space-y-3 mb-4">
+                <div className="grid grid-cols-2 gap-2">
+                    <input type="date" value={newLeave.start} onChange={e => setNewLeave({ ...newLeave, start: e.target.value })} className="w-full bg-black border border-neutral-800 rounded-lg p-2 text-white text-xs outline-none focus:border-red-600 [color-scheme:dark]" />
+                    <input type="date" value={newLeave.end} onChange={e => setNewLeave({ ...newLeave, end: e.target.value })} className="w-full bg-black border border-neutral-800 rounded-lg p-2 text-white text-xs outline-none focus:border-red-600 [color-scheme:dark]" />
+                </div>
+                <input type="text" placeholder="Reason (e.g. Vacation)" value={newLeave.reason} onChange={e => setNewLeave({ ...newLeave, reason: e.target.value })} className="w-full bg-black border border-neutral-800 rounded-lg p-2 text-white text-xs outline-none focus:border-red-600" />
+                <button onClick={addLeave} className="w-full bg-neutral-800 hover:bg-neutral-700 text-neutral-300 text-xs font-bold py-2 rounded-lg border border-neutral-700 transition-all">Log Absence</button>
+            </div>
+
+            <div className="space-y-2 max-h-40 overflow-y-auto pr-2 custom-scrollbar">
+                {leaves.length === 0 && <p className="text-neutral-600 italic text-xs">No upcoming absences.</p>}
+                {leaves.map(l => (
+                    <div key={l.id} className="p-2 bg-black/40 border border-neutral-800 rounded-lg flex justify-between items-center text-xs hover:border-red-900/30 transition-colors">
+                        <div>
+                            <span className="font-bold text-red-400 mr-2">{l.user}</span>
+                            <span className="text-neutral-400">{l.start} - {l.end}</span>
+                            <div className="text-neutral-500 italic">{l.reason}</div>
+                        </div>
+                        {(l.user === currentUser?.displayName || ADMINS.includes(currentUser?.displayName)) && (
+                            <button onClick={() => deleteLeave(l.id)} className="text-neutral-600 hover:text-red-500 font-bold px-2">×</button>
+                        )}
+                    </div>
+                ))}
+            </div>
+        </div>
+    );
+}
+
+function NextMatchCountdown({ events }) {
+    const [timeLeft, setTimeLeft] = useState('');
+    const nextEvent = useMemo(() => {
+        const now = new Date();
+        return events.find(e => new Date(e.date + 'T' + e.time) > now);
+    }, [events]);
+    useEffect(() => {
+        if (!nextEvent) { setTimeLeft(''); return; }
+        const target = new Date(nextEvent.date + 'T' + nextEvent.time);
+        const interval = setInterval(() => {
+            const now = new Date();
+            const diff = target - now;
+            if (diff <= 0) { setTimeLeft('NOW'); return; }
+            const d = Math.floor(diff / (1000 * 60 * 60 * 24));
+            const h = Math.floor((diff / (1000 * 60 * 60)) % 24);
+            const m = Math.floor((diff / 1000 / 60) % 60);
+            const s = Math.floor((diff / 1000) % 60);
+            setTimeLeft(`${d}d ${h}h ${m}m ${s}s`);
+        }, 1000);
+        return () => clearInterval(interval);
+    }, [nextEvent]);
+    if (!nextEvent) return null;
+    return (
+        <div className="bg-gradient-to-r from-red-900/80 to-black p-4 rounded-2xl border border-red-600/30 shadow-2xl mb-8 flex flex-col md:flex-row justify-between items-center gap-4 relative overflow-hidden group">
+            <div className="absolute top-0 right-0 w-64 h-64 bg-red-600/10 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2"></div>
+            <div className="z-10"><div className="text-xs text-red-400 font-bold uppercase tracking-widest mb-1">Next Match vs {nextEvent.opponent}</div><div className="text-2xl font-black text-white">{nextEvent.date} @ {nextEvent.time} <span className="text-neutral-500 text-sm">({nextEvent.type})</span></div></div>
+            <div className="z-10 flex items-center gap-4"><div className="text-4xl font-black text-white font-mono tracking-tight tabular-nums bg-black/30 px-4 py-2 rounded-xl border border-red-900/50 shadow-inner">{timeLeft}</div></div>
+        </div>
+    );
+}
+
+function TeamComps({ members }) {
+    const [comps, setComps] = useState([]);
+    const [selectedMap, setSelectedMap] = useState(MAPS[0]);
+    const [newComp, setNewComp] = useState({ agents: Array(5).fill(''), players: Array(5).fill('') });
+    useEffect(() => { const unsub = onSnapshot(collection(db, 'comps'), (snap) => { const c = []; snap.forEach(doc => c.push({ id: doc.id, ...doc.data() })); setComps(c); }); return () => unsub(); }, []);
+    const saveComp = async () => { if (newComp.agents.some(a => !a)) return; await addDoc(collection(db, 'comps'), { map: selectedMap, ...newComp }); setNewComp({ agents: Array(5).fill(''), players: Array(5).fill('') }); };
+    const deleteComp = async (id) => await deleteDoc(doc(db, 'comps', id));
+    const currentMapComps = comps.filter(c => c.map === selectedMap);
+    return (
+        <div className="bg-neutral-900 p-6 rounded-3xl border border-neutral-800 shadow-2xl h-full">
+            <h3 className="text-2xl font-black text-white mb-6 flex items-center gap-2"><span className="text-red-600">TEAM</span> COMPS</h3>
+            <div className="flex overflow-x-auto gap-2 pb-4 mb-6 scrollbar-hide">{MAPS.map(m => (<button key={m} onClick={() => setSelectedMap(m)} className={`px-4 py-2 rounded-lg text-xs font-bold uppercase tracking-wider whitespace-nowrap transition-all ${selectedMap === m ? 'bg-red-600 text-white shadow-lg' : 'bg-black border border-neutral-800 text-neutral-500 hover:text-white'}`}>{m}</button>))}</div>
+            <div className="bg-black/40 p-4 rounded-xl border border-neutral-800 mb-6"><h4 className="text-xs font-bold text-neutral-500 uppercase mb-3">New {selectedMap} Composition</h4><div className="grid grid-cols-5 gap-2 mb-3">{Array.from({ length: 5 }).map((_, i) => (<div key={i} className="space-y-2"><select value={newComp.agents[i]} onChange={e => { const a = [...newComp.agents]; a[i] = e.target.value; setNewComp({ ...newComp, agents: a }); }} className="w-full bg-black border border-neutral-700 rounded p-1 text-[10px] text-white outline-none focus:border-red-600"><option value="">Agent</option>{AGENTS.map(ag => <option key={ag}>{ag}</option>)}</select><select value={newComp.players[i]} onChange={e => { const p = [...newComp.players]; p[i] = e.target.value; setNewComp({ ...newComp, players: p }); }} className="w-full bg-black border border-neutral-700 rounded p-1 text-[10px] text-neutral-400 outline-none focus:border-red-600"><option value="">Player</option>{members.map(m => <option key={m}>{m}</option>)}</select></div>))}</div><button onClick={saveComp} className="w-full bg-white text-black font-bold py-2 rounded hover:bg-gray-200 text-xs uppercase tracking-wider">Save Composition</button></div>
+            <div className="space-y-4">{currentMapComps.map(comp => (<div key={comp.id} className="p-4 bg-neutral-800/50 rounded-xl border border-neutral-700 relative group"><button onClick={() => deleteComp(comp.id)} className="absolute top-2 right-2 text-neutral-600 hover:text-red-500">×</button><div className="grid grid-cols-5 gap-2">{comp.agents.map((agent, i) => (<div key={i} className="text-center"><div className="text-sm font-bold text-red-400">{agent}</div><div className="text-[10px] text-neutral-500">{comp.players[i] || '-'}</div></div>))}</div></div>))}{currentMapComps.length === 0 && <p className="text-neutral-600 italic text-center text-sm">No comps saved for {selectedMap}.</p>}</div>
+        </div>
+    );
+}
+
+function AdminPanel() {
+    const [applications, setApplications] = useState([]);
+    useEffect(() => { const unsub = onSnapshot(collection(db, 'applications'), (snap) => { const apps = []; snap.forEach(doc => apps.push({ id: doc.id, ...doc.data() })); setApplications(apps); }); return () => unsub(); }, []);
+    const acceptApplicant = async (app) => { await setDoc(doc(db, 'roster', app.user), { rank: app.rank, role: 'Tryout', notes: `Tracker: ${app.tracker}\nWhy: ${app.why}`, joinedAt: new Date().toISOString() }); await deleteDoc(doc(db, 'applications', app.id)); };
+    const rejectApplicant = async (id) => { await deleteDoc(doc(db, 'applications', id)); };
     return (
         <div className="bg-neutral-900 p-8 rounded-3xl border border-red-900/50 shadow-2xl">
             <h2 className="text-3xl font-black text-white mb-6 flex items-center gap-3"><span className="text-red-600">ADMIN</span> DASHBOARD</h2>
-            <div className="space-y-6">
-                <h3 className="text-xl font-bold text-neutral-400 uppercase tracking-widest border-b border-neutral-800 pb-2">Pending Applications</h3>
-                {applications.length === 0 ? <p className="text-neutral-600 italic">No pending applications.</p> : (
-                    <div className="grid grid-cols-1 gap-4">
-                        {applications.map(app => (
-                            <div key={app.id} className="bg-black/40 border border-neutral-800 p-6 rounded-2xl flex flex-col md:flex-row justify-between gap-6">
-                                <div className="space-y-2 flex-1">
-                                    <div className="flex items-center gap-3"><h4 className="text-xl font-black text-white">{app.user}</h4><span className="bg-neutral-800 text-neutral-400 text-xs px-2 py-1 rounded font-bold uppercase">{app.rank}</span><span className="bg-neutral-800 text-neutral-400 text-xs px-2 py-1 rounded font-bold uppercase">{app.role}</span></div>
-                                    <p className="text-neutral-400 text-sm"><strong className="text-neutral-500">Experience:</strong> {app.exp}</p>
-                                    <p className="text-neutral-300 text-sm italic">"{app.why}"</p>
-                                    <a href={app.tracker} target="_blank" rel="noreferrer" className="text-red-500 text-xs font-bold hover:underline block mt-2">View Tracker Profile &rarr;</a>
-                                </div>
-                                <div className="flex flex-row md:flex-col gap-3 justify-center"><button onClick={() => acceptApplicant(app)} className="bg-green-600 hover:bg-green-500 text-white font-bold px-6 py-3 rounded-xl shadow-lg transition-all">ACCEPT</button><button onClick={() => rejectApplicant(app.id)} className="bg-red-900/50 hover:bg-red-900 text-red-200 font-bold px-6 py-3 rounded-xl transition-all border border-red-900">REJECT</button></div>
-                            </div>
-                        ))}
-                    </div>
-                )}
-            </div>
+            <div className="space-y-6"><h3 className="text-xl font-bold text-neutral-400 uppercase tracking-widest border-b border-neutral-800 pb-2">Pending Applications</h3>{applications.length === 0 ? <p className="text-neutral-600 italic">No pending applications.</p> : (<div className="grid grid-cols-1 gap-4">{applications.map(app => (<div key={app.id} className="bg-black/40 border border-neutral-800 p-6 rounded-2xl flex flex-col md:flex-row justify-between gap-6"><div className="space-y-2 flex-1"><div className="flex items-center gap-3"><h4 className="text-xl font-black text-white">{app.user}</h4><span className="bg-neutral-800 text-neutral-400 text-xs px-2 py-1 rounded font-bold uppercase">{app.rank}</span><span className="bg-neutral-800 text-neutral-400 text-xs px-2 py-1 rounded font-bold uppercase">{app.role}</span></div><p className="text-neutral-400 text-sm"><strong className="text-neutral-500">Experience:</strong> {app.exp}</p><p className="text-neutral-300 text-sm italic">"{app.why}"</p><a href={app.tracker} target="_blank" rel="noreferrer" className="text-red-500 text-xs font-bold hover:underline block mt-2">View Tracker Profile &rarr;</a></div><div className="flex flex-row md:flex-col gap-3 justify-center"><button onClick={() => acceptApplicant(app)} className="bg-green-600 hover:bg-green-500 text-white font-bold px-6 py-3 rounded-xl shadow-lg transition-all">ACCEPT</button><button onClick={() => rejectApplicant(app.id)} className="bg-red-900/50 hover:bg-red-900 text-red-200 font-bold px-6 py-3 rounded-xl transition-all border border-red-900">REJECT</button></div></div>))}</div>)}</div>
         </div>
     );
 }
@@ -187,26 +229,13 @@ function ProfileModal({ isOpen, onClose, currentUser }) {
     const [rank, setRank] = useState("Unranked");
     const [agents, setAgents] = useState("");
     const [status, setStatus] = useState("idle");
-
-    const handleSave = async () => {
-        setStatus("saving");
-        try {
-            await setDoc(doc(db, 'roster', currentUser.displayName), { rank, agents }, { merge: true });
-            setStatus("success");
-            setTimeout(() => { setStatus("idle"); onClose(); }, 1000);
-        } catch (e) { console.error(e); setStatus("idle"); }
-    };
-
+    const handleSave = async () => { setStatus("saving"); try { await setDoc(doc(db, 'roster', currentUser.displayName), { rank, agents }, { merge: true }); setStatus("success"); setTimeout(() => { setStatus("idle"); onClose(); }, 1000); } catch (e) { console.error(e); setStatus("idle"); } };
     if (!isOpen) return null;
-
     return (
         <div className="fixed inset-0 bg-black/90 z-[100] flex justify-center items-center backdrop-blur-md p-4">
             <div className="bg-neutral-900 rounded-2xl shadow-2xl p-6 w-full max-w-md border border-neutral-800 animate-fade-in-up">
                 <h3 className="text-2xl font-black text-white mb-6">Edit Profile</h3>
-                <div className="space-y-4">
-                    <div><label className="text-xs font-bold text-neutral-500 uppercase mb-1 block">Current Rank</label><select value={rank} onChange={e => setRank(e.target.value)} className="w-full p-3 bg-black border border-neutral-800 rounded-xl text-white outline-none focus:border-red-600">{RANKS.map(r => <option key={r} value={r}>{r}</option>)}</select></div>
-                    <div><label className="text-xs font-bold text-neutral-500 uppercase mb-1 block">Main Agents</label><input type="text" value={agents} onChange={e => setAgents(e.target.value)} placeholder="Jett, Raze, Omen..." className="w-full p-3 bg-black border border-neutral-800 rounded-xl text-white outline-none focus:border-red-600" /></div>
-                </div>
+                <div className="space-y-4"><div><label className="text-xs font-bold text-neutral-500 uppercase mb-1 block">Current Rank</label><select value={rank} onChange={e => setRank(e.target.value)} className="w-full p-3 bg-black border border-neutral-800 rounded-xl text-white outline-none focus:border-red-600">{RANKS.map(r => <option key={r} value={r}>{r}</option>)}</select></div><div><label className="text-xs font-bold text-neutral-500 uppercase mb-1 block">Main Agents</label><input type="text" value={agents} onChange={e => setAgents(e.target.value)} placeholder="Jett, Raze, Omen..." className="w-full p-3 bg-black border border-neutral-800 rounded-xl text-white outline-none focus:border-red-600" /></div></div>
                 <div className="mt-6 flex justify-end gap-3"><button onClick={onClose} className="px-4 py-2 text-neutral-400 hover:text-white">Cancel</button><button onClick={handleSave} className="bg-red-600 hover:bg-red-500 text-white font-bold px-6 py-2 rounded-xl">{status === 'saving' ? 'Saving...' : 'Save Profile'}</button></div>
             </div>
         </div>
@@ -216,35 +245,13 @@ function ProfileModal({ isOpen, onClose, currentUser }) {
 function ApplicationForm({ currentUser }) {
     const [form, setForm] = useState({ tracker: '', rank: 'Unranked', role: 'Flex', exp: '', why: '' });
     const [status, setStatus] = useState('idle');
-
-    const submitApp = async () => {
-        if (!form.tracker || !form.why) return;
-        setStatus('saving');
-        const appData = { ...form, user: currentUser.displayName, uid: currentUser.uid, submittedAt: new Date().toISOString() };
-        await addDoc(collection(db, 'applications'), appData);
-        // Webhook code omitted for brevity but would go here
-        setStatus('success');
-        setForm({ tracker: '', rank: 'Unranked', role: 'Flex', exp: '', why: '' });
-    };
-
+    const submitApp = async () => { if (!form.tracker || !form.why) return; setStatus('saving'); const appData = { ...form, user: currentUser.displayName, uid: currentUser.uid, submittedAt: new Date().toISOString() }; await addDoc(collection(db, 'applications'), appData); const content = { embeds: [{ title: `📄 New Team Application: ${currentUser.displayName}`, color: 16776960, fields: [{ name: 'Rank', value: form.rank, inline: true }, { name: 'Role', value: form.role, inline: true }, { name: 'Tracker', value: form.tracker }, { name: 'Experience', value: form.exp || 'None provided' }, { name: 'Why Join?', value: form.why }], timestamp: new Date().toISOString() }] }; try { await fetch(discordWebhookUrl, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(content) }); } catch (e) { console.error(e); } setStatus('success'); setForm({ tracker: '', rank: 'Unranked', role: 'Flex', exp: '', why: '' }); };
     if (status === 'success') return <div className="h-full flex flex-col items-center justify-center text-center p-10 animate-fade-in"><div className="text-6xl mb-4">✅</div><h2 className="text-3xl font-black text-white mb-2">Application Received</h2><p className="text-neutral-400 max-w-md">Thank you for applying to Syrix. Your application has been sent to the captains.</p></div>;
-
     return (
         <div className="bg-neutral-900 p-8 rounded-3xl border border-neutral-800 shadow-2xl max-w-3xl mx-auto animate-fade-in-up">
             <h2 className="text-3xl font-black text-white mb-2">Join the Team</h2>
             <p className="text-neutral-400 mb-8">Fill out the details below to apply for the roster.</p>
-            <div className="space-y-5">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-                    <div><label className="text-xs font-bold text-red-500 uppercase mb-1 block">Valorant Tracker URL</label><input type="text" value={form.tracker} onChange={e => setForm({ ...form, tracker: e.target.value })} className="w-full p-3 bg-black border border-neutral-800 rounded-xl text-white outline-none focus:border-red-600 placeholder-neutral-700" placeholder="https://tracker.gg/valorant/profile/..." /></div>
-                    <div><label className="text-xs font-bold text-red-500 uppercase mb-1 block">Current Rank</label><select value={form.rank} onChange={e => setForm({ ...form, rank: e.target.value })} className="w-full p-3 bg-black border border-neutral-800 rounded-xl text-white outline-none focus:border-red-600">{RANKS.map(r => <option key={r} value={r}>{r}</option>)}</select></div>
-                </div>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-                    <div><label className="text-xs font-bold text-red-500 uppercase mb-1 block">Preferred Role</label><select value={form.role} onChange={e => setForm({ ...form, role: e.target.value })} className="w-full p-3 bg-black border border-neutral-800 rounded-xl text-white outline-none focus:border-red-600">{ROLES.map(r => <option key={r} value={r}>{r}</option>)}</select></div>
-                    <div><label className="text-xs font-bold text-red-500 uppercase mb-1 block">Competitive Experience</label><input type="text" value={form.exp} onChange={e => setForm({ ...form, exp: e.target.value })} className="w-full p-3 bg-black border border-neutral-800 rounded-xl text-white outline-none focus:border-red-600 placeholder-neutral-700" placeholder="Previous teams, tournaments..." /></div>
-                </div>
-                <div><label className="text-xs font-bold text-red-500 uppercase mb-1 block">Why do you want to join Syrix?</label><textarea value={form.why} onChange={e => setForm({ ...form, why: e.target.value })} className="w-full h-32 p-3 bg-black border border-neutral-800 rounded-xl text-white outline-none focus:border-red-600 placeholder-neutral-700 resize-none" placeholder="Tell us about yourself and your goals..." /></div>
-                <button onClick={submitApp} disabled={status !== 'idle'} className={`w-full py-4 rounded-xl font-black uppercase tracking-widest shadow-lg transition-all ${status === 'success' ? 'bg-green-600 text-white' : 'bg-red-700 hover:bg-red-600 text-white'}`}>{status === 'idle' ? 'Submit Application' : 'Sending...'}</button>
-            </div>
+            <div className="space-y-5"><div className="grid grid-cols-1 md:grid-cols-2 gap-5"><div><label className="text-xs font-bold text-red-500 uppercase mb-1 block">Valorant Tracker URL</label><input type="text" value={form.tracker} onChange={e => setForm({ ...form, tracker: e.target.value })} className="w-full p-3 bg-black border border-neutral-800 rounded-xl text-white outline-none focus:border-red-600 placeholder-neutral-700" placeholder="https://tracker.gg/valorant/profile/..." /></div><div><label className="text-xs font-bold text-red-500 uppercase mb-1 block">Current Rank</label><select value={form.rank} onChange={e => setForm({ ...form, rank: e.target.value })} className="w-full p-3 bg-black border border-neutral-800 rounded-xl text-white outline-none focus:border-red-600">{RANKS.map(r => <option key={r} value={r}>{r}</option>)}</select></div></div><div className="grid grid-cols-1 md:grid-cols-2 gap-5"><div><label className="text-xs font-bold text-red-500 uppercase mb-1 block">Preferred Role</label><select value={form.role} onChange={e => setForm({ ...form, role: e.target.value })} className="w-full p-3 bg-black border border-neutral-800 rounded-xl text-white outline-none focus:border-red-600">{ROLES.map(r => <option key={r} value={r}>{r}</option>)}</select></div><div><label className="text-xs font-bold text-red-500 uppercase mb-1 block">Competitive Experience</label><input type="text" value={form.exp} onChange={e => setForm({ ...form, exp: e.target.value })} className="w-full p-3 bg-black border border-neutral-800 rounded-xl text-white outline-none focus:border-red-600 placeholder-neutral-700" placeholder="Previous teams, tournaments..." /></div></div><div><label className="text-xs font-bold text-red-500 uppercase mb-1 block">Why do you want to join Syrix?</label><textarea value={form.why} onChange={e => setForm({ ...form, why: e.target.value })} className="w-full h-32 p-3 bg-black border border-neutral-800 rounded-xl text-white outline-none focus:border-red-600 placeholder-neutral-700 resize-none" placeholder="Tell us about yourself and your goals..." /></div><button onClick={submitApp} disabled={status !== 'idle'} className={`w-full py-4 rounded-xl font-black uppercase tracking-widest shadow-lg transition-all ${status === 'success' ? 'bg-green-600 text-white' : 'bg-red-700 hover:bg-red-600 text-white'}`}>{status === 'idle' ? 'Submit Application' : 'Sending...'}</button></div>
         </div>
     );
 }
@@ -261,9 +268,6 @@ function MapVeto() {
         </div>
     );
 }
-
-// ... (CaptainsMessage, PerformanceWidget, RosterManager, MatchHistory, StratBook, PartnerDirectory, ScrimScheduler, AvailabilityHeatmap, LoginScreen - ALL PRESERVED)
-// I will paste the unchanged components below for completeness so the file works instantly.
 
 function CaptainsMessage() {
     const [message, setMessage] = useState({ text: "Welcome to the team hub!", updatedBy: "System" });
@@ -574,9 +578,10 @@ export default function App() {
     const [saveStatus, setSaveStatus] = useState('idle');
     const [userTimezone, setUserTimezone] = useState(localStorage.getItem('timezone') || Intl.DateTimeFormat().resolvedOptions().timeZone);
     const [authLoading, setAuthLoading] = useState(true);
+    const [membershipLoading, setMembershipLoading] = useState(false);
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [isProfileOpen, setIsProfileOpen] = useState(false);
-    const [modalContent, setModalContent] = useState({});
+    const [modalContent, setModalContent] = useState({ title: '', children: null });
     const [isMember, setIsMember] = useState(false);
 
     // Auth Listener
@@ -598,18 +603,23 @@ export default function App() {
 
     // Data Listeners & Access Control
     useEffect(() => {
-        if (!currentUser) return;
+        if (!currentUser) {
+            setMembershipLoading(false);
+            return;
+        }
+
+        setMembershipLoading(true);
 
         // Strict Access Control: Must have a ROLE in the roster to see dashboard
         const checkMembership = onSnapshot(doc(db, 'roster', currentUser.displayName), (docSnap) => {
-            const isAuthorized = (docSnap.exists() && docSnap.data().role) || ADMINS.includes(currentUser.displayName);
+            const isAdmin = ADMINS.some(admin => admin.toLowerCase() === currentUser.displayName.toLowerCase());
+            const isAuthorized = (docSnap.exists() && docSnap.data().role) || isAdmin;
+
             setIsMember(isAuthorized);
-            // Force non-members to the Apply tab, avoiding any "Access Denied" flash
-            if (!isAuthorized && activeTab !== 'apply') setActiveTab('apply');
-            // If authorized and stuck on apply, move to dashboard
-            if (isAuthorized && activeTab === 'apply') setActiveTab('dashboard');
+            setMembershipLoading(false); // Loaded
         });
 
+        // Standard Listeners (Only active if user is logged in, data security via rules recommended too)
         const unsubAvail = onSnapshot(collection(db, 'availabilities'), (snap) => {
             const data = {};
             snap.forEach(doc => data[doc.id] = doc.data().slots || []);
@@ -658,7 +668,7 @@ export default function App() {
         return `https://cdn.discordapp.com/embed/avatars/${Math.floor(Math.random() * 5)}.png`;
     };
 
-    const isAdmin = useMemo(() => currentUser && ADMINS.includes(currentUser.displayName), [currentUser]);
+    const isAdmin = useMemo(() => currentUser && ADMINS.some(a => a.toLowerCase() === currentUser.displayName.toLowerCase()), [currentUser]);
 
     // Actions
     const openModal = (title, message, onConfirm) => { setModalContent({ title, children: message, onConfirm }); setIsModalOpen(true); };
@@ -716,10 +726,28 @@ export default function App() {
         setIsModalOpen(false);
     };
 
-    if (authLoading) return <div className="fixed inset-0 h-full w-full bg-black flex items-center justify-center text-red-600 font-bold text-xl animate-pulse">LOADING SYRIX HUB...</div>;
+    if (authLoading || (currentUser && membershipLoading)) return <div className="fixed inset-0 h-full w-full bg-black flex items-center justify-center text-red-600 font-bold text-xl animate-pulse">LOADING SYRIX HUB...</div>;
     if (!currentUser) return <LoginScreen signIn={signIn} />;
 
-    // Nav Button Helper
+    // VIEW GUARD: If NOT a member, FORCE Apply View
+    if (!isMember) {
+        return (
+            <div className="fixed inset-0 h-full w-full bg-black text-neutral-200 font-sans selection:bg-red-500/30 flex flex-col overflow-hidden">
+                <header className="flex-none flex justify-between items-center px-8 py-4 border-b border-red-900/30 bg-black/90 backdrop-blur-md z-40">
+                    <h1 className="text-3xl font-black tracking-tighter text-white">SYRIX <span className="text-red-600">HUB</span></h1>
+                    <div className="flex items-center gap-4">
+                        <img src={getAvatar()} className="w-10 h-10 rounded-full border-2 border-red-600" alt="Profile" />
+                        <button onClick={handleSignOut} className="text-[10px] text-neutral-400 hover:text-red-500 font-bold uppercase tracking-wide">Log Out</button>
+                    </div>
+                </header>
+                <main className="flex-1 overflow-y-auto p-6 flex items-center justify-center">
+                    <ApplicationForm currentUser={currentUser} />
+                </main>
+            </div>
+        );
+    }
+
+    // Helper for Main Nav
     const NavBtn = ({ id, label }) => (
         <button onClick={() => setActiveTab(id)} className={`text-xs font-bold uppercase tracking-widest pb-1 border-b-2 transition-all ${activeTab === id ? 'text-red-500 border-red-500' : 'text-neutral-500 border-transparent hover:text-neutral-300'}`}>
             {label}
@@ -732,34 +760,27 @@ export default function App() {
             <header className="flex-none flex flex-col md:flex-row justify-between items-center px-8 py-4 gap-4 border-b border-red-900/30 bg-black/90 backdrop-blur-md z-40">
                 <div>
                     <h1 className="text-3xl font-black tracking-tighter text-white">SYRIX <span className="text-red-600">HUB</span></h1>
-
-                    {/* RESTRICTED NAVIGATION */}
                     <div className="flex gap-6 mt-2 overflow-x-auto pb-1 scrollbar-hide">
-                        {isMember ? (
-                            <>
-                                <NavBtn id="dashboard" label="Dashboard" />
-                                <NavBtn id="matches" label="Matches" />
-                                <NavBtn id="strats" label="Stratbook" />
-                                <NavBtn id="roster" label="Roster" />
-                                <NavBtn id="partners" label="Partners" />
-                                <NavBtn id="mapveto" label="Map Veto" />
-                                {isAdmin && <NavBtn id="admin" label="Admin" />}
-                            </>
-                        ) : (
-                            <NavBtn id="apply" label="Apply" />
-                        )}
+                        <NavBtn id="dashboard" label="Dashboard" />
+                        <NavBtn id="comps" label="Comps" /> {/* NEW: Comps Tab */}
+                        <NavBtn id="matches" label="Matches" />
+                        <NavBtn id="strats" label="Stratbook" />
+                        <NavBtn id="roster" label="Roster" />
+                        <NavBtn id="partners" label="Partners" />
+                        <NavBtn id="mapveto" label="Map Veto" />
+                        {isAdmin && <NavBtn id="admin" label="Admin" />}
                     </div>
                 </div>
                 <div className="flex items-center gap-4 bg-neutral-900/80 p-2 rounded-2xl border border-neutral-800 backdrop-blur-sm shadow-lg">
                     <img
                         src={getAvatar()}
-                        onClick={() => isMember && setIsProfileOpen(true)}
+                        onClick={() => setIsProfileOpen(true)}
                         onError={(e) => { e.target.onerror = null; e.target.src = "https://cdn.discordapp.com/embed/avatars/1.png"; }}
-                        className={`w-10 h-10 rounded-full border-2 border-red-600 shadow-red-600/50 shadow-sm transition-transform ${isMember ? 'cursor-pointer hover:scale-105' : 'opacity-50'}`}
+                        className="w-10 h-10 rounded-full border-2 border-red-600 shadow-red-600/50 shadow-sm cursor-pointer hover:scale-105 transition-transform"
                         alt="Profile"
                     />
                     <div className="pr-4 border-r border-neutral-700 mr-2">
-                        <div className="text-sm font-bold text-white cursor-pointer" onClick={() => isMember && setIsProfileOpen(true)}>{currentUser.displayName}</div>
+                        <div className="text-sm font-bold text-white cursor-pointer" onClick={() => setIsProfileOpen(true)}>{currentUser.displayName}</div>
                         <button onClick={handleSignOut} className="text-[10px] text-neutral-400 hover:text-red-500 transition-colors font-bold uppercase tracking-wide">Log Out</button>
                     </div>
                     <select value={userTimezone} onChange={e => { setUserTimezone(e.target.value); localStorage.setItem('timezone', e.target.value); }} className="bg-black border border-neutral-800 text-xs rounded-lg p-2 text-neutral-400 outline-none focus:border-red-600 transition-colors">
@@ -773,11 +794,14 @@ export default function App() {
                 <div className="max-w-[1920px] mx-auto">
 
                     {/* 1. DASHBOARD (Home) */}
-                    {activeTab === 'dashboard' && isMember && (
+                    {activeTab === 'dashboard' && (
                         <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 animate-fade-in-up">
                             {/* Left Column: Availability & Event Ops */}
                             <div className="lg:col-span-4 space-y-8">
                                 <CaptainsMessage />
+
+                                {/* NEW: Absence Logger inserted into sidebar */}
+                                <LeaveLogger members={dynamicMembers} />
 
                                 <div className="bg-neutral-900/50 p-6 rounded-3xl border border-neutral-800 shadow-xl backdrop-blur-sm relative overflow-hidden group">
                                     <div className="absolute top-0 left-0 w-1 h-full bg-red-600/50 group-hover:bg-red-600 transition-colors"></div>
@@ -898,6 +922,9 @@ export default function App() {
                                                         })}
                                                     </tr>
                                                 ))}
+                                                {dynamicMembers.length === 0 && (
+                                                    <tr><td colSpan="8" className="p-8 text-center text-neutral-500 italic">No availability data submitted yet.</td></tr>
+                                                )}
                                             </tbody>
                                         </table>
                                     </div>
@@ -906,29 +933,41 @@ export default function App() {
                         </div>
                     )}
 
-                    {/* 2. MATCH HISTORY */}
-                    {activeTab === 'matches' && isMember && (
+                    {/* 2. TEAM COMPS View */}
+                    {activeTab === 'comps' && (
+                        <div className="animate-fade-in-up h-full"><TeamComps members={dynamicMembers} /></div>
+                    )}
+
+                    {/* 3. MATCH HISTORY View */}
+                    {activeTab === 'matches' && (
                         <div className="animate-fade-in-up"><MatchHistory /></div>
                     )}
 
-                    {/* 3. STRATBOOK */}
-                    {activeTab === 'strats' && isMember && (
+                    {/* 4. STRATBOOK View */}
+                    {activeTab === 'strats' && (
                         <div className="animate-fade-in-up h-[70vh]"><StratBook /></div>
                     )}
 
-                    {/* 4. ROSTER */}
-                    {activeTab === 'roster' && isMember && (
-                        <div className="animate-fade-in-up h-full"><RosterManager members={dynamicMembers} /></div>
+                    {/* 5. ROSTER View */}
+                    {activeTab === 'roster' && (
+                        <div className="animate-fade-in-up h-full">
+                            <div className="mb-6">
+                                <h2 className="text-2xl font-bold text-white mb-2">Roster Management</h2>
+                                <p className="text-neutral-400">Manage team roles and track tryout performance notes.</p>
+                            </div>
+                            <RosterManager members={dynamicMembers} />
+                        </div>
                     )}
 
-                    {/* 5. PARTNERS */}
-                    {activeTab === 'partners' && isMember && (
-                        <div className="animate-fade-in-up h-full"><PartnerDirectory /></div>
-                    )}
-
-                    {/* 6. APPLICATION FORM */}
-                    {activeTab === 'apply' && (
-                        <div className="animate-fade-in-up h-full"><ApplicationForm currentUser={currentUser} /></div>
+                    {/* 6. PARTNERS View */}
+                    {activeTab === 'partners' && (
+                        <div className="animate-fade-in-up h-full">
+                            <div className="mb-6">
+                                <h2 className="text-2xl font-bold text-white mb-2">Scrim Partners</h2>
+                                <p className="text-neutral-400">Directory of other teams for scheduling.</p>
+                            </div>
+                            <PartnerDirectory />
+                        </div>
                     )}
 
                     {/* 7. ADMIN */}
@@ -937,7 +976,7 @@ export default function App() {
                     )}
 
                     {/* 8. MAP VETO */}
-                    {activeTab === 'mapveto' && isMember && (
+                    {activeTab === 'mapveto' && (
                         <div className="animate-fade-in-up h-[80vh]"><MapVeto /></div>
                     )}
 
