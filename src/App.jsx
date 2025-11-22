@@ -1,8 +1,9 @@
 ﻿/*
-Syrix Team Availability - FINAL PREMIUM BUILD (MANUAL MATCH LOGGING ADDED)
-- FEATURE: Added "Log Past Match" button to Match History tab.
-- FEATURE: Ability to manually input scores/maps for unscheduled games.
-- FIX: Refined Discord PFP logic to use Provider UID for CDN links.
+Syrix Team Availability - FINAL ULTIMATE BUILD
+- FIX: Discord PFP logic updated to use correct Provider UID.
+- FEATURE: "My Profile" settings (Set Rank & Agents).
+- FEATURE: "Map Veto" tool (Shared interactive ban/pick board).
+- FEATURE: "Team Application" form for new recruits.
 - DESIGN: Syrix Red/Black Premium Theme maintained.
 */
 
@@ -33,6 +34,7 @@ const SHORT_DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 const MAPS = ["Ascent", "Bind", "Breeze", "Fracture", "Haven", "Icebox", "Lotus", "Pearl", "Split", "Sunset"];
 const ROLES = ["Flex", "Duelist", "Initiator", "Controller", "Sentinel"];
 const timezones = ["UTC", "GMT", "Europe/London", "Europe/Paris", "Europe/Berlin", "America/New_York", "America/Chicago", "America/Denver", "America/Los_Angeles", "Asia/Tokyo", "Australia/Sydney"];
+const RANKS = ["Unranked", "Iron", "Bronze", "Silver", "Gold", "Platinum", "Diamond", "Ascendant", "Immortal", "Radiant"];
 
 // --- Utility Functions ---
 function timeToMinutes(t) { if (!t || t === '24:00') return 1440; const [h, m] = t.split(":").map(Number); return h * 60 + m; }
@@ -98,7 +100,229 @@ function Modal({ isOpen, onClose, onConfirm, title, children }) {
     );
 }
 
-// --- NEW FEATURE: Captain's Message ---
+// --- NEW: Profile Editor Modal ---
+function ProfileModal({ isOpen, onClose, currentUser }) {
+    const [rank, setRank] = useState("Unranked");
+    const [agents, setAgents] = useState("");
+    const [status, setStatus] = useState("idle");
+
+    useEffect(() => {
+        if (isOpen && currentUser) {
+            // Fetch current data if exists (mocking fetch from local roster data for simplicity in this scope,
+            // ideally passed as prop, but we can fetch directly).
+            // For now, we just let user overwrite.
+        }
+    }, [isOpen, currentUser]);
+
+    const handleSave = async () => {
+        setStatus("saving");
+        try {
+            await setDoc(doc(db, 'roster', currentUser.displayName), {
+                rank,
+                agents
+            }, { merge: true });
+            setStatus("success");
+            setTimeout(() => { setStatus("idle"); onClose(); }, 1000);
+        } catch (e) { console.error(e); setStatus("idle"); }
+    };
+
+    if (!isOpen) return null;
+
+    return (
+        <div className="fixed inset-0 bg-black/90 z-[100] flex justify-center items-center backdrop-blur-md p-4">
+            <div className="bg-neutral-900 rounded-2xl shadow-2xl p-6 w-full max-w-md border border-neutral-800 animate-fade-in-up">
+                <h3 className="text-2xl font-black text-white mb-6">Edit Profile</h3>
+
+                <div className="space-y-4">
+                    <div>
+                        <label className="text-xs font-bold text-neutral-500 uppercase mb-1 block">Current Rank</label>
+                        <select value={rank} onChange={e => setRank(e.target.value)} className="w-full p-3 bg-black border border-neutral-800 rounded-xl text-white outline-none focus:border-red-600">
+                            {RANKS.map(r => <option key={r} value={r}>{r}</option>)}
+                        </select>
+                    </div>
+                    <div>
+                        <label className="text-xs font-bold text-neutral-500 uppercase mb-1 block">Main Agents (comma separated)</label>
+                        <input
+                            type="text"
+                            value={agents}
+                            onChange={e => setAgents(e.target.value)}
+                            placeholder="Jett, Raze, Omen..."
+                            className="w-full p-3 bg-black border border-neutral-800 rounded-xl text-white outline-none focus:border-red-600"
+                        />
+                    </div>
+                </div>
+
+                <div className="mt-6 flex justify-end gap-3">
+                    <button onClick={onClose} className="px-4 py-2 text-neutral-400 hover:text-white">Cancel</button>
+                    <button onClick={handleSave} className="bg-red-600 hover:bg-red-500 text-white font-bold px-6 py-2 rounded-xl">
+                        {status === 'saving' ? 'Saving...' : status === 'success' ? 'Saved!' : 'Save Profile'}
+                    </button>
+                </div>
+            </div>
+        </div>
+    );
+}
+
+// --- NEW: Team Application Form ---
+function ApplicationForm({ currentUser }) {
+    const [form, setForm] = useState({ tracker: '', rank: 'Unranked', role: 'Flex', exp: '', why: '' });
+    const [status, setStatus] = useState('idle');
+
+    const submitApp = async () => {
+        if (!form.tracker || !form.why) return;
+        setStatus('saving');
+
+        const appData = {
+            ...form,
+            user: currentUser.displayName,
+            uid: currentUser.uid,
+            submittedAt: new Date().toISOString()
+        };
+
+        await addDoc(collection(db, 'applications'), appData);
+
+        // Post to Discord
+        const content = {
+            embeds: [{
+                title: `📄 New Team Application: ${currentUser.displayName}`,
+                color: 16776960, // Yellow
+                fields: [
+                    { name: 'Rank', value: form.rank, inline: true },
+                    { name: 'Role', value: form.role, inline: true },
+                    { name: 'Tracker', value: form.tracker },
+                    { name: 'Experience', value: form.exp || 'None provided' },
+                    { name: 'Why Join?', value: form.why }
+                ],
+                timestamp: new Date().toISOString()
+            }]
+        };
+        try { await fetch(discordWebhookUrl, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(content) }); } catch (e) { console.error(e); }
+
+        setStatus('success');
+        setForm({ tracker: '', rank: 'Unranked', role: 'Flex', exp: '', why: '' });
+        setTimeout(() => setStatus('idle'), 3000);
+    };
+
+    return (
+        <div className="bg-neutral-900 p-8 rounded-3xl border border-neutral-800 shadow-2xl max-w-3xl mx-auto">
+            <h2 className="text-3xl font-black text-white mb-2">Join the Team</h2>
+            <p className="text-neutral-400 mb-8">Fill out the details below to apply for the roster. Your application will be posted to our Discord for review.</p>
+
+            <div className="space-y-5">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                    <div>
+                        <label className="text-xs font-bold text-red-500 uppercase mb-1 block">Valorant Tracker URL</label>
+                        <input type="text" value={form.tracker} onChange={e => setForm({ ...form, tracker: e.target.value })} className="w-full p-3 bg-black border border-neutral-800 rounded-xl text-white outline-none focus:border-red-600 placeholder-neutral-700" placeholder="https://tracker.gg/valorant/profile/..." />
+                    </div>
+                    <div>
+                        <label className="text-xs font-bold text-red-500 uppercase mb-1 block">Current Rank</label>
+                        <select value={form.rank} onChange={e => setForm({ ...form, rank: e.target.value })} className="w-full p-3 bg-black border border-neutral-800 rounded-xl text-white outline-none focus:border-red-600">
+                            {RANKS.map(r => <option key={r} value={r}>{r}</option>)}
+                        </select>
+                    </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                    <div>
+                        <label className="text-xs font-bold text-red-500 uppercase mb-1 block">Preferred Role</label>
+                        <select value={form.role} onChange={e => setForm({ ...form, role: e.target.value })} className="w-full p-3 bg-black border border-neutral-800 rounded-xl text-white outline-none focus:border-red-600">
+                            {ROLES.map(r => <option key={r} value={r}>{r}</option>)}
+                        </select>
+                    </div>
+                    <div>
+                        <label className="text-xs font-bold text-red-500 uppercase mb-1 block">Competitive Experience</label>
+                        <input type="text" value={form.exp} onChange={e => setForm({ ...form, exp: e.target.value })} className="w-full p-3 bg-black border border-neutral-800 rounded-xl text-white outline-none focus:border-red-600 placeholder-neutral-700" placeholder="Previous teams, tournaments..." />
+                    </div>
+                </div>
+
+                <div>
+                    <label className="text-xs font-bold text-red-500 uppercase mb-1 block">Why do you want to join Syrix?</label>
+                    <textarea value={form.why} onChange={e => setForm({ ...form, why: e.target.value })} className="w-full h-32 p-3 bg-black border border-neutral-800 rounded-xl text-white outline-none focus:border-red-600 placeholder-neutral-700 resize-none" placeholder="Tell us about yourself and your goals..." />
+                </div>
+
+                <button
+                    onClick={submitApp}
+                    disabled={status !== 'idle'}
+                    className={`w-full py-4 rounded-xl font-black uppercase tracking-widest shadow-lg transition-all ${status === 'success' ? 'bg-green-600 text-white' : 'bg-red-700 hover:bg-red-600 text-white'}`}
+                >
+                    {status === 'idle' ? 'Submit Application' : status === 'saving' ? 'Sending...' : 'Application Sent!'}
+                </button>
+            </div>
+        </div>
+    );
+}
+
+// --- NEW: Map Veto Tool ---
+function MapVeto() {
+    const [vetoState, setVetoState] = useState({}); // { mapName: 'neutral' | 'ban' | 'pick' }
+
+    // In a real app, this state should be synced via Firestore so everyone sees the same veto
+    // For this prototype, we will use a simple Firestore document to sync it.
+    useEffect(() => {
+        const unsub = onSnapshot(doc(db, 'general', 'map_veto'), (snap) => {
+            if (snap.exists()) setVetoState(snap.data());
+        });
+        return () => unsub();
+    }, []);
+
+    const toggleMap = async (map) => {
+        const current = vetoState[map] || 'neutral';
+        const next = current === 'neutral' ? 'ban' : current === 'ban' ? 'pick' : 'neutral';
+
+        // Update Firestore
+        await setDoc(doc(db, 'general', 'map_veto'), {
+            ...vetoState,
+            [map]: next
+        });
+    };
+
+    const resetVeto = async () => {
+        await setDoc(doc(db, 'general', 'map_veto'), {});
+    };
+
+    return (
+        <div className="bg-neutral-900 p-6 rounded-3xl border border-neutral-800 shadow-2xl h-full">
+            <div className="flex justify-between items-center mb-6">
+                <h3 className="text-2xl font-black text-white">MAP VETO</h3>
+                <button onClick={resetVeto} className="text-xs text-neutral-500 hover:text-red-500 font-bold uppercase border border-neutral-700 px-3 py-1 rounded">Reset Board</button>
+            </div>
+
+            <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+                {MAPS.map(map => {
+                    const status = vetoState[map] || 'neutral';
+                    return (
+                        <div
+                            key={map}
+                            onClick={() => toggleMap(map)}
+                            className={`
+                                aspect-video rounded-xl border-2 cursor-pointer flex items-center justify-center relative overflow-hidden transition-all group
+                                ${status === 'neutral' ? 'border-neutral-800 bg-black/50 hover:border-neutral-600' : ''}
+                                ${status === 'ban' ? 'border-red-600 bg-red-900/20' : ''}
+                                ${status === 'pick' ? 'border-green-500 bg-green-900/20' : ''}
+                            `}
+                        >
+                            <span className={`
+                                font-black uppercase tracking-widest text-lg z-10 transition-transform group-hover:scale-110
+                                ${status === 'neutral' ? 'text-neutral-500' : 'text-white'}
+                            `}>
+                                {map}
+                            </span>
+
+                            {/* Status Indicator Text */}
+                            {status !== 'neutral' && (
+                                <div className={`absolute bottom-2 text-[10px] font-bold px-2 py-0.5 rounded uppercase ${status === 'ban' ? 'bg-red-600 text-white' : 'bg-green-500 text-black'}`}>
+                                    {status}
+                                </div>
+                            )}
+                        </div>
+                    );
+                })}
+            </div>
+            <p className="text-center text-neutral-500 text-xs mt-6">Click to cycle: Neutral → Ban → Pick</p>
+        </div>
+    );
+}
+
 function CaptainsMessage() {
     const [message, setMessage] = useState({ text: "Welcome to the team hub! Set your availability below.", updatedBy: "System" });
     const [isEditing, setIsEditing] = useState(false);
@@ -127,7 +351,6 @@ function CaptainsMessage() {
 
     return (
         <div className="bg-gradient-to-br from-red-900/40 to-black p-6 rounded-3xl border border-red-900/50 shadow-xl relative overflow-hidden group">
-            {/* Decorative Element */}
             <div className="absolute -right-6 -top-6 w-32 h-32 bg-red-600/20 rounded-full blur-3xl"></div>
 
             <div className="flex justify-between items-start mb-3 relative z-10">
@@ -297,6 +520,8 @@ function RosterManager({ members }) {
                             <div>
                                 <div className="font-bold text-neutral-200">{m}</div>
                                 {rosterData[m]?.gameId && <div className="text-[9px] text-neutral-500 font-mono">{rosterData[m].gameId}</div>}
+                                {/* Display Rank & Agent if available */}
+                                {rosterData[m]?.rank && <div className="text-[9px] text-red-400 font-bold uppercase">{rosterData[m].rank}</div>}
                             </div>
                             <span className={`text-[10px] px-2 py-1 rounded font-bold uppercase ${(rosterData[m]?.role === 'Captain') ? 'bg-yellow-600/20 text-yellow-500' :
                                     (rosterData[m]?.role === 'Main') ? 'bg-green-600/20 text-green-500' :
@@ -378,7 +603,6 @@ function MatchHistory() {
     const [editingId, setEditingId] = useState(null);
     const [editForm, setEditForm] = useState({ myScore: '', enemyScore: '', map: MAPS[0], vod: '' });
 
-    // NEW: Manual Match Log State
     const [isAdding, setIsAdding] = useState(false);
     const [newMatch, setNewMatch] = useState({
         type: 'Scrim',
@@ -395,10 +619,9 @@ function MatchHistory() {
         const unsub = onSnapshot(collection(db, 'events'), (snap) => {
             const evs = [];
             snap.forEach(doc => evs.push({ id: doc.id, ...doc.data() }));
-            // We show all events that have either passed OR have a result logged
             const past = evs.filter(e => {
-                if (e.result) return true; // Explicitly logged result
-                return new Date(e.date + 'T' + e.time) < new Date(); // Time passed
+                if (e.result) return true;
+                return new Date(e.date + 'T' + e.time) < new Date();
             });
             past.sort((a, b) => new Date(b.date) - new Date(a.date));
             setMatches(past);
@@ -430,7 +653,6 @@ function MatchHistory() {
             }
         });
         setIsAdding(false);
-        // Reset form
         setNewMatch({ type: 'Scrim', opponent: '', date: '', time: '20:00', myScore: '', enemyScore: '', map: MAPS[0], vod: '' });
     };
 
@@ -445,7 +667,6 @@ function MatchHistory() {
                 </button>
             </div>
 
-            {/* MANUAL LOGGING FORM */}
             {isAdding && (
                 <div className="mb-8 bg-neutral-800/50 p-4 rounded-xl border border-red-900/30 animate-fade-in">
                     <h4 className="text-sm font-bold text-white mb-3 uppercase tracking-wider">Log Unscheduled Match</h4>
@@ -763,6 +984,7 @@ export default function App() {
     const [userTimezone, setUserTimezone] = useState(localStorage.getItem('timezone') || Intl.DateTimeFormat().resolvedOptions().timeZone);
     const [authLoading, setAuthLoading] = useState(true);
     const [isModalOpen, setIsModalOpen] = useState(false);
+    const [isProfileOpen, setIsProfileOpen] = useState(false); // NEW
     const [modalContent, setModalContent] = useState({});
 
     // Auth Listener
@@ -825,28 +1047,27 @@ export default function App() {
         return converted;
     }, [availabilities, userTimezone]);
 
+    // UPDATED PFP LOGIC
     const getAvatar = () => {
         if (!currentUser) return null;
 
-        // 1. Try direct URL first
-        if (currentUser.photoURL && currentUser.photoURL.startsWith('http')) return currentUser.photoURL;
-
-        // 2. Check provider data deep dive (best bet for Discord)
+        // Check provider data specifically for Discord ID
         const discordData = currentUser.providerData.find(p => p.providerId === 'oidc.discord');
+
+        // If we have specific discord data
         if (discordData) {
-            // If we have a discord user ID, construct it manually to be safe
-            // Sometimes discordData.photoURL is just the hash
+            // Use Provider UID for correct CDN mapping
             if (discordData.uid && discordData.photoURL) {
                 return `https://cdn.discordapp.com/avatars/${discordData.uid}/${discordData.photoURL}.png`;
             }
+            // If we have a photoURL but no UID (rare), try standard
+            if (discordData.photoURL) return discordData.photoURL;
         }
 
-        // 3. Fallback for basic Firebase auth object if hash exists
-        if (currentUser.photoURL && currentUser.uid) {
-            return `https://cdn.discordapp.com/avatars/${currentUser.uid}/${currentUser.photoURL}.png`;
-        }
+        // Fallback: if Firebase has a photoURL (sometimes it copies it over correctly)
+        if (currentUser.photoURL) return currentUser.photoURL;
 
-        // 4. Generic Fallback
+        // Absolute Fallback
         return `https://cdn.discordapp.com/embed/avatars/${Math.floor(Math.random() * 5)}.png`;
     };
 
@@ -928,12 +1149,20 @@ export default function App() {
                         <NavBtn id="strats" label="Stratbook" />
                         <NavBtn id="roster" label="Roster" />
                         <NavBtn id="partners" label="Partners" />
+                        <NavBtn id="apply" label="Apply" />
+                        <NavBtn id="mapveto" label="Map Veto" />
                     </div>
                 </div>
                 <div className="flex items-center gap-4 bg-neutral-900/80 p-2 rounded-2xl border border-neutral-800 backdrop-blur-sm shadow-lg">
-                    <img src={getAvatar()} className="w-10 h-10 rounded-full border-2 border-red-600 shadow-red-600/50 shadow-sm" alt="Profile" />
+                    <img
+                        src={getAvatar()}
+                        onClick={() => setIsProfileOpen(true)}
+                        onError={(e) => { e.target.onerror = null; e.target.src = "https://cdn.discordapp.com/embed/avatars/1.png"; }}
+                        className="w-10 h-10 rounded-full border-2 border-red-600 shadow-red-600/50 shadow-sm cursor-pointer hover:scale-105 transition-transform"
+                        alt="Profile"
+                    />
                     <div className="pr-4 border-r border-neutral-700 mr-2">
-                        <div className="text-sm font-bold text-white">{currentUser.displayName}</div>
+                        <div className="text-sm font-bold text-white cursor-pointer" onClick={() => setIsProfileOpen(true)}>{currentUser.displayName}</div>
                         <button onClick={handleSignOut} className="text-[10px] text-neutral-400 hover:text-red-500 transition-colors font-bold uppercase tracking-wide">Log Out</button>
                     </div>
                     <select value={userTimezone} onChange={e => { setUserTimezone(e.target.value); localStorage.setItem('timezone', e.target.value); }} className="bg-black border border-neutral-800 text-xs rounded-lg p-2 text-neutral-400 outline-none focus:border-red-600 transition-colors">
@@ -1126,12 +1355,28 @@ export default function App() {
                             <PartnerDirectory />
                         </div>
                     )}
+
+                    {/* 6. APPLICATION FORM View */}
+                    {activeTab === 'apply' && (
+                        <div className="animate-fade-in-up h-full">
+                            <ApplicationForm currentUser={currentUser} />
+                        </div>
+                    )}
+
+                    {/* 7. MAP VETO View */}
+                    {activeTab === 'mapveto' && (
+                        <div className="animate-fade-in-up h-[80vh]">
+                            <MapVeto />
+                        </div>
+                    )}
                 </div>
             </main>
 
             <Modal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} onConfirm={modalContent.onConfirm} title={modalContent.title}>
                 {modalContent.children}
             </Modal>
+
+            <ProfileModal isOpen={isProfileOpen} onClose={() => setIsProfileOpen(false)} currentUser={currentUser} />
         </div>
     );
 }
