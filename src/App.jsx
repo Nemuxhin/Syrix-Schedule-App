@@ -1,10 +1,9 @@
 ﻿/*
-Syrix Team Availability - FINAL PREMIUM BUILD (ALL FEATURES)
-- FEATURE: Match History & VOD Archive (Log scores, maps, links).
-- FEATURE: Strategy Board (Stratbook organized by Map).
-- FEATURE: Scrim Partner Directory (Address book for teams).
-- FEATURE: Role/Agent Selector in Availability.
-- DESIGN: "Syrix Red & Black" Premium Aesthetic.
+Syrix Team Availability - FINAL PREMIUM BUILD (FULL SCREEN & FIXED)
+- LAYOUT: Fixed "App-like" layout (Header fixed, content scrolls).
+- FIX: "Inset-0" applied to remove all outer grey borders/margins.
+- DESIGN: Customized scrollbars to match Red/Black theme.
+- FEATURE: All previous features (Match History, Stratbook, etc.) preserved.
 */
 
 import React, { useState, useEffect, useMemo } from 'react';
@@ -86,7 +85,7 @@ const convertFromGMT = (day, time, timezone) => {
 function Modal({ isOpen, onClose, onConfirm, title, children }) {
     if (!isOpen) return null;
     return (
-        <div className="fixed inset-0 bg-black/90 z-50 flex justify-center items-center backdrop-blur-md p-4">
+        <div className="fixed inset-0 bg-black/90 z-[100] flex justify-center items-center backdrop-blur-md p-4">
             <div className="bg-neutral-900 rounded-2xl shadow-2xl shadow-red-900/20 p-6 w-full max-w-md border border-red-900/50 animate-fade-in-up">
                 <h3 className="text-2xl font-black text-white mb-4 border-b pb-2 border-red-900/50 uppercase tracking-wider">{title}</h3>
                 <div className="text-neutral-300 mb-6">{children}</div>
@@ -124,10 +123,10 @@ function RosterManager({ members }) {
     };
 
     return (
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-            <div className="lg:col-span-1 bg-neutral-900/50 p-6 rounded-3xl border border-neutral-800">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 h-full">
+            <div className="lg:col-span-1 bg-neutral-900/50 p-6 rounded-3xl border border-neutral-800/50 flex flex-col h-full">
                 <h3 className="text-xl font-bold text-white mb-4 border-b border-neutral-800 pb-2">Team Members</h3>
-                <div className="space-y-2 max-h-[600px] overflow-y-auto pr-2">
+                <div className="space-y-2 overflow-y-auto pr-2 flex-1 custom-scrollbar">
                     {members.map(m => (
                         <div
                             key={m}
@@ -146,7 +145,7 @@ function RosterManager({ members }) {
                 </div>
             </div>
 
-            <div className="lg:col-span-2 bg-neutral-900 p-6 rounded-3xl border border-neutral-800 shadow-2xl">
+            <div className="lg:col-span-2 bg-neutral-900 p-6 rounded-3xl border border-neutral-800/50 shadow-2xl flex flex-col">
                 {selectedMember ? (
                     <div className="h-full flex flex-col">
                         <h3 className="text-2xl font-black text-white mb-6 flex items-center gap-3">
@@ -210,9 +209,8 @@ function MatchHistory() {
         const unsub = onSnapshot(collection(db, 'events'), (snap) => {
             const evs = [];
             snap.forEach(doc => evs.push({ id: doc.id, ...doc.data() }));
-            // Filter for past events
             const past = evs.filter(e => new Date(e.date + 'T' + e.time) < new Date());
-            past.sort((a, b) => new Date(b.date) - new Date(a.date)); // Newest first
+            past.sort((a, b) => new Date(b.date) - new Date(a.date));
             setMatches(past);
         });
         return () => unsub();
@@ -226,14 +224,14 @@ function MatchHistory() {
     };
 
     return (
-        <div className="bg-neutral-900 p-6 rounded-3xl border border-neutral-800 shadow-2xl">
+        <div className="bg-neutral-900 p-6 rounded-3xl border border-neutral-800/50 shadow-2xl">
             <h3 className="text-2xl font-black text-white mb-6 flex items-center gap-3">
                 <span className="text-red-600">MATCH</span> HISTORY
             </h3>
             <div className="space-y-4">
                 {matches.length === 0 && <p className="text-neutral-500 italic">No past matches found.</p>}
                 {matches.map(m => (
-                    <div key={m.id} className="bg-black/40 border border-neutral-800 p-4 rounded-xl flex flex-col md:flex-row justify-between items-center gap-4">
+                    <div key={m.id} className="bg-black/40 border border-neutral-800 p-4 rounded-xl flex flex-col md:flex-row justify-between items-center gap-4 hover:border-neutral-700 transition-colors">
                         <div className="flex-1">
                             <div className="text-sm font-bold text-red-500 uppercase tracking-wider">{m.type}</div>
                             <div className="text-xl font-black text-white">{m.opponent || 'Unknown Opponent'}</div>
@@ -242,11 +240,11 @@ function MatchHistory() {
 
                         {editingId === m.id ? (
                             <div className="flex flex-wrap gap-2 items-center bg-neutral-900 p-2 rounded-lg border border-neutral-700">
-                                <select value={editForm.map} onChange={e => setEditForm({ ...editForm, map: e.target.value })} className="bg-black text-white text-xs p-2 rounded border border-neutral-700">{MAPS.map(map => <option key={map}>{map}</option>)}</select>
-                                <input type="number" placeholder="Us" value={editForm.myScore} onChange={e => setEditForm({ ...editForm, myScore: e.target.value })} className="w-12 bg-black text-white text-xs p-2 rounded border border-neutral-700" />
+                                <select value={editForm.map} onChange={e => setEditForm({ ...editForm, map: e.target.value })} className="bg-black text-white text-xs p-2 rounded border border-neutral-700 outline-none">{MAPS.map(map => <option key={map}>{map}</option>)}</select>
+                                <input type="number" placeholder="Us" value={editForm.myScore} onChange={e => setEditForm({ ...editForm, myScore: e.target.value })} className="w-12 bg-black text-white text-xs p-2 rounded border border-neutral-700 outline-none" />
                                 <span className="text-white">-</span>
-                                <input type="number" placeholder="Them" value={editForm.enemyScore} onChange={e => setEditForm({ ...editForm, enemyScore: e.target.value })} className="w-12 bg-black text-white text-xs p-2 rounded border border-neutral-700" />
-                                <input type="text" placeholder="VOD Link" value={editForm.vod} onChange={e => setEditForm({ ...editForm, vod: e.target.value })} className="w-32 bg-black text-white text-xs p-2 rounded border border-neutral-700" />
+                                <input type="number" placeholder="Them" value={editForm.enemyScore} onChange={e => setEditForm({ ...editForm, enemyScore: e.target.value })} className="w-12 bg-black text-white text-xs p-2 rounded border border-neutral-700 outline-none" />
+                                <input type="text" placeholder="VOD Link" value={editForm.vod} onChange={e => setEditForm({ ...editForm, vod: e.target.value })} className="w-32 bg-black text-white text-xs p-2 rounded border border-neutral-700 outline-none" />
                                 <button onClick={() => handleUpdate(m.id)} className="bg-green-600 text-white px-3 py-1 rounded text-xs font-bold">Save</button>
                             </div>
                         ) : (
@@ -306,11 +304,10 @@ function StratBook() {
     const filteredStrats = strats.filter(s => s.map === selectedMap);
 
     return (
-        <div className="bg-neutral-900 p-6 rounded-3xl border border-neutral-800 shadow-2xl h-full">
+        <div className="bg-neutral-900 p-6 rounded-3xl border border-neutral-800/50 shadow-2xl h-full">
             <h3 className="text-2xl font-black text-white mb-6">STRATBOOK</h3>
 
-            {/* Map Tabs */}
-            <div className="flex overflow-x-auto gap-2 pb-4 mb-4 scrollbar-thin scrollbar-thumb-red-900">
+            <div className="flex overflow-x-auto gap-2 pb-4 mb-4 scrollbar-thin scrollbar-thumb-red-900 scrollbar-track-black">
                 {MAPS.map(m => (
                     <button
                         key={m}
@@ -330,7 +327,7 @@ function StratBook() {
                 </div>
             </div>
 
-            <div className="space-y-2 max-h-[400px] overflow-y-auto pr-2">
+            <div className="space-y-2 max-h-[400px] overflow-y-auto pr-2 custom-scrollbar">
                 {filteredStrats.length === 0 && <p className="text-neutral-600 italic text-sm">No strats for {selectedMap} yet.</p>}
                 {filteredStrats.map(s => (
                     <div key={s.id} className="p-3 bg-black/40 border border-neutral-800 rounded-lg flex justify-between items-center group hover:border-red-900/50 transition-colors">
@@ -366,7 +363,7 @@ function PartnerDirectory() {
     };
 
     return (
-        <div className="bg-neutral-900 p-6 rounded-3xl border border-neutral-800 shadow-2xl h-full">
+        <div className="bg-neutral-900 p-6 rounded-3xl border border-neutral-800/50 shadow-2xl h-full">
             <h3 className="text-2xl font-black text-white mb-6">SCRIM PARTNERS</h3>
 
             <div className="space-y-3 mb-6 p-4 bg-black/30 rounded-xl border border-neutral-800">
@@ -378,7 +375,7 @@ function PartnerDirectory() {
                 <button onClick={addPartner} className="w-full bg-red-700 hover:bg-red-600 text-white font-bold py-2 rounded-lg text-sm mt-2">Add Partner</button>
             </div>
 
-            <div className="space-y-3 max-h-[400px] overflow-y-auto pr-2">
+            <div className="space-y-3 max-h-[400px] overflow-y-auto pr-2 custom-scrollbar">
                 {partners.map(p => (
                     <div key={p.id} className="p-4 bg-black/40 border border-neutral-800 rounded-xl">
                         <div className="flex justify-between items-start">
@@ -500,7 +497,7 @@ function AvailabilityHeatmap({ availabilities, members }) {
 
 function LoginScreen({ signIn }) {
     return (
-        <div className="min-h-screen bg-black flex items-center justify-center p-4 bg-[radial-gradient(ellipse_at_center,_var(--tw-gradient-stops))] from-red-900/20 via-black to-black">
+        <div className="fixed inset-0 h-full w-full bg-black flex items-center justify-center p-4 bg-[radial-gradient(ellipse_at_center,_var(--tw-gradient-stops))] from-red-900/20 via-black to-black">
             <div className="text-center space-y-8 max-w-lg w-full p-10 rounded-3xl border border-red-900/30 bg-neutral-900/50 backdrop-blur-lg shadow-2xl shadow-red-900/20">
                 <div className="space-y-2">
                     <h1 className="text-6xl font-black text-white tracking-tighter drop-shadow-lg">SYRIX</h1>
@@ -525,7 +522,7 @@ export default function App() {
     const [day, setDay] = useState(DAYS[0]);
     const [start, setStart] = useState('12:00');
     const [end, setEnd] = useState('23:30');
-    const [role, setRole] = useState('Flex'); // NEW: Role Selector State
+    const [role, setRole] = useState('Flex');
     const [saveStatus, setSaveStatus] = useState('idle');
     const [userTimezone, setUserTimezone] = useState(localStorage.getItem('timezone') || Intl.DateTimeFormat().resolvedOptions().timeZone);
     const [authLoading, setAuthLoading] = useState(true);
@@ -580,7 +577,6 @@ export default function App() {
             availabilities[member].forEach(slot => {
                 const localStart = convertFromGMT(slot.day, slot.start, userTimezone);
                 const localEnd = convertFromGMT(slot.day, slot.end, userTimezone);
-                // Pass through the role if it exists in the slot object
                 const role = slot.role;
                 if (localStart.day === localEnd.day) {
                     if (timeToMinutes(localStart.time) < timeToMinutes(localEnd.time)) converted[member].push({ day: localStart.day, start: localStart.time, end: localEnd.time, role });
@@ -613,7 +609,6 @@ export default function App() {
         const gmtEnd = convertToGMT(day, end);
         const existing = availabilities[currentUser.displayName] || [];
         const others = existing.filter(s => convertFromGMT(s.day, s.start, userTimezone).day !== day);
-        // NEW: Saving Role with Slot
         const newSlots = [...others, { day: gmtStart.day, start: gmtStart.time, end: gmtEnd.time, role }];
 
         try {
@@ -659,7 +654,7 @@ export default function App() {
         setIsModalOpen(false);
     };
 
-    if (authLoading) return <div className="min-h-screen bg-black flex items-center justify-center text-red-600 font-bold text-xl animate-pulse">LOADING SYRIX HUB...</div>;
+    if (authLoading) return <div className="fixed inset-0 h-full w-full bg-black flex items-center justify-center text-red-600 font-bold text-xl animate-pulse">LOADING SYRIX HUB...</div>;
     if (!currentUser) return <LoginScreen signIn={signIn} />;
 
     // Nav Button Helper
@@ -670,12 +665,12 @@ export default function App() {
     );
 
     return (
-        <div className="min-h-screen bg-black text-neutral-200 p-4 sm:p-8 font-sans selection:bg-red-500/30">
+        <div className="fixed inset-0 h-full w-full bg-black text-neutral-200 font-sans selection:bg-red-500/30 flex flex-col overflow-hidden">
             {/* Header & Nav */}
-            <header className="flex flex-col md:flex-row justify-between items-center mb-8 gap-4 border-b border-red-900/30 pb-6">
+            <header className="flex-none flex flex-col md:flex-row justify-between items-center px-8 py-4 gap-4 border-b border-red-900/30 bg-black/90 backdrop-blur-md z-40">
                 <div>
-                    <h1 className="text-4xl font-black tracking-tighter text-white">SYRIX <span className="text-red-600">HUB</span></h1>
-                    <div className="flex gap-6 mt-4 overflow-x-auto pb-2">
+                    <h1 className="text-3xl font-black tracking-tighter text-white">SYRIX <span className="text-red-600">HUB</span></h1>
+                    <div className="flex gap-6 mt-2 overflow-x-auto pb-1 scrollbar-hide">
                         <NavBtn id="dashboard" label="Dashboard" />
                         <NavBtn id="matches" label="Matches" />
                         <NavBtn id="strats" label="Stratbook" />
@@ -695,180 +690,183 @@ export default function App() {
                 </div>
             </header>
 
-            {/* --- VIEW ROUTER --- */}
-
-            {/* 1. DASHBOARD (Home) */}
-            {activeTab === 'dashboard' && (
-                <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 animate-fade-in-up">
-                    {/* Left Column: Availability & Event Ops */}
-                    <div className="lg:col-span-4 space-y-8">
-                        <div className="bg-neutral-900/50 p-6 rounded-3xl border border-neutral-800 shadow-xl backdrop-blur-sm relative overflow-hidden group">
-                            <div className="absolute top-0 left-0 w-1 h-full bg-red-600/50 group-hover:bg-red-600 transition-colors"></div>
-                            <h2 className="text-xl font-bold text-white mb-6 uppercase tracking-wide flex items-center gap-2">Set Availability</h2>
-                            <div className="space-y-4">
-                                <div>
-                                    <label className="text-[10px] font-black text-red-500 uppercase mb-1 block">Day</label>
-                                    <select value={day} onChange={e => setDay(e.target.value)} className="w-full p-3 bg-black border border-neutral-800 rounded-xl text-white focus:border-red-600 focus:ring-1 focus:ring-red-600 outline-none transition-all">
-                                        {DAYS.map(d => <option key={d} value={d}>{d}</option>)}
-                                    </select>
-                                </div>
-                                <div className="grid grid-cols-2 gap-3">
-                                    <div>
-                                        <label className="text-[10px] font-black text-red-500 uppercase mb-1 block">Start</label>
-                                        <input type="time" value={start} onChange={e => setStart(e.target.value)} className="w-full p-3 bg-black border border-neutral-800 rounded-xl text-white focus:border-red-600 focus:ring-1 focus:ring-red-600 outline-none [color-scheme:dark]" />
-                                    </div>
-                                    <div>
-                                        <label className="text-[10px] font-black text-red-500 uppercase mb-1 block">End</label>
-                                        <input type="time" value={end} onChange={e => setEnd(e.target.value)} className="w-full p-3 bg-black border border-neutral-800 rounded-xl text-white focus:border-red-600 focus:ring-1 focus:ring-red-600 outline-none [color-scheme:dark]" />
-                                    </div>
-                                </div>
-                                {/* NEW: Role Selector */}
-                                <div>
-                                    <label className="text-[10px] font-black text-red-500 uppercase mb-1 block">Pref. Role</label>
-                                    <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-hide">
-                                        {ROLES.map(r => (
-                                            <button key={r} onClick={() => setRole(r)} className={`px-3 py-2 rounded-lg text-xs font-bold border transition-all whitespace-nowrap ${role === r ? 'bg-red-600 text-white border-red-500' : 'bg-black border-neutral-800 text-neutral-500 hover:text-white'}`}>
-                                                {r}
-                                            </button>
-                                        ))}
-                                    </div>
-                                </div>
-                                <div className="pt-2 flex gap-2">
-                                    <button onClick={saveAvailability} disabled={saveStatus !== 'idle'} className={`flex-1 py-3 rounded-xl font-black uppercase tracking-wider shadow-lg transition-all transform active:scale-95 ${saveStatus === 'success' ? 'bg-green-600 text-white' : 'bg-red-700 hover:bg-red-600 text-white shadow-red-900/30'}`}>
-                                        {saveStatus === 'idle' ? 'Save Slot' : saveStatus === 'saving' ? '...' : 'Saved!'}
-                                    </button>
-                                    <button onClick={() => openModal('Clear Day', `Clear all for ${day}?`, clearDay)} className="px-4 py-3 bg-neutral-800 hover:bg-neutral-700 rounded-xl text-neutral-300 font-bold transition-colors border border-neutral-700">Clear</button>
-                                </div>
-                            </div>
-                        </div>
-
-                        <div className="bg-neutral-900/50 p-6 rounded-3xl border border-neutral-800 shadow-xl backdrop-blur-sm relative overflow-hidden group">
-                            <div className="absolute top-0 left-0 w-1 h-full bg-red-600/50 group-hover:bg-red-600 transition-colors"></div>
-                            <h2 className="text-xl font-bold text-white mb-6 uppercase tracking-wide">Event Operations</h2>
-                            <ScrimScheduler onSchedule={scheduleEvent} userTimezone={userTimezone} />
-                        </div>
-                    </div>
-
-                    {/* Right Column: Data Visualization */}
-                    <div className="lg:col-span-8 space-y-8">
-                        <div className="grid grid-cols-1 xl:grid-cols-2 gap-8">
-                            <div className="bg-neutral-900/80 p-6 rounded-3xl border border-neutral-800 shadow-2xl">
-                                <h2 className="text-lg font-bold text-white mb-4 flex justify-between items-center uppercase tracking-wide">
-                                    <span>Upcoming Events</span>
-                                    <span className="text-[10px] bg-red-900/30 text-red-400 border border-red-900/50 px-2 py-1 rounded font-bold">{events.length} ACTIVE</span>
-                                </h2>
-                                <div className="space-y-3 max-h-64 overflow-y-auto pr-2 scrollbar-thin scrollbar-thumb-neutral-700">
-                                    {events.length === 0 ? <p className="text-neutral-600 text-sm italic p-4 text-center">No scheduled events.</p> : events.map(ev => (
-                                        <div key={ev.id} className="p-3 bg-black/40 rounded-xl border border-neutral-800 flex justify-between items-center group hover:border-red-900/50 transition-colors">
+            {/* Main Content Area - Scrollable */}
+            <main className="flex-1 overflow-y-auto overflow-x-hidden p-6 scrollbar-thin scrollbar-thumb-red-900 scrollbar-track-black">
+                <div className="max-w-[1920px] mx-auto">
+                    {/* 1. DASHBOARD (Home) */}
+                    {activeTab === 'dashboard' && (
+                        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 animate-fade-in-up">
+                            {/* Left Column: Availability & Event Ops */}
+                            <div className="lg:col-span-4 space-y-8">
+                                <div className="bg-neutral-900/50 p-6 rounded-3xl border border-neutral-800 shadow-xl backdrop-blur-sm relative overflow-hidden group">
+                                    <div className="absolute top-0 left-0 w-1 h-full bg-red-600/50 group-hover:bg-red-600 transition-colors"></div>
+                                    <h2 className="text-xl font-bold text-white mb-6 uppercase tracking-wide flex items-center gap-2">Set Availability</h2>
+                                    <div className="space-y-4">
+                                        <div>
+                                            <label className="text-[10px] font-black text-red-500 uppercase mb-1 block">Day</label>
+                                            <select value={day} onChange={e => setDay(e.target.value)} className="w-full p-3 bg-black border border-neutral-800 rounded-xl text-white focus:border-red-600 focus:ring-1 focus:ring-red-600 outline-none transition-all">
+                                                {DAYS.map(d => <option key={d} value={d}>{d}</option>)}
+                                            </select>
+                                        </div>
+                                        <div className="grid grid-cols-2 gap-3">
                                             <div>
-                                                <div className="font-bold text-white text-sm group-hover:text-red-400 transition-colors">{ev.type} <span className="text-neutral-500">vs</span> {ev.opponent || 'TBD'}</div>
-                                                <div className="text-xs text-neutral-400 mt-1">{ev.date} @ <span className="text-white font-mono">{ev.time}</span></div>
+                                                <label className="text-[10px] font-black text-red-500 uppercase mb-1 block">Start</label>
+                                                <input type="time" value={start} onChange={e => setStart(e.target.value)} className="w-full p-3 bg-black border border-neutral-800 rounded-xl text-white focus:border-red-600 focus:ring-1 focus:ring-red-600 outline-none [color-scheme:dark]" />
                                             </div>
-                                            <div className="flex items-center gap-2">
-                                                <div className="text-[9px] bg-neutral-800 text-neutral-400 px-2 py-1 rounded uppercase font-bold tracking-wider">By {ev.scheduledBy || 'Admin'}</div>
-                                                <button onClick={() => openModal('Delete Event', 'Are you sure you want to remove this event?', () => deleteEvent(ev.id))} className="text-neutral-600 hover:text-red-500 p-1 rounded transition-colors">×</button>
+                                            <div>
+                                                <label className="text-[10px] font-black text-red-500 uppercase mb-1 block">End</label>
+                                                <input type="time" value={end} onChange={e => setEnd(e.target.value)} className="w-full p-3 bg-black border border-neutral-800 rounded-xl text-white focus:border-red-600 focus:ring-1 focus:ring-red-600 outline-none [color-scheme:dark]" />
                                             </div>
                                         </div>
-                                    ))}
+                                        {/* Role Selector */}
+                                        <div>
+                                            <label className="text-[10px] font-black text-red-500 uppercase mb-1 block">Pref. Role</label>
+                                            <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-hide">
+                                                {ROLES.map(r => (
+                                                    <button key={r} onClick={() => setRole(r)} className={`px-3 py-2 rounded-lg text-xs font-bold border transition-all whitespace-nowrap ${role === r ? 'bg-red-600 text-white border-red-500' : 'bg-black border-neutral-800 text-neutral-500 hover:text-white'}`}>
+                                                        {r}
+                                                    </button>
+                                                ))}
+                                            </div>
+                                        </div>
+                                        <div className="pt-2 flex gap-2">
+                                            <button onClick={saveAvailability} disabled={saveStatus !== 'idle'} className={`flex-1 py-3 rounded-xl font-black uppercase tracking-wider shadow-lg transition-all transform active:scale-95 ${saveStatus === 'success' ? 'bg-green-600 text-white' : 'bg-red-700 hover:bg-red-600 text-white shadow-red-900/30'}`}>
+                                                {saveStatus === 'idle' ? 'Save Slot' : saveStatus === 'saving' ? '...' : 'Saved!'}
+                                            </button>
+                                            <button onClick={() => openModal('Clear Day', `Clear all for ${day}?`, clearDay)} className="px-4 py-3 bg-neutral-800 hover:bg-neutral-700 rounded-xl text-neutral-300 font-bold transition-colors border border-neutral-700">Clear</button>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div className="bg-neutral-900/50 p-6 rounded-3xl border border-neutral-800 shadow-xl backdrop-blur-sm relative overflow-hidden group">
+                                    <div className="absolute top-0 left-0 w-1 h-full bg-red-600/50 group-hover:bg-red-600 transition-colors"></div>
+                                    <h2 className="text-xl font-bold text-white mb-6 uppercase tracking-wide">Event Operations</h2>
+                                    <ScrimScheduler onSchedule={scheduleEvent} userTimezone={userTimezone} />
                                 </div>
                             </div>
-                            <div className="bg-neutral-900/50 p-6 rounded-3xl border border-neutral-800">
-                                <h2 className="text-lg font-bold text-white mb-4 uppercase tracking-wide">Availability Heatmap</h2>
-                                <AvailabilityHeatmap availabilities={availabilities} members={dynamicMembers} />
-                            </div>
-                        </div>
 
-                        {/* Detailed Timeline */}
-                        <div className="bg-neutral-900 p-6 rounded-3xl border border-neutral-800 shadow-2xl">
-                            <h2 className="text-xl font-bold text-white mb-6 uppercase tracking-wide">Detailed Timeline <span className="text-neutral-500 text-sm normal-case">({userTimezone})</span></h2>
-                            <div className="overflow-x-auto">
-                                <table className="w-full text-left border-collapse">
-                                    <thead>
-                                        <tr className="border-b border-neutral-800">
-                                            <th className="p-3 text-xs font-bold text-neutral-500 uppercase tracking-wider">Team Member</th>
-                                            {SHORT_DAYS.map(day => (
-                                                <th key={day} className="p-3 text-xs font-bold text-red-600 uppercase tracking-wider text-center">{day}</th>
+                            {/* Right Column: Data Visualization */}
+                            <div className="lg:col-span-8 space-y-8">
+                                <div className="grid grid-cols-1 xl:grid-cols-2 gap-8">
+                                    <div className="bg-neutral-900/80 p-6 rounded-3xl border border-neutral-800 shadow-2xl">
+                                        <h2 className="text-lg font-bold text-white mb-4 flex justify-between items-center uppercase tracking-wide">
+                                            <span>Upcoming Events</span>
+                                            <span className="text-[10px] bg-red-900/30 text-red-400 border border-red-900/50 px-2 py-1 rounded font-bold">{events.length} ACTIVE</span>
+                                        </h2>
+                                        <div className="space-y-3 max-h-64 overflow-y-auto pr-2 scrollbar-thin scrollbar-thumb-neutral-700">
+                                            {events.length === 0 ? <p className="text-neutral-600 text-sm italic p-4 text-center">No scheduled events.</p> : events.map(ev => (
+                                                <div key={ev.id} className="p-3 bg-black/40 rounded-xl border border-neutral-800 flex justify-between items-center group hover:border-red-900/50 transition-colors">
+                                                    <div>
+                                                        <div className="font-bold text-white text-sm group-hover:text-red-400 transition-colors">{ev.type} <span className="text-neutral-500">vs</span> {ev.opponent || 'TBD'}</div>
+                                                        <div className="text-xs text-neutral-400 mt-1">{ev.date} @ <span className="text-white font-mono">{ev.time}</span></div>
+                                                    </div>
+                                                    <div className="flex items-center gap-2">
+                                                        <div className="text-[9px] bg-neutral-800 text-neutral-400 px-2 py-1 rounded uppercase font-bold tracking-wider">By {ev.scheduledBy || 'Admin'}</div>
+                                                        <button onClick={() => openModal('Delete Event', 'Are you sure you want to remove this event?', () => deleteEvent(ev.id))} className="text-neutral-600 hover:text-red-500 p-1 rounded transition-colors">×</button>
+                                                    </div>
+                                                </div>
                                             ))}
-                                        </tr>
-                                    </thead>
-                                    <tbody className="divide-y divide-neutral-800/50">
-                                        {dynamicMembers.map(member => (
-                                            <tr key={member} className="hover:bg-neutral-800/30 transition-colors">
-                                                <td className="p-4 font-bold text-white text-sm flex items-center gap-2">
-                                                    <div className="w-2 h-2 rounded-full bg-red-500"></div>
-                                                    {member}
-                                                </td>
-                                                {DAYS.map((day) => {
-                                                    const slots = (displayAvailabilities[member] || []).filter(s => s.day === day);
-                                                    return (
-                                                        <td key={day} className="p-2 align-top">
-                                                            <div className="flex flex-col gap-1 items-center">
-                                                                {slots.length > 0 ? slots.map((s, i) => (
-                                                                    <div key={i} className="bg-red-600 text-white text-[10px] font-bold px-2 py-1 rounded w-full text-center shadow-sm whitespace-nowrap">
-                                                                        {s.start}-{s.end}
-                                                                        {s.role && <div className="text-[8px] opacity-75 font-normal">{s.role}</div>}
-                                                                    </div>
-                                                                )) : <span className="text-neutral-700 text-xs">-</span>}
-                                                            </div>
+                                        </div>
+                                    </div>
+                                    <div className="bg-neutral-900/50 p-6 rounded-3xl border border-neutral-800">
+                                        <h2 className="text-lg font-bold text-white mb-4 uppercase tracking-wide">Availability Heatmap</h2>
+                                        <AvailabilityHeatmap availabilities={availabilities} members={dynamicMembers} />
+                                    </div>
+                                </div>
+
+                                {/* Detailed Timeline - REDESIGNED AS MATRIX TABLE */}
+                                <div className="bg-neutral-900 p-6 rounded-3xl border border-neutral-800 shadow-2xl">
+                                    <h2 className="text-xl font-bold text-white mb-6 uppercase tracking-wide">Detailed Timeline <span className="text-neutral-500 text-sm normal-case">({userTimezone})</span></h2>
+                                    <div className="overflow-x-auto scrollbar-thin scrollbar-thumb-neutral-700">
+                                        <table className="w-full text-left border-collapse min-w-[600px]">
+                                            <thead>
+                                                <tr className="border-b border-neutral-800">
+                                                    <th className="p-3 text-xs font-bold text-neutral-500 uppercase tracking-wider w-32">Team Member</th>
+                                                    {SHORT_DAYS.map(day => (
+                                                        <th key={day} className="p-3 text-xs font-bold text-red-600 uppercase tracking-wider text-center border-l border-neutral-800">{day}</th>
+                                                    ))}
+                                                </tr>
+                                            </thead>
+                                            <tbody className="divide-y divide-neutral-800/50">
+                                                {dynamicMembers.map(member => (
+                                                    <tr key={member} className="hover:bg-neutral-800/30 transition-colors group">
+                                                        <td className="p-4 font-bold text-white text-sm flex items-center gap-2">
+                                                            <div className="w-2 h-2 rounded-full bg-red-500 shadow-red-500/50 shadow-sm"></div>
+                                                            {member}
                                                         </td>
-                                                    );
-                                                })}
-                                            </tr>
-                                        ))}
-                                        {dynamicMembers.length === 0 && (
-                                            <tr><td colSpan="8" className="p-8 text-center text-neutral-500 italic">No availability data submitted yet.</td></tr>
-                                        )}
-                                    </tbody>
-                                </table>
+                                                        {DAYS.map((day) => {
+                                                            const slots = (displayAvailabilities[member] || []).filter(s => s.day === day);
+                                                            return (
+                                                                <td key={day} className="p-2 align-middle border-l border-neutral-800/50">
+                                                                    <div className="flex flex-col gap-1 items-center justify-center">
+                                                                        {slots.length > 0 ? slots.map((s, i) => (
+                                                                            <div key={i} className="bg-gradient-to-br from-red-600 to-red-700 text-white text-[10px] font-bold px-2 py-1 rounded w-full text-center shadow-md whitespace-nowrap">
+                                                                                {s.start}-{s.end}
+                                                                                {s.role && <div className="text-[8px] opacity-75 font-normal uppercase tracking-wider mt-0.5">{s.role}</div>}
+                                                                            </div>
+                                                                        )) : <div className="h-1 w-4 bg-neutral-800 rounded-full"></div>}
+                                                                    </div>
+                                                                </td>
+                                                            );
+                                                        })}
+                                                    </tr>
+                                                ))}
+                                                {dynamicMembers.length === 0 && (
+                                                    <tr><td colSpan="8" className="p-8 text-center text-neutral-500 italic">No availability data submitted yet.</td></tr>
+                                                )}
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </div>
                             </div>
                         </div>
-                    </div>
-                </div>
-            )}
+                    )}
 
-            {/* 2. MATCH HISTORY View */}
-            {activeTab === 'matches' && (
-                <div className="animate-fade-in-up">
-                    <div className="mb-6">
-                        <h2 className="text-2xl font-bold text-white mb-2">Match History</h2>
-                        <p className="text-neutral-400">Log scores, map results, and VOD links.</p>
-                    </div>
-                    <MatchHistory />
-                </div>
-            )}
+                    {/* 2. MATCH HISTORY View */}
+                    {activeTab === 'matches' && (
+                        <div className="animate-fade-in-up">
+                            <div className="mb-6">
+                                <h2 className="text-2xl font-bold text-white mb-2">Match History</h2>
+                                <p className="text-neutral-400">Log scores, map results, and VOD links.</p>
+                            </div>
+                            <MatchHistory />
+                        </div>
+                    )}
 
-            {/* 3. STRATBOOK View */}
-            {activeTab === 'strats' && (
-                <div className="animate-fade-in-up h-[70vh]">
-                    <div className="mb-6">
-                        <h2 className="text-2xl font-bold text-white mb-2">Stratbook</h2>
-                        <p className="text-neutral-400">Team tactics and whiteboard links.</p>
-                    </div>
-                    <StratBook />
-                </div>
-            )}
+                    {/* 3. STRATBOOK View */}
+                    {activeTab === 'strats' && (
+                        <div className="animate-fade-in-up h-[70vh]">
+                            <div className="mb-6">
+                                <h2 className="text-2xl font-bold text-white mb-2">Stratbook</h2>
+                                <p className="text-neutral-400">Team tactics and whiteboard links.</p>
+                            </div>
+                            <StratBook />
+                        </div>
+                    )}
 
-            {/* 4. ROSTER View */}
-            {activeTab === 'roster' && (
-                <div className="animate-fade-in-up">
-                    <div className="mb-6">
-                        <h2 className="text-2xl font-bold text-white mb-2">Roster Management</h2>
-                        <p className="text-neutral-400">Manage team roles and track tryout performance notes.</p>
-                    </div>
-                    <RosterManager members={dynamicMembers} />
-                </div>
-            )}
+                    {/* 4. ROSTER View */}
+                    {activeTab === 'roster' && (
+                        <div className="animate-fade-in-up h-full">
+                            <div className="mb-6">
+                                <h2 className="text-2xl font-bold text-white mb-2">Roster Management</h2>
+                                <p className="text-neutral-400">Manage team roles and track tryout performance notes.</p>
+                            </div>
+                            <RosterManager members={dynamicMembers} />
+                        </div>
+                    )}
 
-            {/* 5. PARTNERS View */}
-            {activeTab === 'partners' && (
-                <div className="animate-fade-in-up">
-                    <div className="mb-6">
-                        <h2 className="text-2xl font-bold text-white mb-2">Scrim Partners</h2>
-                        <p className="text-neutral-400">Directory of other teams for scheduling.</p>
-                    </div>
-                    <PartnerDirectory />
+                    {/* 5. PARTNERS View */}
+                    {activeTab === 'partners' && (
+                        <div className="animate-fade-in-up h-full">
+                            <div className="mb-6">
+                                <h2 className="text-2xl font-bold text-white mb-2">Scrim Partners</h2>
+                                <p className="text-neutral-400">Directory of other teams for scheduling.</p>
+                            </div>
+                            <PartnerDirectory />
+                        </div>
+                    )}
                 </div>
-            )}
+            </main>
 
             <Modal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} onConfirm={modalContent.onConfirm} title={modalContent.title}>
                 {modalContent.children}
