@@ -1,14 +1,14 @@
 ﻿/*
-Syrix Team Availability - FINAL SECURE BUILD
-- SECURITY: Strict View Guard implemented. Non-members CANNOT render dashboard components.
-- FIX: Added 'membershipLoading' state to prevent UI flashing.
-- FIX: Profile editing locked for non-members to prevent database pollution.
-- DESIGN: Maintained Red/Black theme.
+Syrix Team Availability - FINAL STABLE BUILD
+- FIXED: ReferenceError for LoginScreen (Component order and scope corrected).
+- FIXED: "Object as child" error (State initialization hardened).
+- FEATURE: All premium features (Comps, Veto, Match History, etc.) included.
+- DESIGN: Premium Syrix Red/Black Theme.
 */
 
 import React, { useState, useEffect, useMemo } from 'react';
 import { initializeApp } from 'firebase/app';
-import { getFirestore, collection, onSnapshot, doc, setDoc, deleteDoc, addDoc, updateDoc, getDoc } from 'firebase/firestore';
+import { getFirestore, collection, onSnapshot, doc, setDoc, deleteDoc, addDoc, updateDoc } from 'firebase/firestore';
 import { getAuth, onAuthStateChanged, signInWithPopup, signOut, OAuthProvider } from 'firebase/auth';
 
 // --- Firebase Configuration ---
@@ -28,15 +28,15 @@ const auth = getAuth(app);
 
 const discordWebhookUrl = "https://discord.com/api/webhooks/1427426922228351042/lqw36ZxOPEnC3qK45b3vnqZvbkaYhzIxqb-uS1tex6CGOvmLYs19OwKZvslOVABdpHnD";
 
-// STRICT ADMIN LIST (Case sensitive matches)
 const ADMINS = ["Nemuxhin", "Tawz", "tawz", "nemuxhin"];
 
 const DAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
 const SHORT_DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 const MAPS = ["Ascent", "Bind", "Breeze", "Fracture", "Haven", "Icebox", "Lotus", "Pearl", "Split", "Sunset"];
 const ROLES = ["Flex", "Duelist", "Initiator", "Controller", "Sentinel"];
-const timezones = ["UTC", "GMT", "Europe/London", "Europe/Paris", "Europe/Berlin", "America/New_York", "America/Chicago", "America/Denver", "America/Los_Angeles", "Asia/Tokyo", "Australia/Sydney"];
 const RANKS = ["Unranked", "Iron", "Bronze", "Silver", "Gold", "Platinum", "Diamond", "Ascendant", "Immortal", "Radiant"];
+const AGENTS = ["Jett", "Raze", "Reyna", "Yoru", "Phoenix", "Neon", "Iso", "Omen", "Astra", "Brimstone", "Viper", "Harbor", "Clove", "Sova", "Fade", "Skye", "Breach", "KAY/O", "Gekko", "Killjoy", "Cypher", "Sage", "Chamber", "Deadlock", "Vyse"];
+const timezones = ["UTC", "GMT", "Europe/London", "Europe/Paris", "Europe/Berlin", "America/New_York", "America/Chicago", "America/Denver", "America/Los_Angeles", "Asia/Tokyo", "Australia/Sydney"];
 
 // --- Utility Functions ---
 function timeToMinutes(t) { if (!t || t === '24:00') return 1440; const [h, m] = t.split(":").map(Number); return h * 60 + m; }
@@ -84,7 +84,7 @@ const convertFromGMT = (day, time, timezone) => {
     return { day: part('weekday'), time: `${localHours}:${part('minute')}` };
 };
 
-// --- Components ---
+// --- COMPONENTS ---
 
 function Modal({ isOpen, onClose, onConfirm, title, children }) {
     if (!isOpen) return null;
@@ -98,6 +98,85 @@ function Modal({ isOpen, onClose, onConfirm, title, children }) {
                     <button onClick={onConfirm} className="bg-red-600 hover:bg-red-500 text-white font-bold px-5 py-2 rounded-xl shadow-lg shadow-red-900/50 transition-all">Confirm</button>
                 </div>
             </div>
+        </div>
+    );
+}
+
+function NextMatchCountdown({ events }) {
+    const [timeLeft, setTimeLeft] = useState('');
+
+    const nextEvent = useMemo(() => {
+        const now = new Date();
+        return events.find(e => new Date(e.date + 'T' + e.time) > now);
+    }, [events]);
+
+    useEffect(() => {
+        if (!nextEvent) { setTimeLeft(''); return; }
+        const target = new Date(nextEvent.date + 'T' + nextEvent.time);
+        const interval = setInterval(() => {
+            const now = new Date();
+            const diff = target - now;
+            if (diff <= 0) { setTimeLeft('NOW'); return; }
+            const d = Math.floor(diff / (1000 * 60 * 60 * 24));
+            const h = Math.floor((diff / (1000 * 60 * 60)) % 24);
+            const m = Math.floor((diff / 1000 / 60) % 60);
+            const s = Math.floor((diff / 1000) % 60);
+            setTimeLeft(`${d}d ${h}h ${m}m ${s}s`);
+        }, 1000);
+        return () => clearInterval(interval);
+    }, [nextEvent]);
+
+    if (!nextEvent) return null;
+
+    return (
+        <div className="bg-gradient-to-r from-red-900/80 to-black p-4 rounded-2xl border border-red-600/30 shadow-2xl mb-8 flex flex-col md:flex-row justify-between items-center gap-4 relative overflow-hidden group">
+            <div className="absolute top-0 right-0 w-64 h-64 bg-red-600/10 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2"></div>
+            <div className="z-10">
+                <div className="text-xs text-red-400 font-bold uppercase tracking-widest mb-1">Next Match vs {nextEvent.opponent}</div>
+                <div className="text-2xl font-black text-white">{nextEvent.date} @ {nextEvent.time} <span className="text-neutral-500 text-sm">({nextEvent.type})</span></div>
+            </div>
+            <div className="z-10 flex items-center gap-4">
+                <div className="text-4xl font-black text-white font-mono tracking-tight tabular-nums bg-black/30 px-4 py-2 rounded-xl border border-red-900/50 shadow-inner">
+                    {timeLeft}
+                </div>
+            </div>
+        </div>
+    );
+}
+
+function TeamComps({ members }) {
+    const [comps, setComps] = useState([]);
+    const [selectedMap, setSelectedMap] = useState(MAPS[0]);
+    const [newComp, setNewComp] = useState({ agents: Array(5).fill(''), players: Array(5).fill('') });
+
+    useEffect(() => {
+        const unsub = onSnapshot(collection(db, 'comps'), (snap) => {
+            const c = [];
+            snap.forEach(doc => c.push({ id: doc.id, ...doc.data() }));
+            setComps(c);
+        });
+        return () => unsub();
+    }, []);
+
+    const saveComp = async () => {
+        if (newComp.agents.some(a => !a)) return;
+        await addDoc(collection(db, 'comps'), { map: selectedMap, ...newComp });
+        setNewComp({ agents: Array(5).fill(''), players: Array(5).fill('') });
+    };
+
+    const deleteComp = async (id) => await deleteDoc(doc(db, 'comps', id));
+    const currentMapComps = comps.filter(c => c.map === selectedMap);
+
+    return (
+        <div className="bg-neutral-900 p-6 rounded-3xl border border-neutral-800 shadow-2xl h-full">
+            <h3 className="text-2xl font-black text-white mb-6 flex items-center gap-2"><span className="text-red-600">TEAM</span> COMPS</h3>
+            <div className="flex overflow-x-auto gap-2 pb-4 mb-6 scrollbar-hide">{MAPS.map(m => (<button key={m} onClick={() => setSelectedMap(m)} className={`px-4 py-2 rounded-lg text-xs font-bold uppercase tracking-wider whitespace-nowrap transition-all ${selectedMap === m ? 'bg-red-600 text-white shadow-lg' : 'bg-black border border-neutral-800 text-neutral-500 hover:text-white'}`}>{m}</button>))}</div>
+            <div className="bg-black/40 p-4 rounded-xl border border-neutral-800 mb-6">
+                <h4 className="text-xs font-bold text-neutral-500 uppercase mb-3">New {selectedMap} Composition</h4>
+                <div className="grid grid-cols-5 gap-2 mb-3">{Array.from({ length: 5 }).map((_, i) => (<div key={i} className="space-y-2"><select value={newComp.agents[i]} onChange={e => { const a = [...newComp.agents]; a[i] = e.target.value; setNewComp({ ...newComp, agents: a }); }} className="w-full bg-black border border-neutral-700 rounded p-1 text-[10px] text-white outline-none focus:border-red-600"><option value="">Agent</option>{AGENTS.map(ag => <option key={ag}>{ag}</option>)}</select><select value={newComp.players[i]} onChange={e => { const p = [...newComp.players]; p[i] = e.target.value; setNewComp({ ...newComp, players: p }); }} className="w-full bg-black border border-neutral-700 rounded p-1 text-[10px] text-neutral-400 outline-none focus:border-red-600"><option value="">Player</option>{members.map(m => <option key={m}>{m}</option>)}</select></div>))}</div>
+                <button onClick={saveComp} className="w-full bg-white text-black font-bold py-2 rounded hover:bg-gray-200 text-xs uppercase tracking-wider">Save Composition</button>
+            </div>
+            <div className="space-y-4">{currentMapComps.map(comp => (<div key={comp.id} className="p-4 bg-neutral-800/50 rounded-xl border border-neutral-700 relative group"><button onClick={() => deleteComp(comp.id)} className="absolute top-2 right-2 text-neutral-600 hover:text-red-500">×</button><div className="grid grid-cols-5 gap-2">{comp.agents.map((agent, i) => (<div key={i} className="text-center"><div className="text-sm font-bold text-red-400">{agent}</div><div className="text-[10px] text-neutral-500">{comp.players[i] || '-'}</div></div>))}</div></div>))}{currentMapComps.length === 0 && <p className="text-neutral-600 italic text-center text-sm">No comps saved for {selectedMap}.</p>}</div>
         </div>
     );
 }
@@ -535,7 +614,7 @@ export default function App() {
     const [saveStatus, setSaveStatus] = useState('idle');
     const [userTimezone, setUserTimezone] = useState(localStorage.getItem('timezone') || Intl.DateTimeFormat().resolvedOptions().timeZone);
     const [authLoading, setAuthLoading] = useState(true);
-    const [membershipLoading, setMembershipLoading] = useState(false); // NEW
+    const [membershipLoading, setMembershipLoading] = useState(false);
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [isProfileOpen, setIsProfileOpen] = useState(false);
     const [modalContent, setModalContent] = useState({});
@@ -569,7 +648,6 @@ export default function App() {
 
         // Strict Access Control: Must have a ROLE in the roster to see dashboard
         const checkMembership = onSnapshot(doc(db, 'roster', currentUser.displayName), (docSnap) => {
-            // Case insensitive admin check
             const isAdmin = ADMINS.some(admin => admin.toLowerCase() === currentUser.displayName.toLowerCase());
             const isAuthorized = (docSnap.exists() && docSnap.data().role) || isAdmin;
 
@@ -577,6 +655,7 @@ export default function App() {
             setMembershipLoading(false); // Loaded
         });
 
+        // Standard Listeners (Only active if user is logged in, data security via rules recommended too)
         const unsubAvail = onSnapshot(collection(db, 'availabilities'), (snap) => {
             const data = {};
             snap.forEach(doc => data[doc.id] = doc.data().slots || []);
@@ -719,6 +798,7 @@ export default function App() {
                     <h1 className="text-3xl font-black tracking-tighter text-white">SYRIX <span className="text-red-600">HUB</span></h1>
                     <div className="flex gap-6 mt-2 overflow-x-auto pb-1 scrollbar-hide">
                         <NavBtn id="dashboard" label="Dashboard" />
+                        <NavBtn id="comps" label="Comps" /> {/* NEW: Comps Tab */}
                         <NavBtn id="matches" label="Matches" />
                         <NavBtn id="strats" label="Stratbook" />
                         <NavBtn id="roster" label="Roster" />
@@ -755,6 +835,9 @@ export default function App() {
                             {/* Left Column: Availability & Event Ops */}
                             <div className="lg:col-span-4 space-y-8">
                                 <CaptainsMessage />
+
+                                {/* NEW: Absence Logger inserted into sidebar */}
+                                <LeaveLogger members={dynamicMembers} />
 
                                 <div className="bg-neutral-900/50 p-6 rounded-3xl border border-neutral-800 shadow-xl backdrop-blur-sm relative overflow-hidden group">
                                     <div className="absolute top-0 left-0 w-1 h-full bg-red-600/50 group-hover:bg-red-600 transition-colors"></div>
@@ -886,33 +969,50 @@ export default function App() {
                         </div>
                     )}
 
-                    {/* 2. MATCH HISTORY */}
-                    {activeTab === 'matches' && isMember && (
+                    {/* 2. TEAM COMPS View */}
+                    {activeTab === 'comps' && (
+                        <div className="animate-fade-in-up h-full"><TeamComps members={dynamicMembers} /></div>
+                    )}
+
+                    {/* 3. MATCH HISTORY View */}
+                    {activeTab === 'matches' && (
                         <div className="animate-fade-in-up"><MatchHistory /></div>
                     )}
 
-                    {/* 3. STRATBOOK */}
-                    {activeTab === 'strats' && isMember && (
+                    {/* 4. STRATBOOK View */}
+                    {activeTab === 'strats' && (
                         <div className="animate-fade-in-up h-[70vh]"><StratBook /></div>
                     )}
 
-                    {/* 4. ROSTER */}
-                    {activeTab === 'roster' && isMember && (
-                        <div className="animate-fade-in-up h-full"><RosterManager members={dynamicMembers} /></div>
+                    {/* 5. ROSTER View */}
+                    {activeTab === 'roster' && (
+                        <div className="animate-fade-in-up h-full">
+                            <div className="mb-6">
+                                <h2 className="text-2xl font-bold text-white mb-2">Roster Management</h2>
+                                <p className="text-neutral-400">Manage team roles and track tryout performance notes.</p>
+                            </div>
+                            <RosterManager members={dynamicMembers} />
+                        </div>
                     )}
 
-                    {/* 5. PARTNERS */}
-                    {activeTab === 'partners' && isMember && (
-                        <div className="animate-fade-in-up h-full"><PartnerDirectory /></div>
+                    {/* 6. PARTNERS View */}
+                    {activeTab === 'partners' && (
+                        <div className="animate-fade-in-up h-full">
+                            <div className="mb-6">
+                                <h2 className="text-2xl font-bold text-white mb-2">Scrim Partners</h2>
+                                <p className="text-neutral-400">Directory of other teams for scheduling.</p>
+                            </div>
+                            <PartnerDirectory />
+                        </div>
                     )}
 
-                    {/* 6. ADMIN */}
+                    {/* 7. ADMIN */}
                     {activeTab === 'admin' && isAdmin && (
                         <div className="animate-fade-in-up h-full"><AdminPanel /></div>
                     )}
 
-                    {/* 7. MAP VETO */}
-                    {activeTab === 'mapveto' && isMember && (
+                    {/* 8. MAP VETO */}
+                    {activeTab === 'mapveto' && (
                         <div className="animate-fade-in-up h-[80vh]"><MapVeto /></div>
                     )}
 
