@@ -1,9 +1,9 @@
 ﻿/*
-Syrix Team Availability - FINAL STABLE BUILD
-- FIXED: ReferenceError for LoginScreen (Component order and scope corrected).
-- FIXED: "Object as child" error (State initialization hardened).
-- FEATURE: All premium features (Comps, Veto, Match History, etc.) included.
-- DESIGN: Premium Syrix Red/Black Theme.
+Syrix Team Availability - FINAL ULTIMATE BUILD (MOBILE & DESIGN POLISH)
+- DESIGN: "Team Comps" completely restyled with "Agent Card" aesthetic.
+- MOBILE: Fully responsive grids, touch-friendly buttons, and safe-area scrolling.
+- THEME: Unified "Syrix Red" borders, shadows, and glassmorphism across all modules.
+- FIXED: All previous logic maintained.
 */
 
 import React, { useState, useEffect, useMemo } from 'react';
@@ -89,13 +89,13 @@ const convertFromGMT = (day, time, timezone) => {
 function Modal({ isOpen, onClose, onConfirm, title, children }) {
     if (!isOpen) return null;
     return (
-        <div className="fixed inset-0 bg-black/90 z-[100] flex justify-center items-center backdrop-blur-md p-4">
-            <div className="bg-neutral-900 rounded-2xl shadow-2xl shadow-red-900/20 p-6 w-full max-w-md border border-red-900/50 animate-fade-in-up">
-                <h3 className="text-2xl font-black text-white mb-4 border-b pb-2 border-red-900/50 uppercase tracking-wider">{title}</h3>
-                <div className="text-neutral-300 mb-6">{children}</div>
+        <div className="fixed inset-0 bg-black/95 z-[100] flex justify-center items-center backdrop-blur-lg p-4 overflow-y-auto">
+            <div className="bg-neutral-900 rounded-2xl shadow-2xl shadow-red-900/40 p-6 w-full max-w-md border border-red-900/60 animate-fade-in-up relative">
+                <h3 className="text-2xl font-black text-white mb-4 border-b pb-2 border-red-900/50 uppercase tracking-wider italic">{title}</h3>
+                <div className="text-neutral-300 mb-8">{children}</div>
                 <div className="flex justify-end gap-4">
-                    <button onClick={onClose} className="bg-neutral-800 hover:bg-neutral-700 text-neutral-300 font-bold px-5 py-2 rounded-xl transition-all border border-neutral-700">Cancel</button>
-                    <button onClick={onConfirm} className="bg-red-600 hover:bg-red-500 text-white font-bold px-5 py-2 rounded-xl shadow-lg shadow-red-900/50 transition-all">Confirm</button>
+                    <button onClick={onClose} className="bg-black hover:bg-neutral-800 text-neutral-400 font-bold px-6 py-3 rounded-xl transition-all border border-neutral-800 uppercase tracking-widest text-xs">Cancel</button>
+                    <button onClick={onConfirm} className="bg-gradient-to-r from-red-700 to-red-600 hover:from-red-600 hover:to-red-500 text-white font-bold px-6 py-3 rounded-xl shadow-lg shadow-red-900/50 transition-all uppercase tracking-widest text-xs">Confirm</button>
                 </div>
             </div>
         </div>
@@ -130,31 +130,31 @@ function LeaveLogger({ members }) {
     const deleteLeave = async (id) => await deleteDoc(doc(db, 'leaves', id));
 
     return (
-        <div className="bg-neutral-900 p-6 rounded-3xl border border-neutral-800 shadow-xl backdrop-blur-sm">
-            <h3 className="text-lg font-bold text-white mb-4 border-b border-neutral-800 pb-2 uppercase tracking-wider flex items-center gap-2">
+        <div className="bg-neutral-900/60 p-6 rounded-3xl border border-red-900/20 shadow-xl backdrop-blur-md">
+            <h3 className="text-lg font-black text-white mb-4 border-b border-red-900/30 pb-2 uppercase tracking-widest flex items-center gap-2">
                 <span className="text-xl">🏖️</span> Absence Log
             </h3>
 
             <div className="space-y-3 mb-4">
                 <div className="grid grid-cols-2 gap-2">
-                    <input type="date" value={newLeave.start} onChange={e => setNewLeave({ ...newLeave, start: e.target.value })} className="w-full bg-black border border-neutral-800 rounded-lg p-2 text-white text-xs outline-none focus:border-red-600 [color-scheme:dark]" />
-                    <input type="date" value={newLeave.end} onChange={e => setNewLeave({ ...newLeave, end: e.target.value })} className="w-full bg-black border border-neutral-800 rounded-lg p-2 text-white text-xs outline-none focus:border-red-600 [color-scheme:dark]" />
+                    <input type="date" value={newLeave.start} onChange={e => setNewLeave({ ...newLeave, start: e.target.value })} className="w-full bg-black/50 border border-neutral-800 rounded-lg p-3 text-white text-xs outline-none focus:border-red-600 [color-scheme:dark]" />
+                    <input type="date" value={newLeave.end} onChange={e => setNewLeave({ ...newLeave, end: e.target.value })} className="w-full bg-black/50 border border-neutral-800 rounded-lg p-3 text-white text-xs outline-none focus:border-red-600 [color-scheme:dark]" />
                 </div>
-                <input type="text" placeholder="Reason (e.g. Vacation)" value={newLeave.reason} onChange={e => setNewLeave({ ...newLeave, reason: e.target.value })} className="w-full bg-black border border-neutral-800 rounded-lg p-2 text-white text-xs outline-none focus:border-red-600" />
-                <button onClick={addLeave} className="w-full bg-neutral-800 hover:bg-neutral-700 text-neutral-300 text-xs font-bold py-2 rounded-lg border border-neutral-700 transition-all">Log Absence</button>
+                <input type="text" placeholder="Reason (e.g. Vacation)" value={newLeave.reason} onChange={e => setNewLeave({ ...newLeave, reason: e.target.value })} className="w-full bg-black/50 border border-neutral-800 rounded-lg p-3 text-white text-xs outline-none focus:border-red-600 placeholder-neutral-600" />
+                <button onClick={addLeave} className="w-full bg-neutral-800 hover:bg-neutral-700 text-neutral-300 text-xs font-bold py-3 rounded-lg border border-neutral-700 transition-all uppercase tracking-wider">Log Absence</button>
             </div>
 
             <div className="space-y-2 max-h-40 overflow-y-auto pr-2 custom-scrollbar">
-                {leaves.length === 0 && <p className="text-neutral-600 italic text-xs">No upcoming absences.</p>}
+                {leaves.length === 0 && <p className="text-neutral-600 italic text-xs text-center py-2">No upcoming absences.</p>}
                 {leaves.map(l => (
-                    <div key={l.id} className="p-2 bg-black/40 border border-neutral-800 rounded-lg flex justify-between items-center text-xs hover:border-red-900/30 transition-colors">
+                    <div key={l.id} className="p-3 bg-black/40 border border-neutral-800 rounded-lg flex justify-between items-center text-xs hover:border-red-900/30 transition-colors group">
                         <div>
-                            <span className="font-bold text-red-400 mr-2">{l.user}</span>
+                            <span className="font-bold text-red-500 mr-2">{l.user}</span>
                             <span className="text-neutral-400">{l.start} - {l.end}</span>
-                            <div className="text-neutral-500 italic">{l.reason}</div>
+                            <div className="text-neutral-500 italic mt-0.5">{l.reason}</div>
                         </div>
                         {(l.user === currentUser?.displayName || ADMINS.includes(currentUser?.displayName)) && (
-                            <button onClick={() => deleteLeave(l.id)} className="text-neutral-600 hover:text-red-500 font-bold px-2">×</button>
+                            <button onClick={() => deleteLeave(l.id)} className="text-neutral-600 hover:text-red-500 font-bold px-2 opacity-0 group-hover:opacity-100 transition-opacity">✕</button>
                         )}
                     </div>
                 ))}
@@ -186,10 +186,18 @@ function NextMatchCountdown({ events }) {
     }, [nextEvent]);
     if (!nextEvent) return null;
     return (
-        <div className="bg-gradient-to-r from-red-900/80 to-black p-4 rounded-2xl border border-red-600/30 shadow-2xl mb-8 flex flex-col md:flex-row justify-between items-center gap-4 relative overflow-hidden group">
-            <div className="absolute top-0 right-0 w-64 h-64 bg-red-600/10 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2"></div>
-            <div className="z-10"><div className="text-xs text-red-400 font-bold uppercase tracking-widest mb-1">Next Match vs {nextEvent.opponent}</div><div className="text-2xl font-black text-white">{nextEvent.date} @ {nextEvent.time} <span className="text-neutral-500 text-sm">({nextEvent.type})</span></div></div>
-            <div className="z-10 flex items-center gap-4"><div className="text-4xl font-black text-white font-mono tracking-tight tabular-nums bg-black/30 px-4 py-2 rounded-xl border border-red-900/50 shadow-inner">{timeLeft}</div></div>
+        <div className="bg-gradient-to-r from-red-950 via-black to-black p-6 rounded-3xl border border-red-600/40 shadow-2xl shadow-red-900/20 mb-8 flex flex-col md:flex-row justify-between items-center gap-6 relative overflow-hidden group">
+            <div className="absolute top-0 right-0 w-96 h-96 bg-red-600/10 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2 pointer-events-none"></div>
+            <div className="z-10 text-center md:text-left">
+                <div className="text-xs text-red-500 font-black uppercase tracking-[0.2em] mb-2">Next Match vs {nextEvent.opponent}</div>
+                <div className="text-3xl md:text-4xl font-black text-white italic tracking-tighter">{nextEvent.date} @ {nextEvent.time}</div>
+                <div className="text-neutral-500 text-sm font-mono mt-1 uppercase tracking-widest">Type: {nextEvent.type}</div>
+            </div>
+            <div className="z-10">
+                <div className="text-4xl md:text-6xl font-black text-transparent bg-clip-text bg-gradient-to-b from-white to-neutral-400 font-mono tracking-tighter tabular-nums drop-shadow-sm">
+                    {timeLeft}
+                </div>
+            </div>
         </div>
     );
 }
@@ -203,11 +211,60 @@ function TeamComps({ members }) {
     const deleteComp = async (id) => await deleteDoc(doc(db, 'comps', id));
     const currentMapComps = comps.filter(c => c.map === selectedMap);
     return (
-        <div className="bg-neutral-900 p-6 rounded-3xl border border-neutral-800 shadow-2xl h-full">
-            <h3 className="text-2xl font-black text-white mb-6 flex items-center gap-2"><span className="text-red-600">TEAM</span> COMPS</h3>
-            <div className="flex overflow-x-auto gap-2 pb-4 mb-6 scrollbar-hide">{MAPS.map(m => (<button key={m} onClick={() => setSelectedMap(m)} className={`px-4 py-2 rounded-lg text-xs font-bold uppercase tracking-wider whitespace-nowrap transition-all ${selectedMap === m ? 'bg-red-600 text-white shadow-lg' : 'bg-black border border-neutral-800 text-neutral-500 hover:text-white'}`}>{m}</button>))}</div>
-            <div className="bg-black/40 p-4 rounded-xl border border-neutral-800 mb-6"><h4 className="text-xs font-bold text-neutral-500 uppercase mb-3">New {selectedMap} Composition</h4><div className="grid grid-cols-5 gap-2 mb-3">{Array.from({ length: 5 }).map((_, i) => (<div key={i} className="space-y-2"><select value={newComp.agents[i]} onChange={e => { const a = [...newComp.agents]; a[i] = e.target.value; setNewComp({ ...newComp, agents: a }); }} className="w-full bg-black border border-neutral-700 rounded p-1 text-[10px] text-white outline-none focus:border-red-600"><option value="">Agent</option>{AGENTS.map(ag => <option key={ag}>{ag}</option>)}</select><select value={newComp.players[i]} onChange={e => { const p = [...newComp.players]; p[i] = e.target.value; setNewComp({ ...newComp, players: p }); }} className="w-full bg-black border border-neutral-700 rounded p-1 text-[10px] text-neutral-400 outline-none focus:border-red-600"><option value="">Player</option>{members.map(m => <option key={m}>{m}</option>)}</select></div>))}</div><button onClick={saveComp} className="w-full bg-white text-black font-bold py-2 rounded hover:bg-gray-200 text-xs uppercase tracking-wider">Save Composition</button></div>
-            <div className="space-y-4">{currentMapComps.map(comp => (<div key={comp.id} className="p-4 bg-neutral-800/50 rounded-xl border border-neutral-700 relative group"><button onClick={() => deleteComp(comp.id)} className="absolute top-2 right-2 text-neutral-600 hover:text-red-500">×</button><div className="grid grid-cols-5 gap-2">{comp.agents.map((agent, i) => (<div key={i} className="text-center"><div className="text-sm font-bold text-red-400">{agent}</div><div className="text-[10px] text-neutral-500">{comp.players[i] || '-'}</div></div>))}</div></div>))}{currentMapComps.length === 0 && <p className="text-neutral-600 italic text-center text-sm">No comps saved for {selectedMap}.</p>}</div>
+        <div className="bg-neutral-900 p-6 rounded-3xl border border-neutral-800 shadow-2xl h-full flex flex-col">
+            <h3 className="text-3xl font-black text-white mb-6 flex items-center gap-3 italic">
+                <span className="text-red-600 text-4xl">/</span> TACTICAL COMPS
+            </h3>
+
+            {/* Map Selector */}
+            <div className="flex overflow-x-auto gap-3 pb-4 mb-8 scrollbar-hide snap-x">
+                {MAPS.map(m => (
+                    <button
+                        key={m}
+                        onClick={() => setSelectedMap(m)}
+                        className={`
+                            px-6 py-3 rounded-xl text-xs font-black uppercase tracking-widest whitespace-nowrap transition-all snap-start
+                            ${selectedMap === m ? 'bg-red-600 text-white shadow-lg shadow-red-600/20 scale-105' : 'bg-black border border-neutral-800 text-neutral-500 hover:text-white hover:border-neutral-600'}
+                        `}
+                    >
+                        {m}
+                    </button>
+                ))}
+            </div>
+
+            {/* Builder Card */}
+            <div className="bg-black/60 p-6 rounded-2xl border border-red-900/30 mb-8 relative overflow-hidden">
+                <div className="absolute top-0 right-0 w-20 h-20 bg-red-600/5 rounded-full blur-2xl"></div>
+                <h4 className="text-xs font-bold text-red-500 uppercase mb-4 tracking-widest">Design New {selectedMap} Composition</h4>
+                <div className="grid grid-cols-1 sm:grid-cols-5 gap-3 mb-6">
+                    {Array.from({ length: 5 }).map((_, i) => (
+                        <div key={i} className="space-y-2 bg-neutral-900/50 p-2 rounded-lg border border-neutral-800">
+                            <select value={newComp.agents[i]} onChange={e => { const a = [...newComp.agents]; a[i] = e.target.value; setNewComp({ ...newComp, agents: a }); }} className="w-full bg-transparent text-xs font-bold text-white outline-none focus:text-red-500 uppercase"><option value="">Select Agent</option>{AGENTS.map(ag => <option key={ag}>{ag}</option>)}</select>
+                            <div className="h-px w-full bg-neutral-800"></div>
+                            <select value={newComp.players[i]} onChange={e => { const p = [...newComp.players]; p[i] = e.target.value; setNewComp({ ...newComp, players: p }); }} className="w-full bg-transparent text-[10px] text-neutral-400 outline-none focus:text-neutral-200 uppercase"><option value="">Assign Player</option>{members.map(m => <option key={m}>{m}</option>)}</select>
+                        </div>
+                    ))}
+                </div>
+                <button onClick={saveComp} className="w-full bg-white hover:bg-neutral-200 text-black font-black py-3 rounded-xl text-xs uppercase tracking-[0.2em] transition-all shadow-lg">Save Composition</button>
+            </div>
+
+            {/* Display Area */}
+            <div className="space-y-4 overflow-y-auto flex-1 pr-2 custom-scrollbar">
+                {currentMapComps.map(comp => (
+                    <div key={comp.id} className="p-5 bg-neutral-800/40 rounded-2xl border border-neutral-700/50 relative group hover:border-red-600/30 transition-all">
+                        <button onClick={() => deleteComp(comp.id)} className="absolute top-3 right-3 text-neutral-600 hover:text-red-500 transition-colors font-bold p-1">✕</button>
+                        <div className="grid grid-cols-5 gap-2 divide-x divide-neutral-800">
+                            {comp.agents.map((agent, i) => (
+                                <div key={i} className="text-center px-1">
+                                    <div className="text-sm font-black text-white uppercase tracking-tight mb-1">{agent}</div>
+                                    <div className="text-[10px] text-neutral-500 font-mono uppercase tracking-widest">{comp.players[i] || 'FLEX'}</div>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                ))}
+                {currentMapComps.length === 0 && <p className="text-neutral-600 italic text-center text-sm py-8">No strategies defined for {selectedMap} yet.</p>}
+            </div>
         </div>
     );
 }
@@ -332,10 +389,10 @@ function PerformanceWidget({ events }) {
     }, [events]);
 
     return (
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
             <div className="bg-neutral-900/80 p-4 rounded-2xl border border-neutral-800 shadow-lg flex flex-col justify-between"><div className="text-xs font-bold text-neutral-500 uppercase tracking-widest">Win Rate</div><div className="text-3xl font-black text-white mt-1">{stats.overallWinRate}%</div><div className="w-full bg-neutral-800 h-1.5 rounded-full mt-3 overflow-hidden"><div className="bg-red-600 h-full rounded-full" style={{ width: `${stats.overallWinRate}%` }}></div></div></div>
             <div className="bg-neutral-900/80 p-4 rounded-2xl border border-neutral-800 shadow-lg flex flex-col justify-between"><div className="text-xs font-bold text-neutral-500 uppercase tracking-widest">Record</div><div className="flex items-baseline gap-1 mt-1"><span className="text-3xl font-black text-green-500">{stats.wins}</span><span className="text-xl font-bold text-neutral-600">-</span><span className="text-3xl font-black text-red-500">{stats.losses}</span></div><div className="text-[10px] text-neutral-400 font-mono uppercase mt-2">W - L</div></div>
-            <div className="bg-neutral-900/80 p-4 rounded-2xl border border-neutral-800 shadow-lg flex flex-col justify-between col-span-2 md:col-span-1"><div className="text-xs font-bold text-neutral-500 uppercase tracking-widest">Best Map</div><div className="text-2xl font-black text-white mt-1 truncate">{stats.bestMap}</div>{stats.bestMap !== 'N/A' && <div className="text-xs text-green-500 font-bold mt-2">{Math.round((stats.bestMapStats.wins / stats.bestMapStats.played) * 100)}% Win Rate <span className="text-neutral-600 ml-1">({stats.bestMapStats.wins}/{stats.bestMapStats.played})</span></div>}</div>
+            <div className="bg-neutral-900/80 p-4 rounded-2xl border border-neutral-800 shadow-lg flex flex-col justify-between md:col-span-2 lg:col-span-1"><div className="text-xs font-bold text-neutral-500 uppercase tracking-widest">Best Map</div><div className="text-2xl font-black text-white mt-1 truncate">{stats.bestMap}</div>{stats.bestMap !== 'N/A' && <div className="text-xs text-green-500 font-bold mt-2">{Math.round((stats.bestMapStats.wins / stats.bestMapStats.played) * 100)}% Win Rate <span className="text-neutral-600 ml-1">({stats.bestMapStats.wins}/{stats.bestMapStats.played})</span></div>}</div>
             <div className="bg-neutral-900/80 p-4 rounded-2xl border border-neutral-800 shadow-lg flex flex-col justify-between hidden lg:flex"><div className="text-xs font-bold text-neutral-500 uppercase tracking-widest">Matches Logged</div><div className="text-3xl font-black text-white mt-1">{stats.wins + stats.losses + stats.draws}</div><div className="text-[10px] text-neutral-500 mt-2">Total Scrims/Games</div></div>
         </div>
     );
