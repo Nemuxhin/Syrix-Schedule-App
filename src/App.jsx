@@ -1,8 +1,8 @@
 ﻿/*
-Syrix Team Availability - v3.2 (AGENT SELECT FIX)
-- UX: Replaced native Agent <select> with a custom Visual Grid Menu.
-- VISUAL: High-contrast agent picker with Red/Black theme.
-- FIX: Player dropdown options now force-styled to black/white for readability.
+Syrix Team Availability - v3.3 (CONTENT UPDATE)
+- MAP: Added "Corrode" to the active map pool.
+- AGENT: Added "Waylay" (Duelist) to the agent roster.
+- THEME: Maintained v3.0 Red & Black "Syrix" aesthetic.
 */
 
 import React, { useState, useEffect, useMemo } from 'react';
@@ -31,15 +31,19 @@ const ADMINS = ["Nemuxhin", "Tawz", "tawz", "nemuxhin"];
 
 const DAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
 const SHORT_DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
-const MAPS = ["Ascent", "Bind", "Breeze", "Fracture", "Haven", "Icebox", "Lotus", "Pearl", "Split", "Sunset", "Abyss"];
+
+// UPDATED MAP POOL: Added 'Corrode'
+const MAPS = ["Ascent", "Bind", "Breeze", "Fracture", "Haven", "Icebox", "Lotus", "Pearl", "Split", "Sunset", "Abyss", "Corrode"];
+
 const ROLES = ["Flex", "Duelist", "Initiator", "Controller", "Sentinel"];
 const RANKS = ["Unranked", "Iron", "Bronze", "Silver", "Gold", "Platinum", "Diamond", "Ascendant", "Immortal", "Radiant"];
 
+// UPDATED AGENT LIST: Added 'Waylay' (Duelist)
 const AGENTS = [
-    "Jett", "Raze", "Reyna", "Yoru", "Phoenix", "Neon", "Iso", // Duelists
-    "Omen", "Astra", "Brimstone", "Viper", "Harbor", "Clove",  // Controllers
-    "Sova", "Fade", "Skye", "Breach", "KAY/O", "Gekko",        // Initiators
-    "Killjoy", "Cypher", "Sage", "Chamber", "Deadlock", "Vyse", "Veto" // Sentinels
+    "Jett", "Raze", "Reyna", "Yoru", "Phoenix", "Neon", "Iso", "Waylay", // Duelists
+    "Omen", "Astra", "Brimstone", "Viper", "Harbor", "Clove",            // Controllers
+    "Sova", "Fade", "Skye", "Breach", "KAY/O", "Gekko",                  // Initiators
+    "Killjoy", "Cypher", "Sage", "Chamber", "Deadlock", "Vyse", "Veto"   // Sentinels
 ];
 
 const timezones = ["UTC", "GMT", "Europe/London", "Europe/Paris", "Europe/Berlin", "America/New_York", "America/Chicago", "America/Denver", "America/Los_Angeles", "Asia/Tokyo", "Australia/Sydney"];
@@ -236,7 +240,7 @@ function TeamComps({ members }) {
     const [comps, setComps] = useState([]);
     const [selectedMap, setSelectedMap] = useState(MAPS[0]);
     const [newComp, setNewComp] = useState({ agents: Array(5).fill(''), players: Array(5).fill('') });
-    const [activeDropdown, setActiveDropdown] = useState(null); // Track which card's menu is open
+    const [activeDropdown, setActiveDropdown] = useState(null);
 
     useEffect(() => {
         const unsub = onSnapshot(collection(db, 'comps'), (snap) => {
@@ -256,7 +260,6 @@ function TeamComps({ members }) {
     const deleteComp = async (id) => await deleteDoc(doc(db, 'comps', id));
     const currentMapComps = comps.filter(c => c.map === selectedMap);
 
-    // --- CUSTOM AGENT CARD COMPONENT ---
     const AgentCard = ({ index }) => {
         const isOpen = activeDropdown === index;
 
@@ -270,7 +273,6 @@ function TeamComps({ members }) {
         return (
             <div className="relative group h-64 bg-neutral-900/80 border border-white/10 rounded-2xl overflow-hidden transition-all hover:border-red-600 hover:shadow-[0_0_30px_rgba(220,38,38,0.3)] flex flex-col">
 
-                {/* --- AGENT SELECTION AREA (CLICK TO OPEN MENU) --- */}
                 <div
                     onClick={() => setActiveDropdown(isOpen ? null : index)}
                     className="flex-1 relative flex flex-col justify-center items-center p-4 z-10 border-b border-white/5 cursor-pointer group-hover:bg-white/5 transition-colors"
@@ -292,7 +294,6 @@ function TeamComps({ members }) {
                     )}
                 </div>
 
-                {/* --- CUSTOM DROPDOWN MENU (OVERLAY) --- */}
                 {isOpen && (
                     <div className="absolute inset-0 bg-neutral-950 z-50 flex flex-col animate-fade-in">
                         <div className="flex justify-between items-center p-3 border-b border-white/10 bg-neutral-900">
@@ -313,7 +314,6 @@ function TeamComps({ members }) {
                     </div>
                 )}
 
-                {/* --- PLAYER SELECTOR (BOTTOM) --- */}
                 <div className="h-16 relative bg-black flex items-center justify-center z-20 border-t border-white/5">
                     <select
                         value={newComp.players[index]}
@@ -346,7 +346,6 @@ function TeamComps({ members }) {
                     <div className="flex items-center gap-3"><span className="flex h-3 w-3 relative"><span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-500 opacity-75"></span><span className="relative inline-flex rounded-full h-3 w-3 bg-red-600"></span></span><h4 className="text-sm font-bold text-neutral-300 uppercase tracking-widest">Design {selectedMap} Strategy</h4></div>
                     <ButtonPrimary onClick={saveComp} className="text-xs py-2">Save Loadout</ButtonPrimary>
                 </div>
-                {/* Close dropdowns if clicking background */}
                 <div className="grid grid-cols-2 md:grid-cols-5 gap-4" onClick={() => setActiveDropdown(null)}>
                     {Array.from({ length: 5 }).map((_, i) => (
                         <div key={i} onClick={e => e.stopPropagation()}><AgentCard index={i} /></div>
