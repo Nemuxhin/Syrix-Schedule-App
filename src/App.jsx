@@ -1,9 +1,9 @@
 ﻿/*
-Syrix Team Availability - FINAL ULTIMATE BUILD (MOBILE & DESIGN POLISH)
-- DESIGN: "Team Comps" completely restyled with "Agent Card" aesthetic.
-- MOBILE: Fully responsive grids, touch-friendly buttons, and safe-area scrolling.
-- THEME: Unified "Syrix Red" borders, shadows, and glassmorphism across all modules.
-- FIXED: All previous logic maintained.
+Syrix Team Availability - FINAL VISUAL OVERHAUL
+- DESIGN: "Team Comps" upgraded to "Agent Card" aesthetic with neon red accents.
+- MOBILE: Optimized grids for mobile responsiveness.
+- FIXED: Ensured component order to prevent ReferenceErrors.
+- THEME: Syrix Red/Black Premium Glassmorphism.
 */
 
 import React, { useState, useEffect, useMemo } from 'react';
@@ -97,6 +97,17 @@ function Modal({ isOpen, onClose, onConfirm, title, children }) {
                     <button onClick={onClose} className="bg-black hover:bg-neutral-800 text-neutral-400 font-bold px-6 py-3 rounded-xl transition-all border border-neutral-800 uppercase tracking-widest text-xs">Cancel</button>
                     <button onClick={onConfirm} className="bg-gradient-to-r from-red-700 to-red-600 hover:from-red-600 hover:to-red-500 text-white font-bold px-6 py-3 rounded-xl shadow-lg shadow-red-900/50 transition-all uppercase tracking-widest text-xs">Confirm</button>
                 </div>
+            </div>
+        </div>
+    );
+}
+
+function LoginScreen({ signIn }) {
+    return (
+        <div className="fixed inset-0 h-full w-full bg-black flex items-center justify-center p-4 bg-[radial-gradient(ellipse_at_center,_var(--tw-gradient-stops))] from-red-900/20 via-black to-black">
+            <div className="text-center space-y-8 max-w-lg w-full p-10 rounded-3xl border border-red-900/30 bg-neutral-900/50 backdrop-blur-lg shadow-2xl shadow-red-900/20">
+                <div className="space-y-2"><h1 className="text-6xl font-black text-white tracking-tighter drop-shadow-lg">SYRIX</h1><div className="h-1 w-32 bg-red-600 mx-auto rounded-full"></div><p className="text-neutral-400 text-lg font-medium uppercase tracking-widest">Team Hub</p></div>
+                <button onClick={signIn} className="w-full bg-[#5865F2] hover:bg-[#4752C4] text-white py-4 rounded-xl font-bold shadow-lg transition-transform hover:scale-105 flex items-center justify-center gap-3"><span>Login with Discord</span></button>
             </div>
         </div>
     );
@@ -202,29 +213,50 @@ function NextMatchCountdown({ events }) {
     );
 }
 
+// --- REDESIGNED: Team Comps (Agent Card Style) ---
 function TeamComps({ members }) {
     const [comps, setComps] = useState([]);
     const [selectedMap, setSelectedMap] = useState(MAPS[0]);
     const [newComp, setNewComp] = useState({ agents: Array(5).fill(''), players: Array(5).fill('') });
-    useEffect(() => { const unsub = onSnapshot(collection(db, 'comps'), (snap) => { const c = []; snap.forEach(doc => c.push({ id: doc.id, ...doc.data() })); setComps(c); }); return () => unsub(); }, []);
-    const saveComp = async () => { if (newComp.agents.some(a => !a)) return; await addDoc(collection(db, 'comps'), { map: selectedMap, ...newComp }); setNewComp({ agents: Array(5).fill(''), players: Array(5).fill('') }); };
+
+    useEffect(() => {
+        const unsub = onSnapshot(collection(db, 'comps'), (snap) => {
+            const c = [];
+            snap.forEach(doc => c.push({ id: doc.id, ...doc.data() }));
+            setComps(c);
+        });
+        return () => unsub();
+    }, []);
+
+    const saveComp = async () => {
+        if (newComp.agents.some(a => !a)) return;
+        await addDoc(collection(db, 'comps'), { map: selectedMap, ...newComp });
+        setNewComp({ agents: Array(5).fill(''), players: Array(5).fill('') });
+    };
+
     const deleteComp = async (id) => await deleteDoc(doc(db, 'comps', id));
     const currentMapComps = comps.filter(c => c.map === selectedMap);
+
     return (
-        <div className="bg-neutral-900 p-6 rounded-3xl border border-neutral-800 shadow-2xl h-full flex flex-col">
-            <h3 className="text-3xl font-black text-white mb-6 flex items-center gap-3 italic">
+        <div className="bg-neutral-900 p-8 rounded-3xl border border-neutral-800 shadow-2xl h-full flex flex-col relative overflow-hidden">
+            {/* Background Decor */}
+            <div className="absolute top-0 right-0 w-96 h-96 bg-red-600/5 rounded-full blur-3xl pointer-events-none -translate-y-1/2 translate-x-1/2"></div>
+
+            <h3 className="text-3xl font-black text-white mb-8 flex items-center gap-3 italic relative z-10">
                 <span className="text-red-600 text-4xl">/</span> TACTICAL COMPS
             </h3>
 
             {/* Map Selector */}
-            <div className="flex overflow-x-auto gap-3 pb-4 mb-8 scrollbar-hide snap-x">
+            <div className="flex overflow-x-auto gap-4 pb-4 mb-8 scrollbar-hide snap-x relative z-10">
                 {MAPS.map(m => (
                     <button
                         key={m}
                         onClick={() => setSelectedMap(m)}
                         className={`
-                            px-6 py-3 rounded-xl text-xs font-black uppercase tracking-widest whitespace-nowrap transition-all snap-start
-                            ${selectedMap === m ? 'bg-red-600 text-white shadow-lg shadow-red-600/20 scale-105' : 'bg-black border border-neutral-800 text-neutral-500 hover:text-white hover:border-neutral-600'}
+                            px-8 py-4 rounded-2xl text-sm font-black uppercase tracking-widest whitespace-nowrap transition-all duration-300 snap-start border-2
+                            ${selectedMap === m
+                                ? 'bg-red-600 border-red-500 text-white shadow-[0_0_20px_rgba(220,38,38,0.5)] scale-105'
+                                : 'bg-neutral-900/80 border-neutral-800 text-neutral-500 hover:text-white hover:border-neutral-600 hover:bg-neutral-800'}
                         `}
                     >
                         {m}
@@ -232,38 +264,74 @@ function TeamComps({ members }) {
                 ))}
             </div>
 
-            {/* Builder Card */}
-            <div className="bg-black/60 p-6 rounded-2xl border border-red-900/30 mb-8 relative overflow-hidden">
-                <div className="absolute top-0 right-0 w-20 h-20 bg-red-600/5 rounded-full blur-2xl"></div>
-                <h4 className="text-xs font-bold text-red-500 uppercase mb-4 tracking-widest">Design New {selectedMap} Composition</h4>
-                <div className="grid grid-cols-1 sm:grid-cols-5 gap-3 mb-6">
+            {/* Builder Section */}
+            <div className="bg-gradient-to-b from-neutral-800/50 to-black/50 p-6 rounded-3xl border border-red-900/30 mb-10 relative z-10 backdrop-blur-sm">
+                <div className="flex flex-col md:flex-row justify-between items-center mb-6 gap-4">
+                    <h4 className="text-sm font-bold text-red-500 uppercase tracking-[0.2em]">Active Lineup // {selectedMap}</h4>
+                    <button onClick={saveComp} className="bg-white hover:bg-neutral-200 text-black font-black py-2 px-6 rounded-lg text-xs uppercase tracking-widest transition-all shadow-lg hover:shadow-white/20">
+                        Save Strategy
+                    </button>
+                </div>
+
+                {/* Responsive Grid: 1 col mobile, 3 cols tablet, 5 cols desktop */}
+                <div className="grid grid-cols-1 sm:grid-cols-3 md:grid-cols-5 gap-4">
                     {Array.from({ length: 5 }).map((_, i) => (
-                        <div key={i} className="space-y-2 bg-neutral-900/50 p-2 rounded-lg border border-neutral-800">
-                            <select value={newComp.agents[i]} onChange={e => { const a = [...newComp.agents]; a[i] = e.target.value; setNewComp({ ...newComp, agents: a }); }} className="w-full bg-transparent text-xs font-bold text-white outline-none focus:text-red-500 uppercase"><option value="">Select Agent</option>{AGENTS.map(ag => <option key={ag}>{ag}</option>)}</select>
-                            <div className="h-px w-full bg-neutral-800"></div>
-                            <select value={newComp.players[i]} onChange={e => { const p = [...newComp.players]; p[i] = e.target.value; setNewComp({ ...newComp, players: p }); }} className="w-full bg-transparent text-[10px] text-neutral-400 outline-none focus:text-neutral-200 uppercase"><option value="">Assign Player</option>{members.map(m => <option key={m}>{m}</option>)}</select>
+                        <div key={i} className="aspect-[3/4] bg-neutral-900 border border-neutral-800 rounded-xl p-3 flex flex-col justify-between relative group hover:border-red-600/50 transition-all duration-300 hover:shadow-[0_0_15px_rgba(220,38,38,0.15)]">
+                            <div className="text-[10px] font-mono text-neutral-600 mb-2 flex justify-between">
+                                <span>0{i + 1}</span>
+                                <span>ROLE</span>
+                            </div>
+
+                            <div className="flex-1 flex flex-col justify-center gap-4">
+                                <select
+                                    value={newComp.agents[i]}
+                                    onChange={e => { const a = [...newComp.agents]; a[i] = e.target.value; setNewComp({ ...newComp, agents: a }); }}
+                                    className="w-full bg-transparent text-lg font-black text-white outline-none focus:text-red-500 uppercase text-center appearance-none cursor-pointer hover:text-red-400 transition-colors"
+                                >
+                                    <option value="" className="bg-neutral-900 text-neutral-500">SELECT AGENT</option>
+                                    {AGENTS.map(ag => <option key={ag} value={ag} className="bg-neutral-900">{ag}</option>)}
+                                </select>
+                                {newComp.agents[i] ? (
+                                    <div className="w-full h-1 bg-red-600 rounded-full shadow-[0_0_10px_#dc2626]"></div>
+                                ) : (
+                                    <div className="w-full h-1 bg-neutral-800 rounded-full"></div>
+                                )}
+                                <select
+                                    value={newComp.players[i]}
+                                    onChange={e => { const p = [...newComp.players]; p[i] = e.target.value; setNewComp({ ...newComp, players: p }); }}
+                                    className="w-full bg-transparent text-xs font-bold text-neutral-400 outline-none focus:text-white uppercase text-center appearance-none cursor-pointer"
+                                >
+                                    <option value="" className="bg-neutral-900">UNASSIGNED</option>
+                                    {members.map(m => <option key={m} value={m} className="bg-neutral-900">{m}</option>)}
+                                </select>
+                            </div>
                         </div>
                     ))}
                 </div>
-                <button onClick={saveComp} className="w-full bg-white hover:bg-neutral-200 text-black font-black py-3 rounded-xl text-xs uppercase tracking-[0.2em] transition-all shadow-lg">Save Composition</button>
             </div>
 
-            {/* Display Area */}
-            <div className="space-y-4 overflow-y-auto flex-1 pr-2 custom-scrollbar">
+            {/* Saved Comps List */}
+            <div className="space-y-4 overflow-y-auto flex-1 pr-2 custom-scrollbar relative z-10">
+                {currentMapComps.length === 0 && (
+                    <div className="flex flex-col items-center justify-center h-32 border-2 border-dashed border-neutral-800 rounded-2xl">
+                        <p className="text-neutral-600 italic text-sm font-mono">NO TACTICS DEFINED</p>
+                    </div>
+                )}
                 {currentMapComps.map(comp => (
-                    <div key={comp.id} className="p-5 bg-neutral-800/40 rounded-2xl border border-neutral-700/50 relative group hover:border-red-600/30 transition-all">
-                        <button onClick={() => deleteComp(comp.id)} className="absolute top-3 right-3 text-neutral-600 hover:text-red-500 transition-colors font-bold p-1">✕</button>
-                        <div className="grid grid-cols-5 gap-2 divide-x divide-neutral-800">
+                    <div key={comp.id} className="p-6 bg-neutral-900 border border-neutral-800 rounded-2xl relative group hover:border-red-900/50 transition-all hover:bg-neutral-800/30">
+                        <div className="absolute top-0 left-0 w-1 h-full bg-neutral-800 group-hover:bg-red-600 transition-colors rounded-l-2xl"></div>
+                        <button onClick={() => deleteComp(comp.id)} className="absolute top-4 right-4 text-neutral-600 hover:text-red-500 transition-colors font-bold p-1 opacity-0 group-hover:opacity-100">DELETE</button>
+
+                        <div className="grid grid-cols-2 sm:grid-cols-5 gap-4">
                             {comp.agents.map((agent, i) => (
-                                <div key={i} className="text-center px-1">
-                                    <div className="text-sm font-black text-white uppercase tracking-tight mb-1">{agent}</div>
-                                    <div className="text-[10px] text-neutral-500 font-mono uppercase tracking-widest">{comp.players[i] || 'FLEX'}</div>
+                                <div key={i} className="text-center relative">
+                                    <div className="text-xs font-black text-white uppercase tracking-tight mb-1 group-hover:text-red-400 transition-colors truncate">{agent}</div>
+                                    <div className="text-[9px] md:text-[10px] text-neutral-500 font-mono uppercase tracking-widest border-t border-neutral-800 pt-1 mt-1 truncate">{comp.players[i] || 'FLEX'}</div>
                                 </div>
                             ))}
                         </div>
                     </div>
                 ))}
-                {currentMapComps.length === 0 && <p className="text-neutral-600 italic text-center text-sm py-8">No strategies defined for {selectedMap} yet.</p>}
             </div>
         </div>
     );
@@ -546,77 +614,6 @@ function PartnerDirectory() {
             <h3 className="text-2xl font-black text-white mb-6">SCRIM PARTNERS</h3>
             <div className="space-y-3 mb-6 p-4 bg-black/30 rounded-xl border border-neutral-800"><input type="text" placeholder="Team Name" value={newPartner.name} onChange={e => setNewPartner({ ...newPartner, name: e.target.value })} className="w-full bg-black border border-neutral-800 rounded-lg p-2 text-white text-sm outline-none focus:border-red-600 mb-2" /><div className="flex gap-2"><input type="text" placeholder="Contact (Discord)" value={newPartner.contact} onChange={e => setNewPartner({ ...newPartner, contact: e.target.value })} className="flex-1 bg-black border border-neutral-800 rounded-lg p-2 text-white text-sm outline-none focus:border-red-600" /><input type="text" placeholder="Notes" value={newPartner.notes} onChange={e => setNewPartner({ ...newPartner, notes: e.target.value })} className="flex-1 bg-black border border-neutral-800 rounded-lg p-2 text-white text-sm outline-none focus:border-red-600" /></div><button onClick={addPartner} className="w-full bg-red-700 hover:bg-red-600 text-white font-bold py-2 rounded-lg text-sm mt-2">Add Partner</button></div>
             <div className="space-y-3 max-h-[400px] overflow-y-auto pr-2 custom-scrollbar">{partners.map(p => (<div key={p.id} className="p-4 bg-black/40 border border-neutral-800 rounded-xl"><div className="flex justify-between items-start"><div><div className="font-bold text-lg text-white">{p.name}</div><div className="text-xs text-red-400 font-mono">{p.contact}</div></div><button onClick={() => deleteDoc(doc(db, 'partners', p.id))} className="text-neutral-600 hover:text-red-500">×</button></div>{p.notes && <div className="mt-2 text-sm text-neutral-400 bg-neutral-900/50 p-2 rounded">{p.notes}</div>}</div>))}</div>
-        </div>
-    );
-}
-
-function ScrimScheduler({ onSchedule, userTimezone }) {
-    const [type, setType] = useState('Scrim');
-    const [date, setDate] = useState('');
-    const [time, setTime] = useState('');
-    const [opponent, setOpponent] = useState('');
-    const [status, setStatus] = useState('idle');
-
-    const handleSubmit = async () => {
-        if (!date || !time) return;
-        setStatus('saving');
-        await onSchedule({ type, date, time, opponent, timezone: userTimezone });
-        setStatus('success');
-        setTimeout(() => { setStatus('idle'); setOpponent(''); setDate(''); setTime(''); }, 2000);
-    };
-
-    return (
-        <div className="space-y-4">
-            <div className="grid grid-cols-2 gap-4">
-                <div><label className="block text-xs font-bold text-red-500 mb-1 uppercase tracking-wider">Type</label><select value={type} onChange={e => setType(e.target.value)} className="w-full p-2 bg-black border border-neutral-800 rounded-lg text-white text-sm focus:border-red-600 focus:ring-1 focus:ring-red-600 outline-none transition-colors"><option>Scrim</option><option>Tournament</option><option>Practice</option><option>VOD Review</option></select></div>
-                <div><label className="block text-xs font-bold text-red-500 mb-1 uppercase tracking-wider">Opponent / Notes</label><input type="text" placeholder="e.g. Team Liquid" value={opponent} onChange={e => setOpponent(e.target.value)} className="w-full p-2 bg-black border border-neutral-800 rounded-lg text-white text-sm focus:border-red-600 focus:ring-1 focus:ring-red-600 outline-none transition-colors placeholder-neutral-600" /></div>
-            </div>
-            <div className="grid grid-cols-2 gap-4">
-                <div><label className="block text-xs font-bold text-red-500 mb-1 uppercase tracking-wider">Date</label><input type="date" value={date} onChange={e => setDate(e.target.value)} className="w-full p-2 bg-black border border-neutral-800 rounded-lg text-white text-sm focus:border-red-600 focus:ring-1 focus:ring-red-600 outline-none transition-colors [color-scheme:dark]" /></div>
-                <div><label className="block text-xs font-bold text-red-500 mb-1 uppercase tracking-wider">Time ({userTimezone})</label><input type="time" value={time} onChange={e => setTime(e.target.value)} className="w-full p-2 bg-black border border-neutral-800 rounded-lg text-white text-sm focus:border-red-600 focus:ring-1 focus:ring-red-600 outline-none transition-colors [color-scheme:dark]" /></div>
-            </div>
-            <button onClick={handleSubmit} disabled={status !== 'idle'} className={`w-full py-3 rounded-xl font-black uppercase tracking-widest shadow-lg transition-all transform active:scale-95 ${status === 'success' ? 'bg-green-600 text-white' : 'bg-red-700 hover:bg-red-600 text-white shadow-red-900/30'}`}>{status === 'idle' && '📅 Schedule & Post'}{status === 'saving' && 'Scheduling...'}{status === 'success' && 'Event Scheduled!'}</button>
-        </div>
-    );
-}
-
-function AvailabilityHeatmap({ availabilities, members }) {
-    const bucketSize = 60;
-    const numBuckets = (24 * 60) / bucketSize;
-    const activeMembers = members.filter(member => availabilities[member] && availabilities[member].length > 0);
-    const maxCount = activeMembers.length || 1;
-
-    const heatmapData = useMemo(() => {
-        const data = {};
-        for (const day of DAYS) {
-            const buckets = new Array(numBuckets).fill(0);
-            for (const member of activeMembers) {
-                const slots = availabilities[member]?.filter(s => s.day === day) || [];
-                for (const slot of slots) {
-                    const startBucket = Math.floor(timeToMinutes(slot.start) / bucketSize);
-                    const endBucket = Math.ceil(timeToMinutes(slot.end) / bucketSize);
-                    for (let i = startBucket; i < endBucket && i < numBuckets; i++) buckets[i]++;
-                }
-            }
-            data[day] = buckets;
-        }
-        return data;
-    }, [availabilities, activeMembers, numBuckets]);
-
-    return (
-        <div className="overflow-x-auto rounded-xl border border-neutral-800 shadow-inner bg-black">
-            <div className="min-w-[600px]"><div className="flex border-b border-neutral-800"><div className="w-24 p-2 text-xs font-bold text-red-500 bg-black sticky left-0 border-r border-neutral-800">DAY</div>{Array.from({ length: 24 }).map((_, i) => (<div key={i} className="flex-1 text-[10px] text-center text-neutral-500 border-l border-neutral-800/50 py-1">{i}</div>))}</div>{DAYS.map(day => (<div key={day} className="flex border-b border-neutral-800/50 last:border-0"><div className="w-24 p-2 text-xs font-bold text-neutral-400 bg-black sticky left-0 border-r border-neutral-800">{day.substring(0, 3).toUpperCase()}</div>{heatmapData[day]?.map((count, i) => (<div key={i} className={`flex-1 h-8 border-l border-neutral-800/30 transition-all hover:brightness-125 relative group ${count > 0 ? 'bg-red-600' : ''}`} style={{ opacity: count > 0 ? (count / maxCount) * 0.9 + 0.1 : 1, backgroundColor: count === 0 ? 'transparent' : undefined }}>{count > 0 && <span className="absolute inset-0 flex items-center justify-center text-[10px] font-bold text-white group-hover:scale-125 transition-transform">{count}</span>}</div>))}</div>))}</div>
-        </div>
-    );
-}
-
-function LoginScreen({ signIn }) {
-    return (
-        <div className="fixed inset-0 h-full w-full bg-black flex items-center justify-center p-4 bg-[radial-gradient(ellipse_at_center,_var(--tw-gradient-stops))] from-red-900/20 via-black to-black">
-            <div className="text-center space-y-8 max-w-lg w-full p-10 rounded-3xl border border-red-900/30 bg-neutral-900/50 backdrop-blur-lg shadow-2xl shadow-red-900/20">
-                <div className="space-y-2"><h1 className="text-6xl font-black text-white tracking-tighter drop-shadow-lg">SYRIX</h1><div className="h-1 w-32 bg-red-600 mx-auto rounded-full"></div><p className="text-neutral-400 text-lg font-medium uppercase tracking-widest">Team Hub</p></div>
-                <button onClick={signIn} className="w-full bg-[#5865F2] hover:bg-[#4752C4] text-white py-4 rounded-xl font-bold shadow-lg transition-transform hover:scale-105 flex items-center justify-center gap-3"><span>Login with Discord</span></button>
-            </div>
         </div>
     );
 }
@@ -1033,7 +1030,7 @@ export default function App() {
                     )}
 
                     {/* 8. MAP VETO */}
-                    {activeTab === 'mapveto' && (
+                    {activeTab === 'mapveto' && isMember && (
                         <div className="animate-fade-in-up h-[80vh]"><MapVeto /></div>
                     )}
 
