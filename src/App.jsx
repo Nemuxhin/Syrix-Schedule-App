@@ -1,9 +1,8 @@
 ﻿/*
-Syrix Team Availability - v3.0 (THEME UNIFICATION: RED & BLACK)
-- STYLE: Unified "Syrix" aesthetic. All inputs, cards, and buttons match.
-- UI: Deep black backgrounds, red borders, and glassmorphism throughout.
-- AGENT: Includes "Veto" (Sentinel).
-- LOGIC: All backend functionality preserved.
+Syrix Team Availability - v3.1 (VISIBILITY FIX)
+- UX FIX: Agent Select cards now have high-contrast empty states (dashed box).
+- STYLE: Agent names are brighter and have a red accent underline when selected.
+- THEME: Maintained the v3.0 Red & Black "Syrix" aesthetic.
 */
 
 import React, { useState, useEffect, useMemo } from 'react';
@@ -28,7 +27,7 @@ const auth = getAuth(app);
 
 const discordWebhookUrl = "https://discord.com/api/webhooks/1427426922228351042/lqw36ZxOPEnC3qK45b3vnqZvbkaYhzIxqb-uS1tex6CGOvmLYs19OwKZvslOVABdpHnD";
 
-const ADMINS = ["Nemuxhin", "Tawz", "tawz", "nemuxhin"]; 
+const ADMINS = ["Nemuxhin", "Tawz", "tawz", "nemuxhin"];
 
 const DAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
 const SHORT_DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
@@ -142,14 +141,14 @@ function Modal({ isOpen, onClose, onConfirm, title, children }) {
 function LeaveLogger({ members }) {
     const [leaves, setLeaves] = useState([]);
     const [newLeave, setNewLeave] = useState({ start: '', end: '', reason: '' });
-    const { currentUser } = getAuth(); 
+    const { currentUser } = getAuth();
 
     useEffect(() => {
         const unsub = onSnapshot(collection(db, 'leaves'), (snap) => {
             const l = [];
-            snap.forEach(doc => l.push({id: doc.id, ...doc.data()}));
+            snap.forEach(doc => l.push({ id: doc.id, ...doc.data() }));
             l.sort((a, b) => new Date(a.start) - new Date(b.start));
-            setLeaves(l.filter(leave => new Date(leave.end) >= new Date())); 
+            setLeaves(l.filter(leave => new Date(leave.end) >= new Date()));
         });
         return () => unsub();
     }, []);
@@ -168,12 +167,12 @@ function LeaveLogger({ members }) {
                 <span className="text-xl">🏖️</span> Absence Log
             </h3>
             <div className="space-y-3 mb-4">
-                 <div className="grid grid-cols-2 gap-2">
-                    <Input type="date" value={newLeave.start} onChange={e => setNewLeave({...newLeave, start: e.target.value})} className="[color-scheme:dark]" />
-                    <Input type="date" value={newLeave.end} onChange={e => setNewLeave({...newLeave, end: e.target.value})} className="[color-scheme:dark]" />
-                 </div>
-                 <Input type="text" placeholder="Reason (e.g. Vacation)" value={newLeave.reason} onChange={e => setNewLeave({...newLeave, reason: e.target.value})} />
-                 <ButtonSecondary onClick={addLeave} className="w-full text-xs py-3">Log Absence</ButtonSecondary>
+                <div className="grid grid-cols-2 gap-2">
+                    <Input type="date" value={newLeave.start} onChange={e => setNewLeave({ ...newLeave, start: e.target.value })} className="[color-scheme:dark]" />
+                    <Input type="date" value={newLeave.end} onChange={e => setNewLeave({ ...newLeave, end: e.target.value })} className="[color-scheme:dark]" />
+                </div>
+                <Input type="text" placeholder="Reason (e.g. Vacation)" value={newLeave.reason} onChange={e => setNewLeave({ ...newLeave, reason: e.target.value })} />
+                <ButtonSecondary onClick={addLeave} className="w-full text-xs py-3">Log Absence</ButtonSecondary>
             </div>
             <div className="space-y-2 max-h-40 overflow-y-auto pr-2 custom-scrollbar">
                 {leaves.length === 0 && <p className="text-neutral-600 italic text-xs text-center py-2">No upcoming absences.</p>}
@@ -257,19 +256,50 @@ function TeamComps({ members }) {
     const currentMapComps = comps.filter(c => c.map === selectedMap);
 
     const AgentCard = ({ index }) => (
-        <div className="relative group h-64 bg-gradient-to-b from-neutral-950 to-black border border-white/10 rounded-2xl overflow-hidden transition-all hover:border-red-600 hover:shadow-[0_0_30px_rgba(220,38,38,0.2)] flex flex-col">
-            <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,_var(--tw-gradient-stops))] from-neutral-800/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500"></div>
-            <div className="flex-1 relative flex flex-col justify-center items-center p-4 z-10 border-b border-neutral-800 group-hover:border-red-900/50 transition-colors">
-                <label className="text-[10px] font-black text-neutral-600 uppercase tracking-[0.2em] mb-4 group-hover:text-red-500 transition-colors">Role {index + 1}</label>
-                <div className="relative w-full text-center">
-                    <select value={newComp.agents[index]} onChange={e => { const a = [...newComp.agents]; a[index] = e.target.value; setNewComp({...newComp, agents: a}); }} className="appearance-none bg-transparent absolute inset-0 w-full h-full opacity-0 cursor-pointer z-20"><option value="">Select</option>{AGENTS.map(ag => <option key={ag} value={ag}>{ag}</option>)}</select>
-                    <div className={`text-2xl sm:text-3xl font-black uppercase tracking-tighter transition-all ${newComp.agents[index] ? 'text-white scale-110' : 'text-neutral-700'}`}>{newComp.agents[index] || "SELECT"}</div>
-                    <div className="mt-4 text-[10px] text-neutral-600 font-mono group-hover:text-red-600">{newComp.agents[index] ? 'CHANGE AGENT' : 'CLICK TO PICK'}</div>
+        <div className="relative group h-64 bg-neutral-900/80 border border-white/10 rounded-2xl overflow-hidden transition-all hover:border-red-600 hover:shadow-[0_0_30px_rgba(220,38,38,0.3)] flex flex-col">
+            {/* Background Accent */}
+            <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,_var(--tw-gradient-stops))] from-red-900/10 via-transparent to-transparent"></div>
+
+            {/* AGENT PICKER SECTION */}
+            <div className="flex-1 relative flex flex-col justify-center items-center p-4 z-10 border-b border-white/5 group-hover:border-red-900/50 transition-colors">
+                {/* Role Label - Always Visible, Red Accent */}
+                <label className="text-[10px] font-black text-red-500 uppercase tracking-[0.2em] mb-3">
+                    Role {index + 1}
+                </label>
+
+                <div className="relative w-full text-center group-hover:-translate-y-1 transition-transform duration-300">
+                    <select
+                        value={newComp.agents[index]}
+                        onChange={e => { const a = [...newComp.agents]; a[index] = e.target.value; setNewComp({ ...newComp, agents: a }); }}
+                        className="appearance-none bg-transparent absolute inset-0 w-full h-full opacity-0 cursor-pointer z-20"
+                    >
+                        <option value="">Select Agent</option>
+                        {AGENTS.map(ag => <option key={ag} value={ag}>{ag}</option>)}
+                    </select>
+
+                    {/* VISUAL TEXT - BRIGHTER AND CLEARER */}
+                    {newComp.agents[index] ? (
+                        // SELECTED STATE
+                        <div className="flex flex-col items-center">
+                            <div className="text-3xl sm:text-4xl font-black text-white uppercase tracking-tighter drop-shadow-[0_0_10px_rgba(255,255,255,0.5)] scale-110 transition-transform">
+                                {newComp.agents[index]}
+                            </div>
+                            <div className="mt-2 h-0.5 w-8 bg-red-600 rounded-full shadow-[0_0_8px_red]"></div>
+                        </div>
+                    ) : (
+                        // UNSELECTED STATE - FIXED VISIBILITY
+                        <div className="flex flex-col items-center justify-center border-2 border-dashed border-neutral-700 rounded-xl p-4 w-full hover:border-red-500/50 hover:bg-white/5 transition-all">
+                            <span className="text-2xl text-neutral-500 group-hover:text-white transition-colors mb-1">+</span>
+                            <span className="text-xs font-bold text-neutral-400 uppercase tracking-widest group-hover:text-white">Select Agent</span>
+                        </div>
+                    )}
                 </div>
             </div>
-            <div className="h-16 relative bg-black flex items-center justify-center z-10">
-                <select value={newComp.players[index]} onChange={e => { const p = [...newComp.players]; p[index] = e.target.value; setNewComp({...newComp, players: p}); }} className="appearance-none bg-transparent text-center text-xs font-bold text-neutral-400 uppercase outline-none cursor-pointer w-full h-full hover:text-white transition-all tracking-wider" style={{ textAlignLast: 'center' }}><option value="" className="bg-neutral-900">Assign Player</option>{members.map(m => <option key={m} value={m} className="bg-neutral-900">{m}</option>)}</select>
-                <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-neutral-600 text-[10px]">▼</div>
+
+            {/* PLAYER PICKER SECTION */}
+            <div className="h-14 relative bg-black flex items-center justify-center z-10">
+                <select value={newComp.players[index]} onChange={e => { const p = [...newComp.players]; p[index] = e.target.value; setNewComp({ ...newComp, players: p }); }} className="appearance-none bg-transparent text-center text-xs font-bold text-neutral-500 uppercase outline-none cursor-pointer w-full h-full hover:text-white transition-all tracking-wider hover:bg-white/5" style={{ textAlignLast: 'center' }}><option value="" className="bg-neutral-900">Assign Player</option>{members.map(m => <option key={m} value={m} className="bg-neutral-900">{m}</option>)}</select>
+                <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-neutral-700 text-[10px]">▼</div>
             </div>
         </div>
     );
@@ -295,7 +325,7 @@ function TeamComps({ members }) {
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
                 {currentMapComps.map(comp => (
                     <div key={comp.id} className="bg-neutral-900/80 rounded-2xl border border-white/5 overflow-hidden relative group hover:border-red-600/40 transition-all shadow-lg">
-                        <div className="bg-black/50 px-5 py-3 flex justify-between items-center border-b border-neutral-800 group-hover:bg-red-900/10 transition-colors"><div className="flex items-center gap-2"><div className="w-1.5 h-1.5 bg-red-600 rounded-full"></div><div className="text-[10px] font-mono text-neutral-400 uppercase tracking-widest">ID: {comp.id.substring(0,6)}</div></div><button onClick={() => deleteComp(comp.id)} className="text-neutral-600 hover:text-white font-bold text-[10px] bg-neutral-800 hover:bg-red-600 px-2 py-1 rounded transition-all">DELETE</button></div>
+                        <div className="bg-black/50 px-5 py-3 flex justify-between items-center border-b border-neutral-800 group-hover:bg-red-900/10 transition-colors"><div className="flex items-center gap-2"><div className="w-1.5 h-1.5 bg-red-600 rounded-full"></div><div className="text-[10px] font-mono text-neutral-400 uppercase tracking-widest">ID: {comp.id.substring(0, 6)}</div></div><button onClick={() => deleteComp(comp.id)} className="text-neutral-600 hover:text-white font-bold text-[10px] bg-neutral-800 hover:bg-red-600 px-2 py-1 rounded transition-all">DELETE</button></div>
                         <div className="p-5 grid grid-cols-5 gap-2 divide-x divide-neutral-800/50">{comp.agents.map((agent, i) => (<div key={i} className="text-center flex flex-col justify-center items-center gap-1"><div className="text-xs sm:text-sm font-black text-white uppercase tracking-tight drop-shadow-sm">{agent}</div><div className="text-[9px] text-neutral-500 font-mono uppercase tracking-widest truncate w-full">{comp.players[i] || '-'}</div></div>))}</div>
                     </div>
                 ))}
@@ -322,7 +352,7 @@ function ProfileModal({ isOpen, onClose, currentUser }) {
     const [rank, setRank] = useState("Unranked");
     const [agents, setAgents] = useState("");
     const [status, setStatus] = useState("idle");
-    const handleSave = async () => { setStatus("saving"); try { await setDoc(doc(db, 'roster', currentUser.displayName), { rank, agents }, { merge: true }); setStatus("success"); setTimeout(() => { setStatus("idle"); onClose(); }, 1000); } catch(e) { console.error(e); setStatus("idle"); } };
+    const handleSave = async () => { setStatus("saving"); try { await setDoc(doc(db, 'roster', currentUser.displayName), { rank, agents }, { merge: true }); setStatus("success"); setTimeout(() => { setStatus("idle"); onClose(); }, 1000); } catch (e) { console.error(e); setStatus("idle"); } };
     if (!isOpen) return null;
     return (
         <div className="fixed inset-0 bg-black/90 z-[100] flex justify-center items-center backdrop-blur-md p-4">
@@ -338,25 +368,25 @@ function ProfileModal({ isOpen, onClose, currentUser }) {
 function ApplicationForm({ currentUser }) {
     const [form, setForm] = useState({ tracker: '', rank: 'Unranked', role: 'Flex', exp: '', why: '' });
     const [status, setStatus] = useState('idle');
-    const submitApp = async () => { if (!form.tracker || !form.why) return; setStatus('saving'); const appData = { ...form, user: currentUser.displayName, uid: currentUser.uid, submittedAt: new Date().toISOString() }; await addDoc(collection(db, 'applications'), appData); const content = { embeds: [{ title: `📄 New Team Application: ${currentUser.displayName}`, color: 16776960, fields: [ { name: 'Rank', value: form.rank, inline: true }, { name: 'Role', value: form.role, inline: true }, { name: 'Tracker', value: form.tracker }, { name: 'Experience', value: form.exp || 'None provided' }, { name: 'Why Join?', value: form.why } ], timestamp: new Date().toISOString() }] }; try { await fetch(discordWebhookUrl, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(content) }); } catch (e) { console.error(e); } setStatus('success'); setForm({ tracker: '', rank: 'Unranked', role: 'Flex', exp: '', why: '' }); };
+    const submitApp = async () => { if (!form.tracker || !form.why) return; setStatus('saving'); const appData = { ...form, user: currentUser.displayName, uid: currentUser.uid, submittedAt: new Date().toISOString() }; await addDoc(collection(db, 'applications'), appData); const content = { embeds: [{ title: `📄 New Team Application: ${currentUser.displayName}`, color: 16776960, fields: [{ name: 'Rank', value: form.rank, inline: true }, { name: 'Role', value: form.role, inline: true }, { name: 'Tracker', value: form.tracker }, { name: 'Experience', value: form.exp || 'None provided' }, { name: 'Why Join?', value: form.why }], timestamp: new Date().toISOString() }] }; try { await fetch(discordWebhookUrl, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(content) }); } catch (e) { console.error(e); } setStatus('success'); setForm({ tracker: '', rank: 'Unranked', role: 'Flex', exp: '', why: '' }); };
     if (status === 'success') return <div className="h-full flex flex-col items-center justify-center text-center p-10 animate-fade-in"><div className="text-6xl mb-4">✅</div><h2 className="text-3xl font-black text-white mb-2">Application Received</h2><p className="text-neutral-400 max-w-md">Thank you for applying to Syrix. Your application has been sent to the captains.</p></div>;
     return (
         <div className="bg-neutral-900/80 p-8 rounded-3xl border border-white/10 shadow-2xl max-w-3xl mx-auto animate-fade-in-up">
             <h2 className="text-3xl font-black text-white mb-2">Join the Team</h2>
             <p className="text-neutral-400 mb-8">Fill out the details below to apply for the roster.</p>
-            <div className="space-y-5"><div className="grid grid-cols-1 md:grid-cols-2 gap-5"><div><label className="text-xs font-bold text-red-500 uppercase mb-1 block">Valorant Tracker URL</label><Input type="text" value={form.tracker} onChange={e => setForm({...form, tracker: e.target.value})} placeholder="https://tracker.gg/valorant/profile/..." /></div><div><label className="text-xs font-bold text-red-500 uppercase mb-1 block">Current Rank</label><Select value={form.rank} onChange={e => setForm({...form, rank: e.target.value})}>{RANKS.map(r => <option key={r} value={r}>{r}</option>)}</Select></div></div><div className="grid grid-cols-1 md:grid-cols-2 gap-5"><div><label className="text-xs font-bold text-red-500 uppercase mb-1 block">Preferred Role</label><Select value={form.role} onChange={e => setForm({...form, role: e.target.value})}>{ROLES.map(r => <option key={r} value={r}>{r}</option>)}</Select></div><div><label className="text-xs font-bold text-red-500 uppercase mb-1 block">Competitive Experience</label><Input type="text" value={form.exp} onChange={e => setForm({...form, exp: e.target.value})} placeholder="Previous teams, tournaments..." /></div></div><div><label className="text-xs font-bold text-red-500 uppercase mb-1 block">Why do you want to join Syrix?</label><textarea value={form.why} onChange={e => setForm({...form, why: e.target.value})} className="w-full h-32 bg-black border border-neutral-800 rounded-xl p-3 text-white text-sm outline-none focus:border-red-600 resize-none placeholder-neutral-600" placeholder="Tell us about yourself and your goals..." /></div><ButtonPrimary onClick={submitApp} disabled={status !== 'idle'} className="w-full py-4">{status === 'idle' ? 'Submit Application' : 'Sending...'}</ButtonPrimary></div>
+            <div className="space-y-5"><div className="grid grid-cols-1 md:grid-cols-2 gap-5"><div><label className="text-xs font-bold text-red-500 uppercase mb-1 block">Valorant Tracker URL</label><Input type="text" value={form.tracker} onChange={e => setForm({ ...form, tracker: e.target.value })} placeholder="https://tracker.gg/valorant/profile/..." /></div><div><label className="text-xs font-bold text-red-500 uppercase mb-1 block">Current Rank</label><Select value={form.rank} onChange={e => setForm({ ...form, rank: e.target.value })}>{RANKS.map(r => <option key={r} value={r}>{r}</option>)}</Select></div></div><div className="grid grid-cols-1 md:grid-cols-2 gap-5"><div><label className="text-xs font-bold text-red-500 uppercase mb-1 block">Preferred Role</label><Select value={form.role} onChange={e => setForm({ ...form, role: e.target.value })}>{ROLES.map(r => <option key={r} value={r}>{r}</option>)}</Select></div><div><label className="text-xs font-bold text-red-500 uppercase mb-1 block">Competitive Experience</label><Input type="text" value={form.exp} onChange={e => setForm({ ...form, exp: e.target.value })} placeholder="Previous teams, tournaments..." /></div></div><div><label className="text-xs font-bold text-red-500 uppercase mb-1 block">Why do you want to join Syrix?</label><textarea value={form.why} onChange={e => setForm({ ...form, why: e.target.value })} className="w-full h-32 bg-black border border-neutral-800 rounded-xl p-3 text-white text-sm outline-none focus:border-red-600 resize-none placeholder-neutral-600" placeholder="Tell us about yourself and your goals..." /></div><ButtonPrimary onClick={submitApp} disabled={status !== 'idle'} className="w-full py-4">{status === 'idle' ? 'Submit Application' : 'Sending...'}</ButtonPrimary></div>
         </div>
     );
 }
 
 function MapVeto() {
-    const [vetoState, setVetoState] = useState({}); 
+    const [vetoState, setVetoState] = useState({});
     useEffect(() => { const unsub = onSnapshot(doc(db, 'general', 'map_veto'), (snap) => { if (snap.exists()) setVetoState(snap.data()); }); return () => unsub(); }, []);
     const toggleMap = async (map) => { const current = vetoState[map] || 'neutral'; const next = current === 'neutral' ? 'ban' : current === 'ban' ? 'pick' : 'neutral'; await setDoc(doc(db, 'general', 'map_veto'), { ...vetoState, [map]: next }); };
     const resetVeto = async () => { await setDoc(doc(db, 'general', 'map_veto'), {}); };
     return (
         <Card className="h-full">
-             <div className="flex justify-between items-center mb-6"><h3 className="text-2xl font-black text-white">MAP VETO</h3><ButtonSecondary onClick={resetVeto} className="text-xs px-3 py-1">Reset Board</ButtonSecondary></div>
+            <div className="flex justify-between items-center mb-6"><h3 className="text-2xl font-black text-white">MAP VETO</h3><ButtonSecondary onClick={resetVeto} className="text-xs px-3 py-1">Reset Board</ButtonSecondary></div>
             <div className="grid grid-cols-2 md:grid-cols-5 gap-4">{MAPS.map(map => { const status = vetoState[map] || 'neutral'; return (<div key={map} onClick={() => toggleMap(map)} className={`aspect-video rounded-xl border-2 cursor-pointer flex items-center justify-center relative overflow-hidden transition-all group ${status === 'neutral' ? 'border-neutral-800 bg-black/50 hover:border-neutral-600' : ''} ${status === 'ban' ? 'border-red-600 bg-red-900/20' : ''} ${status === 'pick' ? 'border-green-500 bg-green-900/20' : ''}`}><span className={`font-black uppercase tracking-widest text-lg z-10 transition-transform group-hover:scale-110 ${status === 'neutral' ? 'text-neutral-500' : 'text-white'}`}>{map}</span>{status !== 'neutral' && (<div className={`absolute bottom-2 text-[10px] font-bold px-2 py-0.5 rounded uppercase ${status === 'ban' ? 'bg-red-600 text-white' : 'bg-green-500 text-black'}`}>{status}</div>)}</div>); })}</div>
         </Card>
     );
@@ -478,7 +508,7 @@ function RosterManager({ members }) {
                         <h3 className="text-2xl font-black text-white mb-6 flex items-center gap-3"><span className="w-3 h-3 rounded-full bg-red-600"></span>Managing: <span className="text-red-500">{selectedMember}</span></h3>
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
                             <div><label className="block text-xs font-bold text-neutral-500 uppercase mb-2">Assign Role</label><div className="grid grid-cols-2 gap-2 mb-4">{['Captain', 'Main', 'Sub', 'Tryout'].map(r => (<button key={r} onClick={() => setRole(r)} className={`p-3 rounded-lg text-sm font-bold border transition-all ${role === r ? 'bg-red-600 text-white border-red-500 shadow-lg' : 'bg-black border-neutral-800 text-neutral-400 hover:bg-neutral-800'}`}>{r}</button>))}</div><label className="block text-xs font-bold text-neutral-500 uppercase mb-2">In-Game ID (Riot ID)</label><Input type="text" placeholder="Syrix#NA1" value={gameId} onChange={(e) => setGameId(e.target.value)} /></div>
-                            <div><label className="block text-xs font-bold text-neutral-500 uppercase mb-2">Performance Notes</label><textarea value={notes} onChange={(e) => setNotes(e.target.value)} className="w-full h-40 bg-black border border-neutral-800 rounded-xl p-3 text-white text-sm outline-none focus:border-red-600 resize-none" placeholder="Enter notes about gameplay..."/></div>
+                            <div><label className="block text-xs font-bold text-neutral-500 uppercase mb-2">Performance Notes</label><textarea value={notes} onChange={(e) => setNotes(e.target.value)} className="w-full h-40 bg-black border border-neutral-800 rounded-xl p-3 text-white text-sm outline-none focus:border-red-600 resize-none" placeholder="Enter notes about gameplay..." /></div>
                         </div>
                         <div className="mt-auto flex justify-end"><ButtonPrimary onClick={handleSave} disabled={status !== 'idle'}>{status === 'idle' ? 'Save Player Details' : status === 'saving' ? 'Saving...' : 'Saved!'}</ButtonPrimary></div>
                     </div>
@@ -500,9 +530,9 @@ function MatchHistory() {
     useEffect(() => {
         const unsub = onSnapshot(collection(db, 'events'), (snap) => {
             const evs = [];
-            snap.forEach(doc => evs.push({id: doc.id, ...doc.data()}));
+            snap.forEach(doc => evs.push({ id: doc.id, ...doc.data() }));
             const past = evs.filter(e => { if (e.result) return true; return new Date(e.date + 'T' + e.time) < new Date(); });
-            past.sort((a, b) => new Date(b.date) - new Date(a.date)); 
+            past.sort((a, b) => new Date(b.date) - new Date(a.date));
             setMatches(past);
         });
         return () => unsub();
@@ -523,7 +553,7 @@ function MatchHistory() {
             <div className="flex justify-between items-center mb-6"><h3 className="text-2xl font-black text-white flex items-center gap-3"><span className="text-red-600">MATCH</span> HISTORY</h3><ButtonSecondary onClick={() => setIsAdding(!isAdding)} className="text-xs">{isAdding ? 'Cancel' : '+ LOG PAST MATCH'}</ButtonSecondary></div>
             {isAdding && (
                 <div className="mb-8 bg-black/40 p-4 rounded-xl border border-red-900/30 animate-fade-in"><h4 className="text-sm font-bold text-white mb-3 uppercase tracking-wider">Log Unscheduled Match</h4>
-                    <div className="grid grid-cols-1 md:grid-cols-4 gap-3 mb-3"><Input type="text" placeholder="Opponent" value={newMatch.opponent} onChange={e => setNewMatch({...newMatch, opponent: e.target.value})} /><Input type="date" value={newMatch.date} onChange={e => setNewMatch({...newMatch, date: e.target.value})} className="[color-scheme:dark]" /><Select value={newMatch.map} onChange={e => setNewMatch({...newMatch, map: e.target.value})}>{MAPS.map(map => <option key={map}>{map}</option>)}</Select><div className="flex gap-2"><Input type="number" placeholder="Us" value={newMatch.myScore} onChange={e => setNewMatch({...newMatch, myScore: e.target.value})} className="w-1/2" /><Input type="number" placeholder="Them" value={newMatch.enemyScore} onChange={e => setNewMatch({...newMatch, enemyScore: e.target.value})} className="w-1/2" /></div></div>
+                    <div className="grid grid-cols-1 md:grid-cols-4 gap-3 mb-3"><Input type="text" placeholder="Opponent" value={newMatch.opponent} onChange={e => setNewMatch({ ...newMatch, opponent: e.target.value })} /><Input type="date" value={newMatch.date} onChange={e => setNewMatch({ ...newMatch, date: e.target.value })} className="[color-scheme:dark]" /><Select value={newMatch.map} onChange={e => setNewMatch({ ...newMatch, map: e.target.value })}>{MAPS.map(map => <option key={map}>{map}</option>)}</Select><div className="flex gap-2"><Input type="number" placeholder="Us" value={newMatch.myScore} onChange={e => setNewMatch({ ...newMatch, myScore: e.target.value })} className="w-1/2" /><Input type="number" placeholder="Them" value={newMatch.enemyScore} onChange={e => setNewMatch({ ...newMatch, enemyScore: e.target.value })} className="w-1/2" /></div></div>
                     <div className="flex justify-end"><ButtonPrimary onClick={handleManualAdd} className="text-xs py-2">Save Log</ButtonPrimary></div></div>
             )}
             <div className="space-y-4">{matches.length === 0 && <p className="text-neutral-500 italic">No past matches found.</p>}
@@ -535,7 +565,7 @@ function MatchHistory() {
                             <div className="text-xs text-neutral-500">{m.date}</div>
                         </div>
                         {editingId === m.id ? (
-                            <div className="flex flex-wrap gap-2 items-center bg-neutral-900 p-2 rounded-lg border border-neutral-700"><Select value={editForm.map} onChange={e => setEditForm({...editForm, map: e.target.value})} className="!p-2 text-xs w-32">{MAPS.map(map => <option key={map}>{map}</option>)}</Select><Input type="number" placeholder="Us" value={editForm.myScore} onChange={e => setEditForm({...editForm, myScore: e.target.value})} className="w-12 !p-2 text-xs" /><span className="text-white">-</span><Input type="number" placeholder="Them" value={editForm.enemyScore} onChange={e => setEditForm({...editForm, enemyScore: e.target.value})} className="w-12 !p-2 text-xs" /><Input type="text" placeholder="VOD Link" value={editForm.vod} onChange={e => setEditForm({...editForm, vod: e.target.value})} className="w-32 !p-2 text-xs" /><ButtonPrimary onClick={() => handleUpdate(m.id)} className="text-xs py-2 px-3">Save</ButtonPrimary></div>
+                            <div className="flex flex-wrap gap-2 items-center bg-neutral-900 p-2 rounded-lg border border-neutral-700"><Select value={editForm.map} onChange={e => setEditForm({ ...editForm, map: e.target.value })} className="!p-2 text-xs w-32">{MAPS.map(map => <option key={map}>{map}</option>)}</Select><Input type="number" placeholder="Us" value={editForm.myScore} onChange={e => setEditForm({ ...editForm, myScore: e.target.value })} className="w-12 !p-2 text-xs" /><span className="text-white">-</span><Input type="number" placeholder="Them" value={editForm.enemyScore} onChange={e => setEditForm({ ...editForm, enemyScore: e.target.value })} className="w-12 !p-2 text-xs" /><Input type="text" placeholder="VOD Link" value={editForm.vod} onChange={e => setEditForm({ ...editForm, vod: e.target.value })} className="w-32 !p-2 text-xs" /><ButtonPrimary onClick={() => handleUpdate(m.id)} className="text-xs py-2 px-3">Save</ButtonPrimary></div>
                         ) : (
                             <div className="flex items-center gap-6">
                                 {m.result ? (
@@ -567,7 +597,7 @@ function StratBook() {
     useEffect(() => {
         const unsub = onSnapshot(collection(db, 'strats'), (snap) => {
             const s = [];
-            snap.forEach(doc => s.push({id: doc.id, ...doc.data()}));
+            snap.forEach(doc => s.push({ id: doc.id, ...doc.data() }));
             setStrats(s);
         });
         return () => unsub();
@@ -586,7 +616,7 @@ function StratBook() {
         <Card className="h-full">
             <h3 className="text-2xl font-black text-white mb-6">STRATBOOK</h3>
             <div className="flex overflow-x-auto gap-2 pb-4 mb-4 scrollbar-thin scrollbar-thumb-red-900 scrollbar-track-black">{MAPS.map(m => (<button key={m} onClick={() => setSelectedMap(m)} className={`px-4 py-2 rounded-lg text-xs font-bold uppercase tracking-wider whitespace-nowrap transition-all ${selectedMap === m ? 'bg-red-700 text-white shadow-lg' : 'bg-black border border-neutral-800 text-neutral-500 hover:text-white hover:border-white/20'}`}>{m}</button>))}</div>
-            <div className="space-y-3 mb-6"><div className="flex gap-2"><Input type="text" placeholder="Strat Name (e.g. A Split)" value={newStrat.title} onChange={e => setNewStrat({...newStrat, title: e.target.value})} className="flex-1" /><Input type="text" placeholder="Link (Valoplant/Doc)" value={newStrat.link} onChange={e => setNewStrat({...newStrat, link: e.target.value})} className="flex-1" /><ButtonSecondary onClick={addStrat} className="py-2 px-4">+</ButtonSecondary></div></div>
+            <div className="space-y-3 mb-6"><div className="flex gap-2"><Input type="text" placeholder="Strat Name (e.g. A Split)" value={newStrat.title} onChange={e => setNewStrat({ ...newStrat, title: e.target.value })} className="flex-1" /><Input type="text" placeholder="Link (Valoplant/Doc)" value={newStrat.link} onChange={e => setNewStrat({ ...newStrat, link: e.target.value })} className="flex-1" /><ButtonSecondary onClick={addStrat} className="py-2 px-4">+</ButtonSecondary></div></div>
             <div className="space-y-2 max-h-[400px] overflow-y-auto pr-2 custom-scrollbar">{filteredStrats.length === 0 && <p className="text-neutral-600 italic text-sm">No strats for {selectedMap} yet.</p>}{filteredStrats.map(s => (<div key={s.id} className="p-3 bg-black/40 border border-neutral-800 rounded-lg flex justify-between items-center group hover:border-red-900/50 transition-colors"><span className="font-bold text-neutral-200">{s.title}</span><div className="flex gap-3">{s.link && <a href={s.link} target="_blank" rel="noreferrer" className="text-xs text-red-400 hover:underline">View</a>}<button onClick={() => deleteStrat(s.id)} className="text-neutral-600 hover:text-red-500">×</button></div></div>))}</div>
         </Card>
     );
@@ -599,7 +629,7 @@ function PartnerDirectory() {
     useEffect(() => {
         const unsub = onSnapshot(collection(db, 'partners'), (snap) => {
             const p = [];
-            snap.forEach(doc => p.push({id: doc.id, ...doc.data()}));
+            snap.forEach(doc => p.push({ id: doc.id, ...doc.data() }));
             setPartners(p);
         });
         return () => unsub();
@@ -614,7 +644,7 @@ function PartnerDirectory() {
     return (
         <Card className="h-full">
             <h3 className="text-2xl font-black text-white mb-6">SCRIM PARTNERS</h3>
-            <div className="space-y-3 mb-6 p-4 bg-black/30 rounded-xl border border-neutral-800"><Input type="text" placeholder="Team Name" value={newPartner.name} onChange={e => setNewPartner({...newPartner, name: e.target.value})} className="mb-2" /><div className="flex gap-2"><Input type="text" placeholder="Contact (Discord)" value={newPartner.contact} onChange={e => setNewPartner({...newPartner, contact: e.target.value})} className="flex-1" /><Input type="text" placeholder="Notes" value={newPartner.notes} onChange={e => setNewPartner({...newPartner, notes: e.target.value})} className="flex-1" /></div><ButtonPrimary onClick={addPartner} className="w-full text-xs py-3 mt-2">Add Partner</ButtonPrimary></div>
+            <div className="space-y-3 mb-6 p-4 bg-black/30 rounded-xl border border-neutral-800"><Input type="text" placeholder="Team Name" value={newPartner.name} onChange={e => setNewPartner({ ...newPartner, name: e.target.value })} className="mb-2" /><div className="flex gap-2"><Input type="text" placeholder="Contact (Discord)" value={newPartner.contact} onChange={e => setNewPartner({ ...newPartner, contact: e.target.value })} className="flex-1" /><Input type="text" placeholder="Notes" value={newPartner.notes} onChange={e => setNewPartner({ ...newPartner, notes: e.target.value })} className="flex-1" /></div><ButtonPrimary onClick={addPartner} className="w-full text-xs py-3 mt-2">Add Partner</ButtonPrimary></div>
             <div className="space-y-3 max-h-[400px] overflow-y-auto pr-2 custom-scrollbar">{partners.map(p => (<div key={p.id} className="p-4 bg-black/40 border border-neutral-800 rounded-xl"><div className="flex justify-between items-start"><div><div className="font-bold text-lg text-white">{p.name}</div><div className="text-xs text-red-400 font-mono">{p.contact}</div></div><button onClick={() => deleteDoc(doc(db, 'partners', p.id))} className="text-neutral-600 hover:text-red-500">×</button></div>{p.notes && <div className="mt-2 text-sm text-neutral-400 bg-neutral-900/50 p-2 rounded">{p.notes}</div>}</div>))}</div>
         </Card>
     );
@@ -651,13 +681,13 @@ function ScrimScheduler({ onSchedule, userTimezone }) {
 }
 
 function AvailabilityHeatmap({ availabilities, members }) {
-    const bucketSize = 60; 
+    const bucketSize = 60;
     const numBuckets = (24 * 60) / bucketSize;
     const activeMembers = members.filter(member => availabilities[member] && availabilities[member].length > 0);
     const maxCount = activeMembers.length || 1;
 
     const heatmapData = useMemo(() => {
-        const data = {}; 
+        const data = {};
         for (const day of DAYS) {
             const buckets = new Array(numBuckets).fill(0);
             for (const member of activeMembers) {
@@ -675,7 +705,7 @@ function AvailabilityHeatmap({ availabilities, members }) {
 
     return (
         <div className="overflow-x-auto rounded-xl border border-neutral-800 shadow-inner bg-black">
-            <div className="min-w-[600px]"><div className="flex border-b border-neutral-800"><div className="w-24 p-2 text-xs font-bold text-red-500 bg-black sticky left-0 border-r border-neutral-800">DAY</div>{Array.from({length: 24}).map((_, i) => (<div key={i} className="flex-1 text-[10px] text-center text-neutral-500 border-l border-neutral-800/50 py-1">{i}</div>))}</div>{DAYS.map(day => (<div key={day} className="flex border-b border-neutral-800/50 last:border-0"><div className="w-24 p-2 text-xs font-bold text-neutral-400 bg-black sticky left-0 border-r border-neutral-800">{day.substring(0, 3).toUpperCase()}</div>{heatmapData[day]?.map((count, i) => (<div key={i} className={`flex-1 h-8 border-l border-neutral-800/30 transition-all hover:brightness-125 relative group ${count > 0 ? 'bg-red-600' : ''}`} style={{ opacity: count > 0 ? (count/maxCount)*0.9 + 0.1 : 1, backgroundColor: count === 0 ? 'transparent' : undefined }}>{count > 0 && <span className="absolute inset-0 flex items-center justify-center text-[10px] font-bold text-white group-hover:scale-125 transition-transform">{count}</span>}</div>))}</div>))}</div>
+            <div className="min-w-[600px]"><div className="flex border-b border-neutral-800"><div className="w-24 p-2 text-xs font-bold text-red-500 bg-black sticky left-0 border-r border-neutral-800">DAY</div>{Array.from({ length: 24 }).map((_, i) => (<div key={i} className="flex-1 text-[10px] text-center text-neutral-500 border-l border-neutral-800/50 py-1">{i}</div>))}</div>{DAYS.map(day => (<div key={day} className="flex border-b border-neutral-800/50 last:border-0"><div className="w-24 p-2 text-xs font-bold text-neutral-400 bg-black sticky left-0 border-r border-neutral-800">{day.substring(0, 3).toUpperCase()}</div>{heatmapData[day]?.map((count, i) => (<div key={i} className={`flex-1 h-8 border-l border-neutral-800/30 transition-all hover:brightness-125 relative group ${count > 0 ? 'bg-red-600' : ''}`} style={{ opacity: count > 0 ? (count / maxCount) * 0.9 + 0.1 : 1, backgroundColor: count === 0 ? 'transparent' : undefined }}>{count > 0 && <span className="absolute inset-0 flex items-center justify-center text-[10px] font-bold text-white group-hover:scale-125 transition-transform">{count}</span>}</div>))}</div>))}</div>
         </div>
     );
 }
@@ -695,17 +725,17 @@ function LoginScreen({ signIn }) {
 
 export default function App() {
     const [currentUser, setCurrentUser] = useState(null);
-    const [activeTab, setActiveTab] = useState('dashboard'); 
+    const [activeTab, setActiveTab] = useState('dashboard');
     const [availabilities, setAvailabilities] = useState({});
-    const [events, setEvents] = useState([]); 
+    const [events, setEvents] = useState([]);
     const [day, setDay] = useState(DAYS[0]);
     const [start, setStart] = useState('12:00');
     const [end, setEnd] = useState('23:30');
-    const [role, setRole] = useState('Flex'); 
+    const [role, setRole] = useState('Flex');
     const [saveStatus, setSaveStatus] = useState('idle');
     const [userTimezone, setUserTimezone] = useState(localStorage.getItem('timezone') || Intl.DateTimeFormat().resolvedOptions().timeZone);
     const [authLoading, setAuthLoading] = useState(true);
-    const [membershipLoading, setMembershipLoading] = useState(false); 
+    const [membershipLoading, setMembershipLoading] = useState(false);
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [isProfileOpen, setIsProfileOpen] = useState(false);
     const [modalContent, setModalContent] = useState({ title: '', children: null });
@@ -720,7 +750,7 @@ export default function App() {
         setMembershipLoading(true);
         const checkMembership = onSnapshot(doc(db, 'roster', currentUser.displayName), (docSnap) => { const isAdmin = ADMINS.some(admin => admin.toLowerCase() === currentUser.displayName.toLowerCase()); const isAuthorized = (docSnap.exists() && docSnap.data().role) || isAdmin; setIsMember(isAuthorized); setMembershipLoading(false); });
         const unsubAvail = onSnapshot(collection(db, 'availabilities'), (snap) => { const data = {}; snap.forEach(doc => data[doc.id] = doc.data().slots || []); setAvailabilities(data); });
-        const unsubEvents = onSnapshot(collection(db, 'events'), (snap) => { const evs = []; snap.forEach(doc => evs.push({id: doc.id, ...doc.data()})); evs.sort((a, b) => new Date(a.date + 'T' + a.time) - new Date(b.date + 'T' + b.time)); setEvents(evs); });
+        const unsubEvents = onSnapshot(collection(db, 'events'), (snap) => { const evs = []; snap.forEach(doc => evs.push({ id: doc.id, ...doc.data() })); evs.sort((a, b) => new Date(a.date + 'T' + a.time) - new Date(b.date + 'T' + b.time)); setEvents(evs); });
         return () => { checkMembership(); unsubAvail(); unsubEvents(); };
     }, [currentUser]);
 
@@ -733,8 +763,8 @@ export default function App() {
             availabilities[member].forEach(slot => {
                 const localStart = convertFromGMT(slot.day, slot.start, userTimezone);
                 const localEnd = convertFromGMT(slot.day, slot.end, userTimezone);
-                const role = slot.role; 
-                if (localStart.day === localEnd.day) { if (timeToMinutes(localStart.time) < timeToMinutes(localEnd.time)) converted[member].push({ day: localStart.day, start: localStart.time, end: localEnd.time, role }); } 
+                const role = slot.role;
+                if (localStart.day === localEnd.day) { if (timeToMinutes(localStart.time) < timeToMinutes(localEnd.time)) converted[member].push({ day: localStart.day, start: localStart.time, end: localEnd.time, role }); }
                 else { converted[member].push({ day: localStart.day, start: localStart.time, end: '24:00', role }); if (timeToMinutes(localEnd.time) > 0) converted[member].push({ day: localEnd.day, start: '00:00', end: localEnd.time, role }); }
             });
         }
@@ -766,7 +796,7 @@ export default function App() {
     const clearAll = async () => { await deleteDoc(doc(db, 'availabilities', currentUser.displayName)); setIsModalOpen(false); };
     const scheduleEvent = async (eventData) => {
         await addDoc(collection(db, 'events'), eventData);
-        const content = { embeds: [{ title: `🔴 New ${eventData.type} Scheduled!`, color: 15158332, fields: [ { name: 'Type', value: eventData.type, inline: true }, { name: 'Opponent/Info', value: eventData.opponent || 'N/A', inline: true }, { name: 'When', value: `${eventData.date} at ${eventData.time} (${eventData.timezone})` }, { name: 'Scheduled By', value: currentUser.displayName } ], footer: { text: "Syrix Hub" }, timestamp: new Date().toISOString() }] };
+        const content = { embeds: [{ title: `🔴 New ${eventData.type} Scheduled!`, color: 15158332, fields: [{ name: 'Type', value: eventData.type, inline: true }, { name: 'Opponent/Info', value: eventData.opponent || 'N/A', inline: true }, { name: 'When', value: `${eventData.date} at ${eventData.time} (${eventData.timezone})` }, { name: 'Scheduled By', value: currentUser.displayName }], footer: { text: "Syrix Hub" }, timestamp: new Date().toISOString() }] };
         try { await fetch(discordWebhookUrl, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(content) }); } catch (e) { console.error(e); }
     };
     const deleteEvent = async (id) => { await deleteDoc(doc(db, 'events', id)); setIsModalOpen(false); };
@@ -775,13 +805,13 @@ export default function App() {
     if (!currentUser) return <LoginScreen signIn={signIn} />;
 
     if (!isMember) return (
-            <div className="fixed inset-0 h-full w-full bg-black text-neutral-200 font-sans selection:bg-red-500/30 flex flex-col overflow-hidden">
-                <header className="flex-none flex justify-between items-center px-8 py-4 border-b border-red-900/30 bg-black/90 backdrop-blur-md z-40">
-                    <h1 className="text-3xl font-black tracking-tighter text-white">SYRIX <span className="text-red-600">HUB</span></h1>
-                    <div className="flex items-center gap-4"><img src={getAvatar()} className="w-10 h-10 rounded-full border-2 border-red-600" alt="Profile" /><button onClick={handleSignOut} className="text-[10px] text-neutral-400 hover:text-red-500 font-bold uppercase tracking-wide">Log Out</button></div>
-                </header>
-                <main className="flex-1 overflow-y-auto p-6 flex items-center justify-center"><ApplicationForm currentUser={currentUser} /></main>
-            </div>
+        <div className="fixed inset-0 h-full w-full bg-black text-neutral-200 font-sans selection:bg-red-500/30 flex flex-col overflow-hidden">
+            <header className="flex-none flex justify-between items-center px-8 py-4 border-b border-red-900/30 bg-black/90 backdrop-blur-md z-40">
+                <h1 className="text-3xl font-black tracking-tighter text-white">SYRIX <span className="text-red-600">HUB</span></h1>
+                <div className="flex items-center gap-4"><img src={getAvatar()} className="w-10 h-10 rounded-full border-2 border-red-600" alt="Profile" /><button onClick={handleSignOut} className="text-[10px] text-neutral-400 hover:text-red-500 font-bold uppercase tracking-wide">Log Out</button></div>
+            </header>
+            <main className="flex-1 overflow-y-auto p-6 flex items-center justify-center"><ApplicationForm currentUser={currentUser} /></main>
+        </div>
     );
 
     const NavBtn = ({ id, label }) => (
