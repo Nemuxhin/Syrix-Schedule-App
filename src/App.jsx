@@ -1,17 +1,13 @@
 ﻿/*
-Syrix Team Availability - v4.0 (ULTIMATE FEATURE PACK)
-- FEATURES ADDED:
-  1. Agent Portraits (API Integration)
-  3. Role Icons (SVG)
-  4. Win/Loss Stamp Animations
-  5. Interactive Whiteboard (Canvas Drawing)
-  7. Advanced Scrim Analytics (Atk/Def splits)
-  8. Player Comparison Tool
+Syrix Team Availability - v4.1 (STRATBOOK OVERHAUL)
+- MAPS: Now fetches "displayIcon" (Top-Down Schematic) from API instead of art.
+- FEATURES: Added "External Links" section to StratBook for Valoplant/Docs.
+- THEME: Maintained Red/Black aesthetic.
 */
 
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { initializeApp } from 'firebase/app';
-import { getFirestore, collection, onSnapshot, doc, setDoc, deleteDoc, addDoc, updateDoc } from 'firebase/firestore';
+import { getFirestore, collection, onSnapshot, doc, setDoc, deleteDoc, addDoc, updateDoc, query, where } from 'firebase/firestore';
 import { getAuth, onAuthStateChanged, signInWithPopup, signOut, OAuthProvider } from 'firebase/auth';
 
 // --- Firebase Configuration ---
@@ -39,17 +35,15 @@ const MAPS = ["Ascent", "Bind", "Breeze", "Fracture", "Haven", "Icebox", "Lotus"
 const ROLES = ["Flex", "Duelist", "Initiator", "Controller", "Sentinel"];
 const RANKS = ["Unranked", "Iron", "Bronze", "Silver", "Gold", "Platinum", "Diamond", "Ascendant", "Immortal", "Radiant"];
 
-// Agent List (Matches API names usually)
 const AGENT_NAMES = [
-    "Jett", "Raze", "Reyna", "Yoru", "Phoenix", "Neon", "Iso", "Vyse", // Duelists
+    "Jett", "Raze", "Reyna", "Yoru", "Phoenix", "Neon", "Iso", "Vyse", "Waylay", // Duelists
     "Omen", "Astra", "Brimstone", "Viper", "Harbor", "Clove",            // Controllers
     "Sova", "Fade", "Skye", "Breach", "KAY/O", "Gekko",                  // Initiators
-    "Killjoy", "Cypher", "Sage", "Chamber", "Deadlock", "Veto", "Waylay"   // Sentinels
+    "Killjoy", "Cypher", "Sage", "Chamber", "Deadlock", "Veto"           // Sentinels
 ];
 
 const timezones = ["UTC", "GMT", "Europe/London", "Europe/Paris", "Europe/Berlin", "America/New_York", "America/Chicago", "America/Denver", "America/Los_Angeles", "Asia/Tokyo", "Australia/Sydney"];
 
-// --- SVG ICONS (Feature 3) ---
 const RoleIcons = {
     Duelist: <svg viewBox="0 0 24 24" fill="currentColor" className="w-4 h-4"><path d="M12 2L2 22h20L12 2zm0 3.5L18.5 20h-13L12 5.5z" /></svg>,
     Initiator: <svg viewBox="0 0 24 24" fill="currentColor" className="w-4 h-4"><path d="M12 2l-9 4v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V6l-9-4zm0 2.18l7 3.12v4.7c0 4.67-3.13 8.96-7 10.1-3.87-1.14-7-5.43-7-10.1v-4.7l7-3.12z" /></svg>,
@@ -129,7 +123,7 @@ const ButtonSecondary = ({ children, onClick, className = "" }) => (
     </button>
 );
 
-// --- NEW: Hook to fetch Agent/Map Images (Feature 1) ---
+// --- HOOKS ---
 const useValorantData = () => {
     const [agentImages, setAgentImages] = useState({});
     const [mapImages, setMapImages] = useState({});
@@ -146,12 +140,12 @@ const useValorantData = () => {
                 });
                 setAgentImages(aMap);
 
-                // Maps
+                // Maps - NOW FETCHING displayIcon FOR SCHEMATICS
                 const mapRes = await fetch('https://valorant-api.com/v1/maps');
                 const mapData = await mapRes.json();
                 const mMap = {};
                 mapData.data.forEach(map => {
-                    mMap[map.displayName] = map.splash;
+                    mMap[map.displayName] = map.displayIcon; // Changed from splash to displayIcon
                 });
                 setMapImages(mMap);
             } catch (e) {
@@ -163,7 +157,7 @@ const useValorantData = () => {
     return { agentImages, mapImages };
 };
 
-// --- NEW: Animated Stamps (Feature 4) ---
+// --- ANIMATED STAMPS ---
 const VictoryStamp = () => (
     <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-50 border-8 border-green-500 text-green-500 font-black text-5xl md:text-7xl p-4 uppercase tracking-tighter -rotate-12 opacity-0 animate-stamp-in pointer-events-none mix-blend-screen">
         VICTORY
@@ -194,7 +188,6 @@ function Modal({ isOpen, onClose, onConfirm, title, children }) {
 }
 
 function LeaveLogger({ members }) {
-    // ... (Same as v3.3)
     const [leaves, setLeaves] = useState([]);
     const [newLeave, setNewLeave] = useState({ start: '', end: '', reason: '' });
     const { currentUser } = getAuth();
@@ -222,7 +215,6 @@ function LeaveLogger({ members }) {
 }
 
 function NextMatchCountdown({ events }) {
-    // ... (Same as v3.3)
     const [timeLeft, setTimeLeft] = useState('');
     const nextEvent = useMemo(() => { const now = new Date(); return events.find(e => new Date(e.date + 'T' + e.time) > now); }, [events]);
     useEffect(() => {
@@ -251,7 +243,7 @@ function TeamComps({ members }) {
     const [selectedMap, setSelectedMap] = useState(MAPS[0]);
     const [newComp, setNewComp] = useState({ agents: Array(5).fill(''), players: Array(5).fill('') });
     const [activeDropdown, setActiveDropdown] = useState(null);
-    const { agentImages } = useValorantData(); // Feature 1
+    const { agentImages } = useValorantData();
 
     useEffect(() => { const unsub = onSnapshot(collection(db, 'comps'), (snap) => { const c = []; snap.forEach(doc => c.push({ id: doc.id, ...doc.data() })); setComps(c); }); return () => unsub(); }, []);
     const saveComp = async () => { if (newComp.agents.some(a => !a)) return; await addDoc(collection(db, 'comps'), { map: selectedMap, ...newComp }); setNewComp({ agents: Array(5).fill(''), players: Array(5).fill('') }); };
@@ -265,7 +257,6 @@ function TeamComps({ members }) {
 
         return (
             <div className="relative group h-64 bg-neutral-900/80 border border-white/10 rounded-2xl overflow-hidden transition-all hover:border-red-600 hover:shadow-[0_0_30px_rgba(220,38,38,0.3)] flex flex-col">
-                {/* Feature 1: Background Image of Agent */}
                 {selectedAgent && agentImage && (
                     <div className="absolute inset-0 z-0">
                         <img src={agentImage} alt={selectedAgent} className="w-full h-full object-cover opacity-40 group-hover:opacity-60 transition-opacity mix-blend-luminosity" style={{ objectPosition: 'center top' }} />
@@ -275,12 +266,9 @@ function TeamComps({ members }) {
 
                 <div onClick={() => setActiveDropdown(isOpen ? null : index)} className="flex-1 relative flex flex-col justify-center items-center p-4 z-10 border-b border-white/5 cursor-pointer">
                     <label className="text-[10px] font-black text-red-500 uppercase tracking-[0.2em] mb-3 z-20 drop-shadow-md">Role {index + 1}</label>
-
                     {selectedAgent ? (
                         <div className="flex flex-col items-center animate-fade-in-up z-20">
-                            <div className="text-3xl sm:text-4xl font-black text-white uppercase tracking-tighter drop-shadow-[0_0_10px_rgba(0,0,0,0.8)]">
-                                {selectedAgent}
-                            </div>
+                            <div className="text-3xl sm:text-4xl font-black text-white uppercase tracking-tighter drop-shadow-[0_0_10px_rgba(0,0,0,0.8)]">{selectedAgent}</div>
                             <div className="mt-2 h-0.5 w-8 bg-red-600 rounded-full shadow-[0_0_8px_red]"></div>
                         </div>
                     ) : (
@@ -338,7 +326,6 @@ function TeamComps({ members }) {
 }
 
 function AdminPanel() {
-    // ... (No changes needed here, logic maintained)
     const [applications, setApplications] = useState([]);
     useEffect(() => { const unsub = onSnapshot(collection(db, 'applications'), (snap) => { const apps = []; snap.forEach(doc => apps.push({ id: doc.id, ...doc.data() })); setApplications(apps); }); return () => unsub(); }, []);
     const acceptApplicant = async (app) => { await setDoc(doc(db, 'roster', app.user), { rank: app.rank, role: 'Tryout', notes: `Tracker: ${app.tracker}\nWhy: ${app.why}`, joinedAt: new Date().toISOString() }); await deleteDoc(doc(db, 'applications', app.id)); };
@@ -351,7 +338,7 @@ function AdminPanel() {
     );
 }
 
-// ... (ProfileModal, ApplicationForm, MapVeto, CaptainsMessage remain same structure, just concise)
+// ... (ProfileModal, ApplicationForm, MapVeto, CaptainsMessage remain same as v4.0)
 function ProfileModal({ isOpen, onClose, currentUser }) {
     const [rank, setRank] = useState("Unranked"); const [agents, setAgents] = useState(""); const [status, setStatus] = useState("idle");
     const handleSave = async () => { setStatus("saving"); try { await setDoc(doc(db, 'roster', currentUser.displayName), { rank, agents }, { merge: true }); setStatus("success"); setTimeout(() => { setStatus("idle"); onClose(); }, 1000); } catch (e) { console.error(e); setStatus("idle"); } };
@@ -380,7 +367,6 @@ function CaptainsMessage() {
     return (<div className="bg-gradient-to-br from-red-950 to-black p-6 rounded-3xl border border-red-900/50 shadow-xl"><div className="flex justify-between items-center mb-2"><h2 className="text-lg font-black text-white">📢 CAPTAIN'S MESSAGE</h2>{!isEditing && <button onClick={() => { setDraft(message.text); setIsEditing(true) }} className="text-xs text-neutral-400">Edit</button>}</div>{isEditing ? <div><textarea value={draft} onChange={e => setDraft(e.target.value)} className="w-full bg-black p-2 text-white mb-2" /><ButtonPrimary onClick={handleSave} className="text-xs py-2">Post</ButtonPrimary></div> : <p className="text-slate-200 text-sm whitespace-pre-wrap">"{message.text}"</p>}</div>);
 }
 
-// --- UPDATED: Performance Widget with Atk/Def Stats (Feature 7) ---
 function PerformanceWidget({ events }) {
     const stats = useMemo(() => {
         let wins = 0, losses = 0, draws = 0;
@@ -421,14 +407,38 @@ function PerformanceWidget({ events }) {
     );
 }
 
-// --- NEW: Stratbook with Canvas Drawing (Feature 5) ---
+// --- UPDATED: StratBook with Canvas + External Links (Feature 5) ---
 function StratBook() {
     const [selectedMap, setSelectedMap] = useState(MAPS[0]);
     const canvasRef = useRef(null);
     const [isDrawing, setIsDrawing] = useState(false);
-    const { mapImages } = useValorantData(); // Feature 1 map images
-    const [color, setColor] = useState('#ef4444'); // Red default
+    const { mapImages } = useValorantData();
+    const [color, setColor] = useState('#ef4444');
 
+    // External Links State
+    const [links, setLinks] = useState([]);
+    const [newLink, setNewLink] = useState({ title: '', url: '' });
+
+    // Fetch Links
+    useEffect(() => {
+        const q = query(collection(db, 'strat_links'), where("map", "==", selectedMap));
+        const unsub = onSnapshot(q, (snap) => {
+            const l = [];
+            snap.forEach(doc => l.push({ id: doc.id, ...doc.data() }));
+            setLinks(l);
+        });
+        return () => unsub();
+    }, [selectedMap]);
+
+    const addLink = async () => {
+        if (!newLink.title || !newLink.url) return;
+        await addDoc(collection(db, 'strat_links'), { ...newLink, map: selectedMap });
+        setNewLink({ title: '', url: '' });
+    };
+
+    const deleteLink = async (id) => await deleteDoc(doc(db, 'strat_links', id));
+
+    // Canvas Logic
     const startDraw = (e) => {
         const ctx = canvasRef.current.getContext('2d');
         ctx.beginPath();
@@ -454,39 +464,60 @@ function StratBook() {
     };
 
     return (
-        <Card className="h-full flex flex-col">
-            <div className="flex justify-between items-center mb-4">
-                <h3 className="text-2xl font-black text-white">TACTICAL BOARD</h3>
-                <div className="flex gap-2">
-                    <button onClick={() => setColor('#ef4444')} className="w-6 h-6 rounded-full bg-red-500 border border-white"></button>
-                    <button onClick={() => setColor('#3b82f6')} className="w-6 h-6 rounded-full bg-blue-500 border border-white"></button>
-                    <button onClick={() => setColor('#ffffff')} className="w-6 h-6 rounded-full bg-white border border-white"></button>
-                    <ButtonSecondary onClick={clearCanvas} className="text-xs py-1 px-3">Clear</ButtonSecondary>
-                    <ButtonPrimary onClick={saveStrat} className="text-xs py-1 px-3">Save</ButtonPrimary>
+        <div className="h-full flex flex-col gap-6">
+            <Card className="flex-1 flex flex-col">
+                <div className="flex justify-between items-center mb-4">
+                    <h3 className="text-2xl font-black text-white">TACTICAL BOARD</h3>
+                    <div className="flex gap-2">
+                        <button onClick={() => setColor('#ef4444')} className="w-6 h-6 rounded-full bg-red-500 border border-white"></button>
+                        <button onClick={() => setColor('#3b82f6')} className="w-6 h-6 rounded-full bg-blue-500 border border-white"></button>
+                        <button onClick={() => setColor('#ffffff')} className="w-6 h-6 rounded-full bg-white border border-white"></button>
+                        <ButtonSecondary onClick={clearCanvas} className="text-xs py-1 px-3">Clear</ButtonSecondary>
+                        <ButtonPrimary onClick={saveStrat} className="text-xs py-1 px-3">Save</ButtonPrimary>
+                    </div>
                 </div>
-            </div>
-            <div className="flex overflow-x-auto gap-2 pb-4 mb-4">{MAPS.map(m => <button key={m} onClick={() => { setSelectedMap(m); clearCanvas(); }} className={`px-3 py-1 rounded-full text-xs font-bold ${selectedMap === m ? 'bg-red-600 text-white' : 'bg-black text-neutral-500'}`}>{m}</button>)}</div>
+                <div className="flex overflow-x-auto gap-2 pb-4 mb-4">{MAPS.map(m => <button key={m} onClick={() => { setSelectedMap(m); clearCanvas(); }} className={`px-3 py-1 rounded-full text-xs font-bold ${selectedMap === m ? 'bg-red-600 text-white' : 'bg-black text-neutral-500'}`}>{m}</button>)}</div>
 
-            <div className="relative flex-1 bg-black rounded-2xl overflow-hidden border border-neutral-800">
-                {/* Background Map Image */}
-                {mapImages[selectedMap] && <img src={mapImages[selectedMap]} alt="Map" className="absolute inset-0 w-full h-full object-cover opacity-50 pointer-events-none" />}
-                <canvas
-                    ref={canvasRef}
-                    width={800}
-                    height={450}
-                    className="absolute inset-0 w-full h-full cursor-crosshair z-10"
-                    onMouseDown={startDraw}
-                    onMouseMove={draw}
-                    onMouseUp={stopDraw}
-                    onMouseLeave={stopDraw}
-                />
-            </div>
-        </Card>
+                <div className="relative flex-1 bg-neutral-900 rounded-2xl overflow-hidden border border-neutral-800">
+                    {/* Background Map Image (DisplayIcon) */}
+                    {mapImages[selectedMap] && <img src={mapImages[selectedMap]} alt="Map" className="absolute inset-0 w-full h-full object-contain opacity-70 pointer-events-none" />}
+                    <canvas
+                        ref={canvasRef}
+                        width={800}
+                        height={450}
+                        className="absolute inset-0 w-full h-full cursor-crosshair z-10"
+                        onMouseDown={startDraw}
+                        onMouseMove={draw}
+                        onMouseUp={stopDraw}
+                        onMouseLeave={stopDraw}
+                    />
+                </div>
+            </Card>
+
+            {/* External Links Section */}
+            <Card>
+                <h4 className="text-lg font-bold text-white mb-4">EXTERNAL STRATEGY LINKS ({selectedMap})</h4>
+                <div className="flex gap-2 mb-4">
+                    <Input placeholder="Title (e.g. A Split - Valoplant)" value={newLink.title} onChange={e => setNewLink({ ...newLink, title: e.target.value })} className="flex-1" />
+                    <Input placeholder="URL" value={newLink.url} onChange={e => setNewLink({ ...newLink, url: e.target.value })} className="flex-1" />
+                    <ButtonPrimary onClick={addLink} className="text-xs py-2">Add Link</ButtonPrimary>
+                </div>
+                <div className="space-y-2 max-h-40 overflow-y-auto custom-scrollbar">
+                    {links.length === 0 && <p className="text-neutral-500 italic text-sm">No links added for {selectedMap}.</p>}
+                    {links.map(link => (
+                        <div key={link.id} className="flex justify-between items-center bg-black/50 p-3 rounded-lg border border-neutral-800 hover:border-red-900 transition-colors">
+                            <a href={link.url} target="_blank" rel="noreferrer" className="text-red-500 font-bold hover:underline text-sm">{link.title}</a>
+                            <button onClick={() => deleteLink(link.id)} className="text-neutral-600 hover:text-red-500">×</button>
+                        </div>
+                    ))}
+                </div>
+            </Card>
+        </div>
     );
 }
 
-// --- UPDATED: Match History with Atk/Def & Stamps (Feature 4 & 7) ---
 function MatchHistory() {
+    // ... (Same as v4.0)
     const [matches, setMatches] = useState([]);
     const [isAdding, setIsAdding] = useState(false);
     const [expandedId, setExpandedId] = useState(null); // For stamps
@@ -504,9 +535,16 @@ function MatchHistory() {
         setIsAdding(false);
     };
 
+    const getResultColor = (my, enemy) => {
+        const m = parseInt(my); const e = parseInt(enemy);
+        if (m > e) return 'border-l-4 border-l-green-500';
+        if (m < e) return 'border-l-4 border-l-red-600';
+        return 'border-l-4 border-l-neutral-500';
+    };
+
     return (
         <Card>
-            <div className="flex justify-between mb-6"><h3 className="text-2xl font-black text-white">MATCH HISTORY</h3><ButtonSecondary onClick={() => setIsAdding(!isAdding)} className="text-xs">{isAdding ? 'Cancel' : '+ Log Match'}</ButtonSecondary></div>
+            <div className="flex justify-between items-center mb-6"><h3 className="text-2xl font-black text-white flex items-center gap-3"><span className="text-red-600">MATCH</span> HISTORY</h3><ButtonSecondary onClick={() => setIsAdding(!isAdding)} className="text-xs">{isAdding ? 'Cancel' : '+ Log Match'}</ButtonSecondary></div>
             {isAdding && (
                 <div className="mb-6 bg-black/50 p-4 rounded-xl border border-white/10 space-y-2">
                     <div className="grid grid-cols-2 gap-2"><Input placeholder="Opponent" value={newMatch.opponent} onChange={e => setNewMatch({ ...newMatch, opponent: e.target.value })} /><Input type="date" value={newMatch.date} onChange={e => setNewMatch({ ...newMatch, date: e.target.value })} className="[color-scheme:dark]" /></div>
@@ -553,15 +591,14 @@ function MatchHistory() {
     );
 }
 
-// --- UPDATED: Roster Manager with Comparison (Feature 8) ---
 function RosterManager({ members }) {
+    // ... (Same as v4.0)
     const [rosterData, setRosterData] = useState({});
     const [mode, setMode] = useState('edit'); // 'edit' or 'compare'
     const [compare1, setCompare1] = useState('');
     const [compare2, setCompare2] = useState('');
     const [selectedMember, setSelectedMember] = useState(null);
 
-    // ... (Edit Logic Same as before)
     const [role, setRole] = useState('Tryout'); const [gameId, setGameId] = useState(''); const [notes, setNotes] = useState('');
     useEffect(() => { const unsub = onSnapshot(collection(db, 'roster'), (snap) => { const data = {}; snap.forEach(doc => data[doc.id] = doc.data()); setRosterData(data); }); return () => unsub(); }, []);
     const handleSave = async () => { if (!selectedMember) return; await setDoc(doc(db, 'roster', selectedMember), { role, notes, gameId }, { merge: true }); };
@@ -601,7 +638,6 @@ function RosterManager({ members }) {
                     </Card>
                 </div>
             ) : (
-                // FEATURE 8: COMPARISON VIEW
                 <div className="grid grid-cols-2 gap-8 h-full">
                     {[setCompare1, setCompare2].map((setter, i) => (
                         <Card key={i} className="h-full">
@@ -675,6 +711,7 @@ export default function App() {
     const saveAvail = async () => { if (timeToMinutes(end) <= timeToMinutes(start)) return openModal('Error', 'Invalid time.', () => setIsModalOpen(false)); setSaveStatus('saving'); const gs = convertToGMT(day, start); const ge = convertToGMT(day, end); const old = availabilities[currentUser.displayName] || []; const others = old.filter(s => convertFromGMT(s.day, s.start, userTimezone).day !== day); await setDoc(doc(db, 'availabilities', currentUser.displayName), { slots: [...others, { day: gs.day, start: gs.time, end: ge.time, role }] }); setSaveStatus('idle'); };
     const clearDay = async () => { const old = availabilities[currentUser.displayName] || []; await setDoc(doc(db, 'availabilities', currentUser.displayName), { slots: old.filter(s => convertFromGMT(s.day, s.start, userTimezone).day !== day) }); setIsModalOpen(false); };
     const schedEvent = async (d) => { await addDoc(collection(db, 'events'), d); try { await fetch(discordWebhookUrl, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ embeds: [{ title: `New Event: ${d.type}`, description: `vs ${d.opponent} on ${d.date} @ ${d.time}` }] }) }); } catch (e) { } };
+    const deleteEvent = async (id) => { await deleteDoc(doc(db, 'events', id)); setIsModalOpen(false); };
 
     if (authLoading) return <div className="fixed inset-0 bg-black flex items-center justify-center text-red-600 font-black text-2xl animate-pulse">LOADING SYRIX...</div>;
     if (!currentUser) return <LoginScreen signIn={signIn} />;
