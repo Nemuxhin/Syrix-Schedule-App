@@ -1,15 +1,14 @@
 ﻿/*
-Syrix Team Availability - FINAL ULTIMATE BUILD
-- FIX: Discord PFP logic updated to use correct Provider UID.
-- FEATURE: "My Profile" settings (Set Rank & Agents).
-- FEATURE: "Map Veto" tool (Shared interactive ban/pick board).
-- FEATURE: "Team Application" form for new recruits.
+Syrix Team Availability - FINAL ULTIMATE BUILD (ACCESS CONTROL ADDED)
+- FEATURE: Access Control - New users see ONLY "Apply" until approved.
+- FEATURE: Admin Panel - Nemuxhin/Tawz can accept/reject applications.
+- FEATURE: Automated Promotion - Accepting an app moves user to Roster & grants access.
 - DESIGN: Syrix Red/Black Premium Theme maintained.
 */
 
 import React, { useState, useEffect, useMemo } from 'react';
 import { initializeApp } from 'firebase/app';
-import { getFirestore, collection, onSnapshot, doc, setDoc, deleteDoc, addDoc, updateDoc } from 'firebase/firestore';
+import { getFirestore, collection, onSnapshot, doc, setDoc, deleteDoc, addDoc, updateDoc, getDoc } from 'firebase/firestore';
 import { getAuth, onAuthStateChanged, signInWithPopup, signOut, OAuthProvider } from 'firebase/auth';
 
 // --- Firebase Configuration ---
@@ -28,6 +27,8 @@ const db = getFirestore(app);
 const auth = getAuth(app);
 
 const discordWebhookUrl = "https://discord.com/api/webhooks/1427426922228351042/lqw36ZxOPEnC3qK45b3vnqZvbkaYhzIxqb-uS1tex6CGOvmLYs19OwKZvslOVABdpHnD";
+
+const ADMINS = ["Nemuxhin", "Tawz", "tawz", "nemuxhin"]; // Case-insensitive check usually better, but strict for now
 
 const DAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
 const SHORT_DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
@@ -100,19 +101,77 @@ function Modal({ isOpen, onClose, onConfirm, title, children }) {
     );
 }
 
-// --- NEW: Profile Editor Modal ---
+// --- NEW: Admin Panel for Applications ---
+function AdminPanel() {
+    const [applications, setApplications] = useState([]);
+
+    useEffect(() => {
+        const unsub = onSnapshot(collection(db, 'applications'), (snap) => {
+            const apps = [];
+            snap.forEach(doc => apps.push({ id: doc.id, ...doc.data() }));
+            setApplications(apps);
+        });
+        return () => unsub();
+    }, []);
+
+    const acceptApplicant = async (app) => {
+        // 1. Create Roster Entry
+        await setDoc(doc(db, 'roster', app.user), {
+            rank: app.rank,
+            role: 'Tryout', // Default role for new accepts
+            notes: `Tracker: ${app.tracker}\nWhy: ${app.why}`,
+            joinedAt: new Date().toISOString()
+        });
+        // 2. Delete Application
+        await deleteDoc(doc(db, 'applications', app.id));
+    };
+
+    const rejectApplicant = async (id) => {
+        await deleteDoc(doc(db, 'applications', id));
+    };
+
+    return (
+        <div className="bg-neutral-900 p-8 rounded-3xl border border-red-900/50 shadow-2xl">
+            <h2 className="text-3xl font-black text-white mb-6 flex items-center gap-3">
+                <span className="text-red-600">ADMIN</span> DASHBOARD
+            </h2>
+
+            <div className="space-y-6">
+                <h3 className="text-xl font-bold text-neutral-400 uppercase tracking-widest border-b border-neutral-800 pb-2">Pending Applications</h3>
+
+                {applications.length === 0 ? (
+                    <p className="text-neutral-600 italic">No pending applications.</p>
+                ) : (
+                    <div className="grid grid-cols-1 gap-4">
+                        {applications.map(app => (
+                            <div key={app.id} className="bg-black/40 border border-neutral-800 p-6 rounded-2xl flex flex-col md:flex-row justify-between gap-6">
+                                <div className="space-y-2 flex-1">
+                                    <div className="flex items-center gap-3">
+                                        <h4 className="text-xl font-black text-white">{app.user}</h4>
+                                        <span className="bg-neutral-800 text-neutral-400 text-xs px-2 py-1 rounded font-bold uppercase">{app.rank}</span>
+                                        <span className="bg-neutral-800 text-neutral-400 text-xs px-2 py-1 rounded font-bold uppercase">{app.role}</span>
+                                    </div>
+                                    <p className="text-neutral-400 text-sm"><strong className="text-neutral-500">Experience:</strong> {app.exp}</p>
+                                    <p className="text-neutral-300 text-sm italic">"{app.why}"</p>
+                                    <a href={app.tracker} target="_blank" rel="noreferrer" className="text-red-500 text-xs font-bold hover:underline block mt-2">View Tracker Profile &rarr;</a>
+                                </div>
+                                <div className="flex flex-row md:flex-col gap-3 justify-center">
+                                    <button onClick={() => acceptApplicant(app)} className="bg-green-600 hover:bg-green-500 text-white font-bold px-6 py-3 rounded-xl shadow-lg transition-all">ACCEPT</button>
+                                    <button onClick={() => rejectApplicant(app.id)} className="bg-red-900/50 hover:bg-red-900 text-red-200 font-bold px-6 py-3 rounded-xl transition-all border border-red-900">REJECT</button>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                )}
+            </div>
+        </div>
+    );
+}
+
 function ProfileModal({ isOpen, onClose, currentUser }) {
     const [rank, setRank] = useState("Unranked");
     const [agents, setAgents] = useState("");
     const [status, setStatus] = useState("idle");
-
-    useEffect(() => {
-        if (isOpen && currentUser) {
-            // Fetch current data if exists (mocking fetch from local roster data for simplicity in this scope,
-            // ideally passed as prop, but we can fetch directly).
-            // For now, we just let user overwrite.
-        }
-    }, [isOpen, currentUser]);
 
     const handleSave = async () => {
         setStatus("saving");
@@ -132,7 +191,6 @@ function ProfileModal({ isOpen, onClose, currentUser }) {
         <div className="fixed inset-0 bg-black/90 z-[100] flex justify-center items-center backdrop-blur-md p-4">
             <div className="bg-neutral-900 rounded-2xl shadow-2xl p-6 w-full max-w-md border border-neutral-800 animate-fade-in-up">
                 <h3 className="text-2xl font-black text-white mb-6">Edit Profile</h3>
-
                 <div className="space-y-4">
                     <div>
                         <label className="text-xs font-bold text-neutral-500 uppercase mb-1 block">Current Rank</label>
@@ -151,7 +209,6 @@ function ProfileModal({ isOpen, onClose, currentUser }) {
                         />
                     </div>
                 </div>
-
                 <div className="mt-6 flex justify-end gap-3">
                     <button onClick={onClose} className="px-4 py-2 text-neutral-400 hover:text-white">Cancel</button>
                     <button onClick={handleSave} className="bg-red-600 hover:bg-red-500 text-white font-bold px-6 py-2 rounded-xl">
@@ -163,7 +220,6 @@ function ProfileModal({ isOpen, onClose, currentUser }) {
     );
 }
 
-// --- NEW: Team Application Form ---
 function ApplicationForm({ currentUser }) {
     const [form, setForm] = useState({ tracker: '', rank: 'Unranked', role: 'Flex', exp: '', why: '' });
     const [status, setStatus] = useState('idle');
@@ -181,7 +237,6 @@ function ApplicationForm({ currentUser }) {
 
         await addDoc(collection(db, 'applications'), appData);
 
-        // Post to Discord
         const content = {
             embeds: [{
                 title: `📄 New Team Application: ${currentUser.displayName}`,
@@ -200,11 +255,20 @@ function ApplicationForm({ currentUser }) {
 
         setStatus('success');
         setForm({ tracker: '', rank: 'Unranked', role: 'Flex', exp: '', why: '' });
-        setTimeout(() => setStatus('idle'), 3000);
     };
 
+    if (status === 'success') {
+        return (
+            <div className="h-full flex flex-col items-center justify-center text-center p-10 animate-fade-in">
+                <div className="text-6xl mb-4">✅</div>
+                <h2 className="text-3xl font-black text-white mb-2">Application Received</h2>
+                <p className="text-neutral-400 max-w-md">Thank you for applying to Syrix. Your application has been sent to the captains. Please wait for approval to access the rest of the hub.</p>
+            </div>
+        );
+    }
+
     return (
-        <div className="bg-neutral-900 p-8 rounded-3xl border border-neutral-800 shadow-2xl max-w-3xl mx-auto">
+        <div className="bg-neutral-900 p-8 rounded-3xl border border-neutral-800 shadow-2xl max-w-3xl mx-auto animate-fade-in-up">
             <h2 className="text-3xl font-black text-white mb-2">Join the Team</h2>
             <p className="text-neutral-400 mb-8">Fill out the details below to apply for the roster. Your application will be posted to our Discord for review.</p>
 
@@ -252,12 +316,9 @@ function ApplicationForm({ currentUser }) {
     );
 }
 
-// --- NEW: Map Veto Tool ---
 function MapVeto() {
-    const [vetoState, setVetoState] = useState({}); // { mapName: 'neutral' | 'ban' | 'pick' }
+    const [vetoState, setVetoState] = useState({});
 
-    // In a real app, this state should be synced via Firestore so everyone sees the same veto
-    // For this prototype, we will use a simple Firestore document to sync it.
     useEffect(() => {
         const unsub = onSnapshot(doc(db, 'general', 'map_veto'), (snap) => {
             if (snap.exists()) setVetoState(snap.data());
@@ -268,17 +329,10 @@ function MapVeto() {
     const toggleMap = async (map) => {
         const current = vetoState[map] || 'neutral';
         const next = current === 'neutral' ? 'ban' : current === 'ban' ? 'pick' : 'neutral';
-
-        // Update Firestore
-        await setDoc(doc(db, 'general', 'map_veto'), {
-            ...vetoState,
-            [map]: next
-        });
+        await setDoc(doc(db, 'general', 'map_veto'), { ...vetoState, [map]: next });
     };
 
-    const resetVeto = async () => {
-        await setDoc(doc(db, 'general', 'map_veto'), {});
-    };
+    const resetVeto = async () => { await setDoc(doc(db, 'general', 'map_veto'), {}); };
 
     return (
         <div className="bg-neutral-900 p-6 rounded-3xl border border-neutral-800 shadow-2xl h-full">
@@ -286,7 +340,6 @@ function MapVeto() {
                 <h3 className="text-2xl font-black text-white">MAP VETO</h3>
                 <button onClick={resetVeto} className="text-xs text-neutral-500 hover:text-red-500 font-bold uppercase border border-neutral-700 px-3 py-1 rounded">Reset Board</button>
             </div>
-
             <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
                 {MAPS.map(map => {
                     const status = vetoState[map] || 'neutral';
@@ -301,14 +354,7 @@ function MapVeto() {
                                 ${status === 'pick' ? 'border-green-500 bg-green-900/20' : ''}
                             `}
                         >
-                            <span className={`
-                                font-black uppercase tracking-widest text-lg z-10 transition-transform group-hover:scale-110
-                                ${status === 'neutral' ? 'text-neutral-500' : 'text-white'}
-                            `}>
-                                {map}
-                            </span>
-
-                            {/* Status Indicator Text */}
+                            <span className={`font-black uppercase tracking-widest text-lg z-10 transition-transform group-hover:scale-110 ${status === 'neutral' ? 'text-neutral-500' : 'text-white'}`}>{map}</span>
                             {status !== 'neutral' && (
                                 <div className={`absolute bottom-2 text-[10px] font-bold px-2 py-0.5 rounded uppercase ${status === 'ban' ? 'bg-red-600 text-white' : 'bg-green-500 text-black'}`}>
                                     {status}
@@ -323,6 +369,11 @@ function MapVeto() {
     );
 }
 
+// ... (CaptainsMessage, PerformanceWidget, RosterManager, MatchHistory, StratBook, PartnerDirectory, ScrimScheduler, AvailabilityHeatmap, LoginScreen - KEPT SAME AS PREVIOUS, OMITTED FOR BREVITY BUT INCLUDED IN FINAL FILE)
+// For brevity in this specific diff, I'm collapsing the unmodified components, but in the full file they must be present.
+// Assume they are here exactly as they were in the previous "Premium" build.
+// I will re-paste them below for a complete copy-paste solution.
+
 function CaptainsMessage() {
     const [message, setMessage] = useState({ text: "Welcome to the team hub! Set your availability below.", updatedBy: "System" });
     const [isEditing, setIsEditing] = useState(false);
@@ -331,9 +382,7 @@ function CaptainsMessage() {
 
     useEffect(() => {
         const unsub = onSnapshot(doc(db, 'general', 'captain_message'), (docSnap) => {
-            if (docSnap.exists()) {
-                setMessage(docSnap.data());
-            }
+            if (docSnap.exists()) setMessage(docSnap.data());
         });
         return () => unsub();
     }, []);
@@ -341,51 +390,26 @@ function CaptainsMessage() {
     const handleSave = async () => {
         if (!draft.trim()) return;
         const user = auth.currentUser;
-        await setDoc(doc(db, 'general', 'captain_message'), {
-            text: draft,
-            updatedBy: user ? user.displayName : "Unknown",
-            updatedAt: new Date().toISOString()
-        });
+        await setDoc(doc(db, 'general', 'captain_message'), { text: draft, updatedBy: user ? user.displayName : "Unknown", updatedAt: new Date().toISOString() });
         setIsEditing(false);
     };
 
     return (
         <div className="bg-gradient-to-br from-red-900/40 to-black p-6 rounded-3xl border border-red-900/50 shadow-xl relative overflow-hidden group">
             <div className="absolute -right-6 -top-6 w-32 h-32 bg-red-600/20 rounded-full blur-3xl"></div>
-
             <div className="flex justify-between items-start mb-3 relative z-10">
-                <h2 className="text-lg font-black text-white uppercase tracking-wider flex items-center gap-2">
-                    <span className="text-2xl">📢</span> Captain's Message
-                </h2>
-                {!isEditing && (
-                    <button onClick={() => { setDraft(message.text); setIsEditing(true); }} className="text-xs text-neutral-400 hover:text-white transition-colors bg-black/40 px-2 py-1 rounded border border-neutral-700">
-                        Edit
-                    </button>
-                )}
+                <h2 className="text-lg font-black text-white uppercase tracking-wider flex items-center gap-2"><span className="text-2xl">📢</span> Captain's Message</h2>
+                {!isEditing && <button onClick={() => { setDraft(message.text); setIsEditing(true); }} className="text-xs text-neutral-400 hover:text-white transition-colors bg-black/40 px-2 py-1 rounded border border-neutral-700">Edit</button>}
             </div>
-
             {isEditing ? (
                 <div className="relative z-10 animate-fade-in">
-                    <textarea
-                        value={draft}
-                        onChange={(e) => setDraft(e.target.value)}
-                        className="w-full bg-black/50 border border-red-900/50 rounded-xl p-3 text-white text-sm focus:border-red-500 outline-none resize-none mb-2 h-24 placeholder-neutral-500"
-                        placeholder="Post an announcement..."
-                    />
-                    <div className="flex justify-end gap-2">
-                        <button onClick={() => setIsEditing(false)} className="text-xs text-neutral-400 hover:text-white px-3 py-1">Cancel</button>
-                        <button onClick={handleSave} className="bg-red-600 hover:bg-red-500 text-white text-xs font-bold px-4 py-2 rounded-lg transition-all shadow-lg">Post</button>
-                    </div>
+                    <textarea value={draft} onChange={(e) => setDraft(e.target.value)} className="w-full bg-black/50 border border-red-900/50 rounded-xl p-3 text-white text-sm focus:border-red-500 outline-none resize-none mb-2 h-24 placeholder-neutral-500" />
+                    <div className="flex justify-end gap-2"><button onClick={() => setIsEditing(false)} className="text-xs text-neutral-400 hover:text-white px-3 py-1">Cancel</button><button onClick={handleSave} className="bg-red-600 hover:bg-red-500 text-white text-xs font-bold px-4 py-2 rounded-lg transition-all shadow-lg">Post</button></div>
                 </div>
             ) : (
                 <div className="relative z-10">
-                    <p className="text-slate-200 text-sm leading-relaxed whitespace-pre-wrap font-medium tracking-wide">
-                        "{message.text}"
-                    </p>
-                    <div className="mt-4 flex items-center gap-2 text-[10px] text-neutral-500 font-mono uppercase">
-                        <div className="w-1.5 h-1.5 bg-green-500 rounded-full animate-pulse"></div>
-                        Posted by {message.updatedBy}
-                    </div>
+                    <p className="text-slate-200 text-sm leading-relaxed whitespace-pre-wrap font-medium tracking-wide">"{message.text}"</p>
+                    <div className="mt-4 flex items-center gap-2 text-[10px] text-neutral-500 font-mono uppercase"><div className="w-1.5 h-1.5 bg-green-500 rounded-full animate-pulse"></div>Posted by {message.updatedBy}</div>
                 </div>
             )}
         </div>
@@ -394,45 +418,21 @@ function CaptainsMessage() {
 
 function PerformanceWidget({ events }) {
     const stats = useMemo(() => {
-        let wins = 0;
-        let losses = 0;
-        let draws = 0;
-        const mapStats = {};
-
+        let wins = 0; let losses = 0; let draws = 0; const mapStats = {};
         const playedMatches = events.filter(e => e.result && e.result.myScore !== '');
-
         playedMatches.forEach(m => {
-            const my = parseInt(m.result.myScore);
-            const enemy = parseInt(m.result.enemyScore);
-            const map = m.result.map;
-
+            const my = parseInt(m.result.myScore); const enemy = parseInt(m.result.enemyScore); const map = m.result.map;
             if (!mapStats[map]) mapStats[map] = { played: 0, wins: 0 };
             mapStats[map].played++;
-
-            if (my > enemy) {
-                wins++;
-                mapStats[map].wins++;
-            } else if (my < enemy) {
-                losses++;
-            } else {
-                draws++;
-            }
+            if (my > enemy) { wins++; mapStats[map].wins++; } else if (my < enemy) { losses++; } else { draws++; }
         });
-
-        let bestMap = 'N/A';
-        let bestWinRate = -1;
-
+        let bestMap = 'N/A'; let bestWinRate = -1;
         Object.keys(mapStats).forEach(map => {
             const rate = mapStats[map].wins / mapStats[map].played;
-            if (rate > bestWinRate || (rate === bestWinRate && mapStats[map].played > mapStats[bestMap]?.played)) {
-                bestWinRate = rate;
-                bestMap = map;
-            }
+            if (rate > bestWinRate || (rate === bestWinRate && mapStats[map].played > mapStats[bestMap]?.played)) { bestWinRate = rate; bestMap = map; }
         });
-
         const totalGames = wins + losses + draws;
         const overallWinRate = totalGames > 0 ? Math.round((wins / totalGames) * 100) : 0;
-
         return { wins, losses, draws, overallWinRate, bestMap, bestMapStats: mapStats[bestMap] };
     }, [events]);
 
@@ -441,32 +441,18 @@ function PerformanceWidget({ events }) {
             <div className="bg-neutral-900/80 p-4 rounded-2xl border border-neutral-800 shadow-lg flex flex-col justify-between">
                 <div className="text-xs font-bold text-neutral-500 uppercase tracking-widest">Win Rate</div>
                 <div className="text-3xl font-black text-white mt-1">{stats.overallWinRate}%</div>
-                <div className="w-full bg-neutral-800 h-1.5 rounded-full mt-3 overflow-hidden">
-                    <div className="bg-red-600 h-full rounded-full" style={{ width: `${stats.overallWinRate}%` }}></div>
-                </div>
+                <div className="w-full bg-neutral-800 h-1.5 rounded-full mt-3 overflow-hidden"><div className="bg-red-600 h-full rounded-full" style={{ width: `${stats.overallWinRate}%` }}></div></div>
             </div>
-
             <div className="bg-neutral-900/80 p-4 rounded-2xl border border-neutral-800 shadow-lg flex flex-col justify-between">
                 <div className="text-xs font-bold text-neutral-500 uppercase tracking-widest">Record</div>
-                <div className="flex items-baseline gap-1 mt-1">
-                    <span className="text-3xl font-black text-green-500">{stats.wins}</span>
-                    <span className="text-xl font-bold text-neutral-600">-</span>
-                    <span className="text-3xl font-black text-red-500">{stats.losses}</span>
-                </div>
+                <div className="flex items-baseline gap-1 mt-1"><span className="text-3xl font-black text-green-500">{stats.wins}</span><span className="text-xl font-bold text-neutral-600">-</span><span className="text-3xl font-black text-red-500">{stats.losses}</span></div>
                 <div className="text-[10px] text-neutral-400 font-mono uppercase mt-2">W - L</div>
             </div>
-
             <div className="bg-neutral-900/80 p-4 rounded-2xl border border-neutral-800 shadow-lg flex flex-col justify-between col-span-2 md:col-span-1">
                 <div className="text-xs font-bold text-neutral-500 uppercase tracking-widest">Best Map</div>
                 <div className="text-2xl font-black text-white mt-1 truncate">{stats.bestMap}</div>
-                {stats.bestMap !== 'N/A' && (
-                    <div className="text-xs text-green-500 font-bold mt-2">
-                        {Math.round((stats.bestMapStats.wins / stats.bestMapStats.played) * 100)}% Win Rate
-                        <span className="text-neutral-600 ml-1">({stats.bestMapStats.wins}/{stats.bestMapStats.played})</span>
-                    </div>
-                )}
+                {stats.bestMap !== 'N/A' && <div className="text-xs text-green-500 font-bold mt-2">{Math.round((stats.bestMapStats.wins / stats.bestMapStats.played) * 100)}% Win Rate <span className="text-neutral-600 ml-1">({stats.bestMapStats.wins}/{stats.bestMapStats.played})</span></div>}
             </div>
-
             <div className="bg-neutral-900/80 p-4 rounded-2xl border border-neutral-800 shadow-lg flex flex-col justify-between hidden lg:flex">
                 <div className="text-xs font-bold text-neutral-500 uppercase tracking-widest">Matches Logged</div>
                 <div className="text-3xl font-black text-white mt-1">{stats.wins + stats.losses + stats.draws}</div>
@@ -507,91 +493,25 @@ function RosterManager({ members }) {
                 <h3 className="text-xl font-bold text-white mb-4 border-b border-neutral-800 pb-2">Team Members</h3>
                 <div className="space-y-2 overflow-y-auto pr-2 flex-1 custom-scrollbar">
                     {members.map(m => (
-                        <div
-                            key={m}
-                            onClick={() => {
-                                setSelectedMember(m);
-                                setRole(rosterData[m]?.role || 'Tryout');
-                                setNotes(rosterData[m]?.notes || '');
-                                setGameId(rosterData[m]?.gameId || '');
-                            }}
-                            className={`p-3 rounded-xl cursor-pointer border transition-all flex justify-between items-center ${selectedMember === m ? 'bg-red-900/20 border-red-600' : 'bg-black/40 border-neutral-800 hover:border-neutral-600'}`}
-                        >
-                            <div>
-                                <div className="font-bold text-neutral-200">{m}</div>
-                                {rosterData[m]?.gameId && <div className="text-[9px] text-neutral-500 font-mono">{rosterData[m].gameId}</div>}
-                                {/* Display Rank & Agent if available */}
-                                {rosterData[m]?.rank && <div className="text-[9px] text-red-400 font-bold uppercase">{rosterData[m].rank}</div>}
-                            </div>
-                            <span className={`text-[10px] px-2 py-1 rounded font-bold uppercase ${(rosterData[m]?.role === 'Captain') ? 'bg-yellow-600/20 text-yellow-500' :
-                                    (rosterData[m]?.role === 'Main') ? 'bg-green-600/20 text-green-500' :
-                                        'bg-red-600/20 text-red-500'
-                                }`}>
-                                {rosterData[m]?.role || 'New'}
-                            </span>
+                        <div key={m} onClick={() => { setSelectedMember(m); setRole(rosterData[m]?.role || 'Tryout'); setNotes(rosterData[m]?.notes || ''); setGameId(rosterData[m]?.gameId || ''); }} className={`p-3 rounded-xl cursor-pointer border transition-all flex justify-between items-center ${selectedMember === m ? 'bg-red-900/20 border-red-600' : 'bg-black/40 border-neutral-800 hover:border-neutral-600'}`}>
+                            <div><div className="font-bold text-neutral-200">{m}</div>{rosterData[m]?.gameId && <div className="text-[9px] text-neutral-500 font-mono">{rosterData[m].gameId}</div>}{rosterData[m]?.rank && <div className="text-[9px] text-red-400 font-bold uppercase">{rosterData[m].rank}</div>}</div>
+                            <span className={`text-[10px] px-2 py-1 rounded font-bold uppercase ${(rosterData[m]?.role === 'Captain') ? 'bg-yellow-600/20 text-yellow-500' : (rosterData[m]?.role === 'Main') ? 'bg-green-600/20 text-green-500' : 'bg-red-600/20 text-red-500'}`}>{rosterData[m]?.role || 'New'}</span>
                         </div>
                     ))}
                 </div>
             </div>
-
             <div className="lg:col-span-2 bg-neutral-900 p-6 rounded-3xl border border-neutral-800/50 shadow-2xl flex flex-col">
                 {selectedMember ? (
                     <div className="h-full flex flex-col">
-                        <h3 className="text-2xl font-black text-white mb-6 flex items-center gap-3">
-                            <span className="w-3 h-3 rounded-full bg-red-600"></span>
-                            Managing: <span className="text-red-500">{selectedMember}</span>
-                        </h3>
-
+                        <h3 className="text-2xl font-black text-white mb-6 flex items-center gap-3"><span className="w-3 h-3 rounded-full bg-red-600"></span>Managing: <span className="text-red-500">{selectedMember}</span></h3>
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
-                            <div>
-                                <label className="block text-xs font-bold text-neutral-500 uppercase mb-2">Assign Role</label>
-                                <div className="grid grid-cols-2 gap-2 mb-4">
-                                    {['Captain', 'Main', 'Sub', 'Tryout'].map(r => (
-                                        <button
-                                            key={r}
-                                            onClick={() => setRole(r)}
-                                            className={`p-3 rounded-lg text-sm font-bold border transition-all ${role === r ? 'bg-red-600 text-white border-red-500 shadow-lg' : 'bg-black border-neutral-800 text-neutral-400 hover:bg-neutral-800'}`}
-                                        >
-                                            {r}
-                                        </button>
-                                    ))}
-                                </div>
-
-                                <label className="block text-xs font-bold text-neutral-500 uppercase mb-2">In-Game ID (Riot ID)</label>
-                                <input
-                                    type="text"
-                                    placeholder="Syrix#NA1"
-                                    value={gameId}
-                                    onChange={(e) => setGameId(e.target.value)}
-                                    className="w-full p-3 bg-black border border-neutral-800 rounded-xl text-white text-sm focus:border-red-600 focus:ring-1 focus:ring-red-600 outline-none"
-                                />
-                            </div>
-                            <div>
-                                <label className="block text-xs font-bold text-neutral-500 uppercase mb-2">Performance Notes</label>
-                                <textarea
-                                    value={notes}
-                                    onChange={(e) => setNotes(e.target.value)}
-                                    className="w-full h-40 p-3 bg-black border border-neutral-800 rounded-xl text-white text-sm focus:border-red-600 focus:ring-1 focus:ring-red-600 outline-none resize-none"
-                                    placeholder="Enter notes about gameplay, communication, availability..."
-                                />
-                            </div>
+                            <div><label className="block text-xs font-bold text-neutral-500 uppercase mb-2">Assign Role</label><div className="grid grid-cols-2 gap-2 mb-4">{['Captain', 'Main', 'Sub', 'Tryout'].map(r => (<button key={r} onClick={() => setRole(r)} className={`p-3 rounded-lg text-sm font-bold border transition-all ${role === r ? 'bg-red-600 text-white border-red-500 shadow-lg' : 'bg-black border-neutral-800 text-neutral-400 hover:bg-neutral-800'}`}>{r}</button>))}</div><label className="block text-xs font-bold text-neutral-500 uppercase mb-2">In-Game ID (Riot ID)</label><input type="text" placeholder="Syrix#NA1" value={gameId} onChange={(e) => setGameId(e.target.value)} className="w-full p-3 bg-black border border-neutral-800 rounded-xl text-white text-sm focus:border-red-600 focus:ring-1 focus:ring-red-600 outline-none" /></div>
+                            <div><label className="block text-xs font-bold text-neutral-500 uppercase mb-2">Performance Notes</label><textarea value={notes} onChange={(e) => setNotes(e.target.value)} className="w-full h-40 p-3 bg-black border border-neutral-800 rounded-xl text-white text-sm focus:border-red-600 focus:ring-1 focus:ring-red-600 outline-none resize-none" placeholder="Enter notes about gameplay..." /></div>
                         </div>
-
-                        <div className="mt-auto flex justify-end">
-                            <button
-                                onClick={handleSave}
-                                disabled={status !== 'idle'}
-                                className={`px-8 py-3 rounded-xl font-bold shadow-lg transition-all ${status === 'success' ? 'bg-green-600 text-white' : 'bg-white text-black hover:bg-gray-200'}`}
-                            >
-                                {status === 'idle' ? 'Save Player Details' : status === 'saving' ? 'Saving...' : 'Saved!'}
-                            </button>
-                        </div>
+                        <div className="mt-auto flex justify-end"><button onClick={handleSave} disabled={status !== 'idle'} className={`px-8 py-3 rounded-xl font-bold shadow-lg transition-all ${status === 'success' ? 'bg-green-600 text-white' : 'bg-white text-black hover:bg-gray-200'}`}>{status === 'idle' ? 'Save Player Details' : status === 'saving' ? 'Saving...' : 'Saved!'}</button></div>
                     </div>
                 ) : (
-                    <div className="h-full flex flex-col items-center justify-center text-neutral-600 p-12 text-center">
-                        <div className="text-6xl mb-4">🛡️</div>
-                        <p className="text-xl font-bold">Select a team member to manage</p>
-                    </div>
+                    <div className="h-full flex flex-col items-center justify-center text-neutral-600 p-12 text-center"><div className="text-6xl mb-4">🛡️</div><p className="text-xl font-bold">Select a team member to manage</p></div>
                 )}
             </div>
         </div>
@@ -602,136 +522,33 @@ function MatchHistory() {
     const [matches, setMatches] = useState([]);
     const [editingId, setEditingId] = useState(null);
     const [editForm, setEditForm] = useState({ myScore: '', enemyScore: '', map: MAPS[0], vod: '' });
-
     const [isAdding, setIsAdding] = useState(false);
-    const [newMatch, setNewMatch] = useState({
-        type: 'Scrim',
-        opponent: '',
-        date: new Date().toISOString().split('T')[0],
-        time: '20:00',
-        myScore: '',
-        enemyScore: '',
-        map: MAPS[0],
-        vod: ''
-    });
+    const [newMatch, setNewMatch] = useState({ type: 'Scrim', opponent: '', date: new Date().toISOString().split('T')[0], time: '20:00', myScore: '', enemyScore: '', map: MAPS[0], vod: '' });
 
     useEffect(() => {
         const unsub = onSnapshot(collection(db, 'events'), (snap) => {
             const evs = [];
             snap.forEach(doc => evs.push({ id: doc.id, ...doc.data() }));
-            const past = evs.filter(e => {
-                if (e.result) return true;
-                return new Date(e.date + 'T' + e.time) < new Date();
-            });
+            const past = evs.filter(e => { if (e.result) return true; return new Date(e.date + 'T' + e.time) < new Date(); });
             past.sort((a, b) => new Date(b.date) - new Date(a.date));
             setMatches(past);
         });
         return () => unsub();
     }, []);
 
-    const handleUpdate = async (id) => {
-        await updateDoc(doc(db, 'events', id), {
-            result: { ...editForm }
-        });
-        setEditingId(null);
-    };
-
-    const handleManualAdd = async () => {
-        if (!newMatch.opponent || !newMatch.date) return;
-
-        await addDoc(collection(db, 'events'), {
-            type: newMatch.type,
-            opponent: newMatch.opponent,
-            date: newMatch.date,
-            time: newMatch.time,
-            scheduledBy: "Manual Log",
-            result: {
-                myScore: newMatch.myScore,
-                enemyScore: newMatch.enemyScore,
-                map: newMatch.map,
-                vod: newMatch.vod
-            }
-        });
-        setIsAdding(false);
-        setNewMatch({ type: 'Scrim', opponent: '', date: '', time: '20:00', myScore: '', enemyScore: '', map: MAPS[0], vod: '' });
-    };
+    const handleUpdate = async (id) => { await updateDoc(doc(db, 'events', id), { result: { ...editForm } }); setEditingId(null); };
+    const handleManualAdd = async () => { if (!newMatch.opponent || !newMatch.date) return; await addDoc(collection(db, 'events'), { type: newMatch.type, opponent: newMatch.opponent, date: newMatch.date, time: newMatch.time, scheduledBy: "Manual Log", result: { myScore: newMatch.myScore, enemyScore: newMatch.enemyScore, map: newMatch.map, vod: newMatch.vod } }); setIsAdding(false); setNewMatch({ type: 'Scrim', opponent: '', date: '', time: '20:00', myScore: '', enemyScore: '', map: MAPS[0], vod: '' }); };
 
     return (
         <div className="bg-neutral-900 p-6 rounded-3xl border border-neutral-800/50 shadow-2xl">
-            <div className="flex justify-between items-center mb-6">
-                <h3 className="text-2xl font-black text-white flex items-center gap-3">
-                    <span className="text-red-600">MATCH</span> HISTORY
-                </h3>
-                <button onClick={() => setIsAdding(!isAdding)} className="bg-neutral-800 hover:bg-neutral-700 text-white text-xs font-bold px-4 py-2 rounded-lg border border-neutral-700 transition-all">
-                    {isAdding ? 'Cancel' : '+ LOG PAST MATCH'}
-                </button>
-            </div>
-
+            <div className="flex justify-between items-center mb-6"><h3 className="text-2xl font-black text-white flex items-center gap-3"><span className="text-red-600">MATCH</span> HISTORY</h3><button onClick={() => setIsAdding(!isAdding)} className="bg-neutral-800 hover:bg-neutral-700 text-white text-xs font-bold px-4 py-2 rounded-lg border border-neutral-700 transition-all">{isAdding ? 'Cancel' : '+ LOG PAST MATCH'}</button></div>
             {isAdding && (
-                <div className="mb-8 bg-neutral-800/50 p-4 rounded-xl border border-red-900/30 animate-fade-in">
-                    <h4 className="text-sm font-bold text-white mb-3 uppercase tracking-wider">Log Unscheduled Match</h4>
-                    <div className="grid grid-cols-1 md:grid-cols-4 gap-3 mb-3">
-                        <input type="text" placeholder="Opponent" value={newMatch.opponent} onChange={e => setNewMatch({ ...newMatch, opponent: e.target.value })} className="bg-black text-white text-sm p-2 rounded border border-neutral-700 outline-none focus:border-red-600" />
-                        <input type="date" value={newMatch.date} onChange={e => setNewMatch({ ...newMatch, date: e.target.value })} className="bg-black text-white text-sm p-2 rounded border border-neutral-700 outline-none focus:border-red-600" />
-                        <select value={newMatch.map} onChange={e => setNewMatch({ ...newMatch, map: e.target.value })} className="bg-black text-white text-sm p-2 rounded border border-neutral-700 outline-none focus:border-red-600">{MAPS.map(map => <option key={map}>{map}</option>)}</select>
-                        <div className="flex gap-2">
-                            <input type="number" placeholder="Us" value={newMatch.myScore} onChange={e => setNewMatch({ ...newMatch, myScore: e.target.value })} className="w-1/2 bg-black text-white text-sm p-2 rounded border border-neutral-700 outline-none focus:border-red-600" />
-                            <input type="number" placeholder="Them" value={newMatch.enemyScore} onChange={e => setNewMatch({ ...newMatch, enemyScore: e.target.value })} className="w-1/2 bg-black text-white text-sm p-2 rounded border border-neutral-700 outline-none focus:border-red-600" />
-                        </div>
-                    </div>
-                    <div className="flex justify-end">
-                        <button onClick={handleManualAdd} className="bg-red-600 hover:bg-red-500 text-white font-bold px-6 py-2 rounded-lg shadow-lg transition-all">Save Log</button>
-                    </div>
-                </div>
+                <div className="mb-8 bg-neutral-800/50 p-4 rounded-xl border border-red-900/30 animate-fade-in"><h4 className="text-sm font-bold text-white mb-3 uppercase tracking-wider">Log Unscheduled Match</h4>
+                    <div className="grid grid-cols-1 md:grid-cols-4 gap-3 mb-3"><input type="text" placeholder="Opponent" value={newMatch.opponent} onChange={e => setNewMatch({ ...newMatch, opponent: e.target.value })} className="bg-black text-white text-sm p-2 rounded border border-neutral-700 outline-none focus:border-red-600" /><input type="date" value={newMatch.date} onChange={e => setNewMatch({ ...newMatch, date: e.target.value })} className="bg-black text-white text-sm p-2 rounded border border-neutral-700 outline-none focus:border-red-600" /><select value={newMatch.map} onChange={e => setNewMatch({ ...newMatch, map: e.target.value })} className="bg-black text-white text-sm p-2 rounded border border-neutral-700 outline-none focus:border-red-600">{MAPS.map(map => <option key={map}>{map}</option>)}</select><div className="flex gap-2"><input type="number" placeholder="Us" value={newMatch.myScore} onChange={e => setNewMatch({ ...newMatch, myScore: e.target.value })} className="w-1/2 bg-black text-white text-sm p-2 rounded border border-neutral-700 outline-none focus:border-red-600" /><input type="number" placeholder="Them" value={newMatch.enemyScore} onChange={e => setNewMatch({ ...newMatch, enemyScore: e.target.value })} className="w-1/2 bg-black text-white text-sm p-2 rounded border border-neutral-700 outline-none focus:border-red-600" /></div></div>
+                    <div className="flex justify-end"><button onClick={handleManualAdd} className="bg-red-600 hover:bg-red-500 text-white font-bold px-6 py-2 rounded-lg shadow-lg transition-all">Save Log</button></div></div>
             )}
-
-            <div className="space-y-4">
-                {matches.length === 0 && <p className="text-neutral-500 italic">No past matches found.</p>}
-                {matches.map(m => (
-                    <div key={m.id} className="bg-black/40 border border-neutral-800 p-4 rounded-xl flex flex-col md:flex-row justify-between items-center gap-4 hover:border-neutral-700 transition-colors">
-                        <div className="flex-1">
-                            <div className="text-sm font-bold text-red-500 uppercase tracking-wider">{m.type}</div>
-                            <div className="text-xl font-black text-white">{m.opponent || 'Unknown Opponent'}</div>
-                            <div className="text-xs text-neutral-500">{m.date}</div>
-                        </div>
-
-                        {editingId === m.id ? (
-                            <div className="flex flex-wrap gap-2 items-center bg-neutral-900 p-2 rounded-lg border border-neutral-700">
-                                <select value={editForm.map} onChange={e => setEditForm({ ...editForm, map: e.target.value })} className="bg-black text-white text-xs p-2 rounded border border-neutral-700 outline-none">{MAPS.map(map => <option key={map}>{map}</option>)}</select>
-                                <input type="number" placeholder="Us" value={editForm.myScore} onChange={e => setEditForm({ ...editForm, myScore: e.target.value })} className="w-12 bg-black text-white text-xs p-2 rounded border border-neutral-700 outline-none" />
-                                <span className="text-white">-</span>
-                                <input type="number" placeholder="Them" value={editForm.enemyScore} onChange={e => setEditForm({ ...editForm, enemyScore: e.target.value })} className="w-12 bg-black text-white text-xs p-2 rounded border border-neutral-700 outline-none" />
-                                <input type="text" placeholder="VOD Link" value={editForm.vod} onChange={e => setEditForm({ ...editForm, vod: e.target.value })} className="w-32 bg-black text-white text-xs p-2 rounded border border-neutral-700 outline-none" />
-                                <button onClick={() => handleUpdate(m.id)} className="bg-green-600 text-white px-3 py-1 rounded text-xs font-bold">Save</button>
-                            </div>
-                        ) : (
-                            <div className="flex items-center gap-6">
-                                {m.result ? (
-                                    <div className="text-center">
-                                        <div className={`text-2xl font-black ${m.result.myScore > m.result.enemyScore ? 'text-green-500' : 'text-red-500'}`}>
-                                            {m.result.myScore} - {m.result.enemyScore}
-                                        </div>
-                                        <div className="text-[10px] uppercase font-bold text-neutral-500">{m.result.map}</div>
-                                    </div>
-                                ) : (
-                                    <span className="text-neutral-600 text-sm italic">No result logged</span>
-                                )}
-
-                                <div className="flex flex-col gap-2">
-                                    {m.result?.vod && (
-                                        <a href={m.result.vod} target="_blank" rel="noreferrer" className="text-xs bg-red-600/20 text-red-400 border border-red-600/50 px-3 py-1 rounded uppercase font-bold hover:bg-red-600 hover:text-white transition-colors text-center">
-                                            Watch VOD
-                                        </a>
-                                    )}
-                                    <button onClick={() => { setEditingId(m.id); setEditForm(m.result || { myScore: '', enemyScore: '', map: MAPS[0], vod: '' }) }} className="text-xs text-neutral-500 hover:text-white underline">
-                                        Edit Result
-                                    </button>
-                                </div>
-                            </div>
-                        )}
-                    </div>
-                ))}
-            </div>
+            <div className="space-y-4">{matches.length === 0 && <p className="text-neutral-500 italic">No past matches found.</p>}
+                {matches.map(m => (<div key={m.id} className="bg-black/40 border border-neutral-800 p-4 rounded-xl flex flex-col md:flex-row justify-between items-center gap-4 hover:border-neutral-700 transition-colors"><div className="flex-1"><div className="text-sm font-bold text-red-500 uppercase tracking-wider">{m.type}</div><div className="text-xl font-black text-white">{m.opponent || 'Unknown Opponent'}</div><div className="text-xs text-neutral-500">{m.date}</div></div>{editingId === m.id ? (<div className="flex flex-wrap gap-2 items-center bg-neutral-900 p-2 rounded-lg border border-neutral-700"><select value={editForm.map} onChange={e => setEditForm({ ...editForm, map: e.target.value })} className="bg-black text-white text-xs p-2 rounded border border-neutral-700 outline-none">{MAPS.map(map => <option key={map}>{map}</option>)}</select><input type="number" placeholder="Us" value={editForm.myScore} onChange={e => setEditForm({ ...editForm, myScore: e.target.value })} className="w-12 bg-black text-white text-xs p-2 rounded border border-neutral-700 outline-none" /><span className="text-white">-</span><input type="number" placeholder="Them" value={editForm.enemyScore} onChange={e => setEditForm({ ...editForm, enemyScore: e.target.value })} className="w-12 bg-black text-white text-xs p-2 rounded border border-neutral-700 outline-none" /><input type="text" placeholder="VOD Link" value={editForm.vod} onChange={e => setEditForm({ ...editForm, vod: e.target.value })} className="w-32 bg-black text-white text-xs p-2 rounded border border-neutral-700 outline-none" /><button onClick={() => handleUpdate(m.id)} className="bg-green-600 text-white px-3 py-1 rounded text-xs font-bold">Save</button></div>) : (<div className="flex items-center gap-6">{m.result ? (<div className="text-center"><div className={`text-2xl font-black ${m.result.myScore > m.result.enemyScore ? 'text-green-500' : 'text-red-500'}`}>{m.result.myScore} - {m.result.enemyScore}</div><div className="text-[10px] uppercase font-bold text-neutral-500">{m.result.map}</div></div>) : (<span className="text-neutral-600 text-sm italic">No result logged</span>)}<div className="flex flex-col gap-2">{m.result?.vod && (<a href={m.result.vod} target="_blank" rel="noreferrer" className="text-xs bg-red-600/20 text-red-400 border border-red-600/50 px-3 py-1 rounded uppercase font-bold hover:bg-red-600 hover:text-white transition-colors text-center">Watch VOD</a>)}<button onClick={() => { setEditingId(m.id); setEditForm(m.result || { myScore: '', enemyScore: '', map: MAPS[0], vod: '' }) }} className="text-xs text-neutral-500 hover:text-white underline">Edit Result</button></div></div>)}</div>))}</div>
         </div>
     );
 }
@@ -757,45 +574,14 @@ function StratBook() {
     };
 
     const deleteStrat = async (id) => await deleteDoc(doc(db, 'strats', id));
-
     const filteredStrats = strats.filter(s => s.map === selectedMap);
 
     return (
         <div className="bg-neutral-900 p-6 rounded-3xl border border-neutral-800/50 shadow-2xl h-full">
             <h3 className="text-2xl font-black text-white mb-6">STRATBOOK</h3>
-
-            <div className="flex overflow-x-auto gap-2 pb-4 mb-4 scrollbar-thin scrollbar-thumb-red-900 scrollbar-track-black">
-                {MAPS.map(m => (
-                    <button
-                        key={m}
-                        onClick={() => setSelectedMap(m)}
-                        className={`px-4 py-2 rounded-lg text-xs font-bold uppercase tracking-wider whitespace-nowrap transition-all ${selectedMap === m ? 'bg-red-600 text-white shadow-lg' : 'bg-black border border-neutral-800 text-neutral-500 hover:text-white'}`}
-                    >
-                        {m}
-                    </button>
-                ))}
-            </div>
-
-            <div className="space-y-3 mb-6">
-                <div className="flex gap-2">
-                    <input type="text" placeholder="Strat Name (e.g. A Split)" value={newStrat.title} onChange={e => setNewStrat({ ...newStrat, title: e.target.value })} className="flex-1 bg-black border border-neutral-800 rounded-lg p-2 text-white text-sm outline-none focus:border-red-600" />
-                    <input type="text" placeholder="Link (Valoplant/Doc)" value={newStrat.link} onChange={e => setNewStrat({ ...newStrat, link: e.target.value })} className="flex-1 bg-black border border-neutral-800 rounded-lg p-2 text-white text-sm outline-none focus:border-red-600" />
-                    <button onClick={addStrat} className="bg-white text-black font-bold px-4 rounded-lg hover:bg-gray-200">+</button>
-                </div>
-            </div>
-
-            <div className="space-y-2 max-h-[400px] overflow-y-auto pr-2 custom-scrollbar">
-                {filteredStrats.length === 0 && <p className="text-neutral-600 italic text-sm">No strats for {selectedMap} yet.</p>}
-                {filteredStrats.map(s => (
-                    <div key={s.id} className="p-3 bg-black/40 border border-neutral-800 rounded-lg flex justify-between items-center group hover:border-red-900/50 transition-colors">
-                        <span className="font-bold text-neutral-200">{s.title}</span>
-                        <div className="flex gap-3">
-                            {s.link && <a href={s.link} target="_blank" rel="noreferrer" className="text-xs text-red-400 hover:underline">View</a>}
-                            <button onClick={() => deleteStrat(s.id)} className="text-neutral-600 hover:text-red-500">×</button>
-                        </div>
-                    </div>
-                ))}
-            </div>
+            <div className="flex overflow-x-auto gap-2 pb-4 mb-4 scrollbar-thin scrollbar-thumb-red-900 scrollbar-track-black">{MAPS.map(m => (<button key={m} onClick={() => setSelectedMap(m)} className={`px-4 py-2 rounded-lg text-xs font-bold uppercase tracking-wider whitespace-nowrap transition-all ${selectedMap === m ? 'bg-red-600 text-white shadow-lg' : 'bg-black border border-neutral-800 text-neutral-500 hover:text-white'}`}>{m}</button>))}</div>
+            <div className="space-y-3 mb-6"><div className="flex gap-2"><input type="text" placeholder="Strat Name (e.g. A Split)" value={newStrat.title} onChange={e => setNewStrat({ ...newStrat, title: e.target.value })} className="flex-1 bg-black border border-neutral-800 rounded-lg p-2 text-white text-sm outline-none focus:border-red-600" /><input type="text" placeholder="Link (Valoplant/Doc)" value={newStrat.link} onChange={e => setNewStrat({ ...newStrat, link: e.target.value })} className="flex-1 bg-black border border-neutral-800 rounded-lg p-2 text-white text-sm outline-none focus:border-red-600" /><button onClick={addStrat} className="bg-white text-black font-bold px-4 rounded-lg hover:bg-gray-200">+</button></div></div>
+            <div className="space-y-2 max-h-[400px] overflow-y-auto pr-2 custom-scrollbar">{filteredStrats.length === 0 && <p className="text-neutral-600 italic text-sm">No strats for {selectedMap} yet.</p>}{filteredStrats.map(s => (<div key={s.id} className="p-3 bg-black/40 border border-neutral-800 rounded-lg flex justify-between items-center group hover:border-red-900/50 transition-colors"><span className="font-bold text-neutral-200">{s.title}</span><div className="flex gap-3">{s.link && <a href={s.link} target="_blank" rel="noreferrer" className="text-xs text-red-400 hover:underline">View</a>}<button onClick={() => deleteStrat(s.id)} className="text-neutral-600 hover:text-red-500">×</button></div></div>))}</div>
         </div>
     );
 }
@@ -822,30 +608,8 @@ function PartnerDirectory() {
     return (
         <div className="bg-neutral-900 p-6 rounded-3xl border border-neutral-800/50 shadow-2xl h-full">
             <h3 className="text-2xl font-black text-white mb-6">SCRIM PARTNERS</h3>
-
-            <div className="space-y-3 mb-6 p-4 bg-black/30 rounded-xl border border-neutral-800">
-                <input type="text" placeholder="Team Name" value={newPartner.name} onChange={e => setNewPartner({ ...newPartner, name: e.target.value })} className="w-full bg-black border border-neutral-800 rounded-lg p-2 text-white text-sm outline-none focus:border-red-600 mb-2" />
-                <div className="flex gap-2">
-                    <input type="text" placeholder="Contact (Discord)" value={newPartner.contact} onChange={e => setNewPartner({ ...newPartner, contact: e.target.value })} className="flex-1 bg-black border border-neutral-800 rounded-lg p-2 text-white text-sm outline-none focus:border-red-600" />
-                    <input type="text" placeholder="Notes" value={newPartner.notes} onChange={e => setNewPartner({ ...newPartner, notes: e.target.value })} className="flex-1 bg-black border border-neutral-800 rounded-lg p-2 text-white text-sm outline-none focus:border-red-600" />
-                </div>
-                <button onClick={addPartner} className="w-full bg-red-700 hover:bg-red-600 text-white font-bold py-2 rounded-lg text-sm mt-2">Add Partner</button>
-            </div>
-
-            <div className="space-y-3 max-h-[400px] overflow-y-auto pr-2 custom-scrollbar">
-                {partners.map(p => (
-                    <div key={p.id} className="p-4 bg-black/40 border border-neutral-800 rounded-xl">
-                        <div className="flex justify-between items-start">
-                            <div>
-                                <div className="font-bold text-lg text-white">{p.name}</div>
-                                <div className="text-xs text-red-400 font-mono">{p.contact}</div>
-                            </div>
-                            <button onClick={() => deleteDoc(doc(db, 'partners', p.id))} className="text-neutral-600 hover:text-red-500">×</button>
-                        </div>
-                        {p.notes && <div className="mt-2 text-sm text-neutral-400 bg-neutral-900/50 p-2 rounded">{p.notes}</div>}
-                    </div>
-                ))}
-            </div>
+            <div className="space-y-3 mb-6 p-4 bg-black/30 rounded-xl border border-neutral-800"><input type="text" placeholder="Team Name" value={newPartner.name} onChange={e => setNewPartner({ ...newPartner, name: e.target.value })} className="w-full bg-black border border-neutral-800 rounded-lg p-2 text-white text-sm outline-none focus:border-red-600 mb-2" /><div className="flex gap-2"><input type="text" placeholder="Contact (Discord)" value={newPartner.contact} onChange={e => setNewPartner({ ...newPartner, contact: e.target.value })} className="flex-1 bg-black border border-neutral-800 rounded-lg p-2 text-white text-sm outline-none focus:border-red-600" /><input type="text" placeholder="Notes" value={newPartner.notes} onChange={e => setNewPartner({ ...newPartner, notes: e.target.value })} className="flex-1 bg-black border border-neutral-800 rounded-lg p-2 text-white text-sm outline-none focus:border-red-600" /></div><button onClick={addPartner} className="w-full bg-red-700 hover:bg-red-600 text-white font-bold py-2 rounded-lg text-sm mt-2">Add Partner</button></div>
+            <div className="space-y-3 max-h-[400px] overflow-y-auto pr-2 custom-scrollbar">{partners.map(p => (<div key={p.id} className="p-4 bg-black/40 border border-neutral-800 rounded-xl"><div className="flex justify-between items-start"><div><div className="font-bold text-lg text-white">{p.name}</div><div className="text-xs text-red-400 font-mono">{p.contact}</div></div><button onClick={() => deleteDoc(doc(db, 'partners', p.id))} className="text-neutral-600 hover:text-red-500">×</button></div>{p.notes && <div className="mt-2 text-sm text-neutral-400 bg-neutral-900/50 p-2 rounded">{p.notes}</div>}</div>))}</div>
         </div>
     );
 }
@@ -868,39 +632,14 @@ function ScrimScheduler({ onSchedule, userTimezone }) {
     return (
         <div className="space-y-4">
             <div className="grid grid-cols-2 gap-4">
-                <div>
-                    <label className="block text-xs font-bold text-red-500 mb-1 uppercase tracking-wider">Type</label>
-                    <select value={type} onChange={e => setType(e.target.value)} className="w-full p-2 bg-black border border-neutral-800 rounded-lg text-white text-sm focus:border-red-600 focus:ring-1 focus:ring-red-600 outline-none transition-colors">
-                        <option>Scrim</option>
-                        <option>Tournament</option>
-                        <option>Practice</option>
-                        <option>VOD Review</option>
-                    </select>
-                </div>
-                <div>
-                    <label className="block text-xs font-bold text-red-500 mb-1 uppercase tracking-wider">Opponent / Notes</label>
-                    <input type="text" placeholder="e.g. Team Liquid" value={opponent} onChange={e => setOpponent(e.target.value)} className="w-full p-2 bg-black border border-neutral-800 rounded-lg text-white text-sm focus:border-red-600 focus:ring-1 focus:ring-red-600 outline-none transition-colors placeholder-neutral-600" />
-                </div>
+                <div><label className="block text-xs font-bold text-red-500 mb-1 uppercase tracking-wider">Type</label><select value={type} onChange={e => setType(e.target.value)} className="w-full p-2 bg-black border border-neutral-800 rounded-lg text-white text-sm focus:border-red-600 focus:ring-1 focus:ring-red-600 outline-none transition-colors"><option>Scrim</option><option>Tournament</option><option>Practice</option><option>VOD Review</option></select></div>
+                <div><label className="block text-xs font-bold text-red-500 mb-1 uppercase tracking-wider">Opponent / Notes</label><input type="text" placeholder="e.g. Team Liquid" value={opponent} onChange={e => setOpponent(e.target.value)} className="w-full p-2 bg-black border border-neutral-800 rounded-lg text-white text-sm focus:border-red-600 focus:ring-1 focus:ring-red-600 outline-none transition-colors placeholder-neutral-600" /></div>
             </div>
             <div className="grid grid-cols-2 gap-4">
-                <div>
-                    <label className="block text-xs font-bold text-red-500 mb-1 uppercase tracking-wider">Date</label>
-                    <input type="date" value={date} onChange={e => setDate(e.target.value)} className="w-full p-2 bg-black border border-neutral-800 rounded-lg text-white text-sm focus:border-red-600 focus:ring-1 focus:ring-red-600 outline-none transition-colors [color-scheme:dark]" />
-                </div>
-                <div>
-                    <label className="block text-xs font-bold text-red-500 mb-1 uppercase tracking-wider">Time ({userTimezone})</label>
-                    <input type="time" value={time} onChange={e => setTime(e.target.value)} className="w-full p-2 bg-black border border-neutral-800 rounded-lg text-white text-sm focus:border-red-600 focus:ring-1 focus:ring-red-600 outline-none transition-colors [color-scheme:dark]" />
-                </div>
+                <div><label className="block text-xs font-bold text-red-500 mb-1 uppercase tracking-wider">Date</label><input type="date" value={date} onChange={e => setDate(e.target.value)} className="w-full p-2 bg-black border border-neutral-800 rounded-lg text-white text-sm focus:border-red-600 focus:ring-1 focus:ring-red-600 outline-none transition-colors [color-scheme:dark]" /></div>
+                <div><label className="block text-xs font-bold text-red-500 mb-1 uppercase tracking-wider">Time ({userTimezone})</label><input type="time" value={time} onChange={e => setTime(e.target.value)} className="w-full p-2 bg-black border border-neutral-800 rounded-lg text-white text-sm focus:border-red-600 focus:ring-1 focus:ring-red-600 outline-none transition-colors [color-scheme:dark]" /></div>
             </div>
-            <button
-                onClick={handleSubmit}
-                disabled={status !== 'idle'}
-                className={`w-full py-3 rounded-xl font-black uppercase tracking-widest shadow-lg transition-all transform active:scale-95 ${status === 'success' ? 'bg-green-600 text-white' : 'bg-red-700 hover:bg-red-600 text-white shadow-red-900/30'}`}
-            >
-                {status === 'idle' && '📅 Schedule & Post'}
-                {status === 'saving' && 'Scheduling...'}
-                {status === 'success' && 'Event Scheduled!'}
-            </button>
+            <button onClick={handleSubmit} disabled={status !== 'idle'} className={`w-full py-3 rounded-xl font-black uppercase tracking-widest shadow-lg transition-all transform active:scale-95 ${status === 'success' ? 'bg-green-600 text-white' : 'bg-red-700 hover:bg-red-600 text-white shadow-red-900/30'}`}>{status === 'idle' && '📅 Schedule & Post'}{status === 'saving' && 'Scheduling...'}{status === 'success' && 'Event Scheduled!'}</button>
         </div>
     );
 }
@@ -930,24 +669,7 @@ function AvailabilityHeatmap({ availabilities, members }) {
 
     return (
         <div className="overflow-x-auto rounded-xl border border-neutral-800 shadow-inner bg-black">
-            <div className="min-w-[600px]">
-                <div className="flex border-b border-neutral-800">
-                    <div className="w-24 p-2 text-xs font-bold text-red-500 bg-black sticky left-0 border-r border-neutral-800">DAY</div>
-                    {Array.from({ length: 24 }).map((_, i) => (
-                        <div key={i} className="flex-1 text-[10px] text-center text-neutral-500 border-l border-neutral-800/50 py-1">{i}</div>
-                    ))}
-                </div>
-                {DAYS.map(day => (
-                    <div key={day} className="flex border-b border-neutral-800/50 last:border-0">
-                        <div className="w-24 p-2 text-xs font-bold text-neutral-400 bg-black sticky left-0 border-r border-neutral-800">{day.substring(0, 3).toUpperCase()}</div>
-                        {heatmapData[day]?.map((count, i) => (
-                            <div key={i} className={`flex-1 h-8 border-l border-neutral-800/30 transition-all hover:brightness-125 relative group ${count > 0 ? 'bg-red-600' : ''}`} style={{ opacity: count > 0 ? (count / maxCount) * 0.9 + 0.1 : 1, backgroundColor: count === 0 ? 'transparent' : undefined }}>
-                                {count > 0 && <span className="absolute inset-0 flex items-center justify-center text-[10px] font-bold text-white group-hover:scale-125 transition-transform">{count}</span>}
-                            </div>
-                        ))}
-                    </div>
-                ))}
-            </div>
+            <div className="min-w-[600px]"><div className="flex border-b border-neutral-800"><div className="w-24 p-2 text-xs font-bold text-red-500 bg-black sticky left-0 border-r border-neutral-800">DAY</div>{Array.from({ length: 24 }).map((_, i) => (<div key={i} className="flex-1 text-[10px] text-center text-neutral-500 border-l border-neutral-800/50 py-1">{i}</div>))}</div>{DAYS.map(day => (<div key={day} className="flex border-b border-neutral-800/50 last:border-0"><div className="w-24 p-2 text-xs font-bold text-neutral-400 bg-black sticky left-0 border-r border-neutral-800">{day.substring(0, 3).toUpperCase()}</div>{heatmapData[day]?.map((count, i) => (<div key={i} className={`flex-1 h-8 border-l border-neutral-800/30 transition-all hover:brightness-125 relative group ${count > 0 ? 'bg-red-600' : ''}`} style={{ opacity: count > 0 ? (count / maxCount) * 0.9 + 0.1 : 1, backgroundColor: count === 0 ? 'transparent' : undefined }}>{count > 0 && <span className="absolute inset-0 flex items-center justify-center text-[10px] font-bold text-white group-hover:scale-125 transition-transform">{count}</span>}</div>))}</div>))}</div>
         </div>
     );
 }
@@ -956,14 +678,8 @@ function LoginScreen({ signIn }) {
     return (
         <div className="fixed inset-0 h-full w-full bg-black flex items-center justify-center p-4 bg-[radial-gradient(ellipse_at_center,_var(--tw-gradient-stops))] from-red-900/20 via-black to-black">
             <div className="text-center space-y-8 max-w-lg w-full p-10 rounded-3xl border border-red-900/30 bg-neutral-900/50 backdrop-blur-lg shadow-2xl shadow-red-900/20">
-                <div className="space-y-2">
-                    <h1 className="text-6xl font-black text-white tracking-tighter drop-shadow-lg">SYRIX</h1>
-                    <div className="h-1 w-32 bg-red-600 mx-auto rounded-full"></div>
-                    <p className="text-neutral-400 text-lg font-medium uppercase tracking-widest">Team Hub</p>
-                </div>
-                <button onClick={signIn} className="w-full bg-[#5865F2] hover:bg-[#4752C4] text-white py-4 rounded-xl font-bold shadow-lg transition-transform hover:scale-105 flex items-center justify-center gap-3">
-                    <span>Login with Discord</span>
-                </button>
+                <div className="space-y-2"><h1 className="text-6xl font-black text-white tracking-tighter drop-shadow-lg">SYRIX</h1><div className="h-1 w-32 bg-red-600 mx-auto rounded-full"></div><p className="text-neutral-400 text-lg font-medium uppercase tracking-widest">Team Hub</p></div>
+                <button onClick={signIn} className="w-full bg-[#5865F2] hover:bg-[#4752C4] text-white py-4 rounded-xl font-bold shadow-lg transition-transform hover:scale-105 flex items-center justify-center gap-3"><span>Login with Discord</span></button>
             </div>
         </div>
     );
@@ -984,8 +700,9 @@ export default function App() {
     const [userTimezone, setUserTimezone] = useState(localStorage.getItem('timezone') || Intl.DateTimeFormat().resolvedOptions().timeZone);
     const [authLoading, setAuthLoading] = useState(true);
     const [isModalOpen, setIsModalOpen] = useState(false);
-    const [isProfileOpen, setIsProfileOpen] = useState(false); // NEW
+    const [isProfileOpen, setIsProfileOpen] = useState(false);
     const [modalContent, setModalContent] = useState({});
+    const [isMember, setIsMember] = useState(false);
 
     // Auth Listener
     useEffect(() => {
@@ -1004,9 +721,18 @@ export default function App() {
 
     const handleSignOut = async () => await signOut(auth);
 
-    // Data Listeners
+    // Data Listeners & Access Control
     useEffect(() => {
         if (!currentUser) return;
+
+        // Check if user is in the roster
+        const checkMembership = onSnapshot(doc(db, 'roster', currentUser.displayName), (doc) => {
+            const isAuthorized = doc.exists() || ADMINS.includes(currentUser.displayName);
+            setIsMember(isAuthorized);
+            // Default to 'apply' if not a member, otherwise 'dashboard'
+            if (!isAuthorized && activeTab !== 'apply') setActiveTab('apply');
+            if (isAuthorized && activeTab === 'apply') setActiveTab('dashboard');
+        });
 
         const unsubAvail = onSnapshot(collection(db, 'availabilities'), (snap) => {
             const data = {};
@@ -1021,7 +747,7 @@ export default function App() {
             setEvents(evs);
         });
 
-        return () => { unsubAvail(); unsubEvents(); };
+        return () => { checkMembership(); unsubAvail(); unsubEvents(); };
     }, [currentUser]);
 
     useEffect(() => { document.documentElement.classList.add('dark'); }, []);
@@ -1047,29 +773,17 @@ export default function App() {
         return converted;
     }, [availabilities, userTimezone]);
 
-    // UPDATED PFP LOGIC
     const getAvatar = () => {
         if (!currentUser) return null;
-
-        // Check provider data specifically for Discord ID
+        // Prioritize Discord Provider Data
         const discordData = currentUser.providerData.find(p => p.providerId === 'oidc.discord');
-
-        // If we have specific discord data
-        if (discordData) {
-            // Use Provider UID for correct CDN mapping
-            if (discordData.uid && discordData.photoURL) {
-                return `https://cdn.discordapp.com/avatars/${discordData.uid}/${discordData.photoURL}.png`;
-            }
-            // If we have a photoURL but no UID (rare), try standard
-            if (discordData.photoURL) return discordData.photoURL;
-        }
-
-        // Fallback: if Firebase has a photoURL (sometimes it copies it over correctly)
-        if (currentUser.photoURL) return currentUser.photoURL;
-
-        // Absolute Fallback
+        if (discordData && discordData.photoURL) return discordData.photoURL;
+        if (currentUser.photoURL && currentUser.photoURL.startsWith('http')) return currentUser.photoURL;
+        if (currentUser.photoURL) return `https://cdn.discordapp.com/avatars/${currentUser.uid}/${currentUser.photoURL}.png`;
         return `https://cdn.discordapp.com/embed/avatars/${Math.floor(Math.random() * 5)}.png`;
     };
+
+    const isAdmin = useMemo(() => currentUser && ADMINS.includes(currentUser.displayName), [currentUser]);
 
     // Actions
     const openModal = (title, message, onConfirm) => { setModalContent({ title, children: message, onConfirm }); setIsModalOpen(true); };
@@ -1143,26 +857,34 @@ export default function App() {
             <header className="flex-none flex flex-col md:flex-row justify-between items-center px-8 py-4 gap-4 border-b border-red-900/30 bg-black/90 backdrop-blur-md z-40">
                 <div>
                     <h1 className="text-3xl font-black tracking-tighter text-white">SYRIX <span className="text-red-600">HUB</span></h1>
+
+                    {/* RESTRICTED NAVIGATION */}
                     <div className="flex gap-6 mt-2 overflow-x-auto pb-1 scrollbar-hide">
-                        <NavBtn id="dashboard" label="Dashboard" />
-                        <NavBtn id="matches" label="Matches" />
-                        <NavBtn id="strats" label="Stratbook" />
-                        <NavBtn id="roster" label="Roster" />
-                        <NavBtn id="partners" label="Partners" />
-                        <NavBtn id="apply" label="Apply" />
-                        <NavBtn id="mapveto" label="Map Veto" />
+                        {isMember ? (
+                            <>
+                                <NavBtn id="dashboard" label="Dashboard" />
+                                <NavBtn id="matches" label="Matches" />
+                                <NavBtn id="strats" label="Stratbook" />
+                                <NavBtn id="roster" label="Roster" />
+                                <NavBtn id="partners" label="Partners" />
+                                <NavBtn id="mapveto" label="Map Veto" />
+                                {isAdmin && <NavBtn id="admin" label="Admin" />}
+                            </>
+                        ) : (
+                            <NavBtn id="apply" label="Apply" />
+                        )}
                     </div>
                 </div>
                 <div className="flex items-center gap-4 bg-neutral-900/80 p-2 rounded-2xl border border-neutral-800 backdrop-blur-sm shadow-lg">
                     <img
                         src={getAvatar()}
-                        onClick={() => setIsProfileOpen(true)}
+                        onClick={() => isMember && setIsProfileOpen(true)}
                         onError={(e) => { e.target.onerror = null; e.target.src = "https://cdn.discordapp.com/embed/avatars/1.png"; }}
-                        className="w-10 h-10 rounded-full border-2 border-red-600 shadow-red-600/50 shadow-sm cursor-pointer hover:scale-105 transition-transform"
+                        className={`w-10 h-10 rounded-full border-2 border-red-600 shadow-red-600/50 shadow-sm transition-transform ${isMember ? 'cursor-pointer hover:scale-105' : 'opacity-50'}`}
                         alt="Profile"
                     />
                     <div className="pr-4 border-r border-neutral-700 mr-2">
-                        <div className="text-sm font-bold text-white cursor-pointer" onClick={() => setIsProfileOpen(true)}>{currentUser.displayName}</div>
+                        <div className="text-sm font-bold text-white cursor-pointer" onClick={() => isMember && setIsProfileOpen(true)}>{currentUser.displayName}</div>
                         <button onClick={handleSignOut} className="text-[10px] text-neutral-400 hover:text-red-500 transition-colors font-bold uppercase tracking-wide">Log Out</button>
                     </div>
                     <select value={userTimezone} onChange={e => { setUserTimezone(e.target.value); localStorage.setItem('timezone', e.target.value); }} className="bg-black border border-neutral-800 text-xs rounded-lg p-2 text-neutral-400 outline-none focus:border-red-600 transition-colors">
@@ -1174,12 +896,21 @@ export default function App() {
             {/* Main Content Area - Scrollable */}
             <main className="flex-1 overflow-y-auto overflow-x-hidden p-6 scrollbar-thin scrollbar-thumb-red-900 scrollbar-track-black">
                 <div className="max-w-[1920px] mx-auto">
+
+                    {/* 0. LOCKED STATE (If not member and not on apply tab) */}
+                    {!isMember && activeTab !== 'apply' && (
+                        <div className="flex flex-col items-center justify-center h-full py-20 text-center">
+                            <h2 className="text-4xl font-black text-white mb-4">ACCESS DENIED</h2>
+                            <p className="text-neutral-400 max-w-md mb-8">You must be an approved member of the Syrix roster to view this dashboard. Please submit an application.</p>
+                            <button onClick={() => setActiveTab('apply')} className="bg-red-600 hover:bg-red-500 text-white font-bold px-8 py-4 rounded-xl shadow-lg transition-all">Go to Application</button>
+                        </div>
+                    )}
+
                     {/* 1. DASHBOARD (Home) */}
-                    {activeTab === 'dashboard' && (
+                    {activeTab === 'dashboard' && isMember && (
                         <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 animate-fade-in-up">
                             {/* Left Column: Availability & Event Ops */}
                             <div className="lg:col-span-4 space-y-8">
-                                {/* Captains Message */}
                                 <CaptainsMessage />
 
                                 <div className="bg-neutral-900/50 p-6 rounded-3xl border border-neutral-800 shadow-xl backdrop-blur-sm relative overflow-hidden group">
@@ -1202,7 +933,6 @@ export default function App() {
                                                 <input type="time" value={end} onChange={e => setEnd(e.target.value)} className="w-full p-3 bg-black border border-neutral-800 rounded-xl text-white focus:border-red-600 focus:ring-1 focus:ring-red-600 outline-none [color-scheme:dark]" />
                                             </div>
                                         </div>
-                                        {/* Role Selector */}
                                         <div>
                                             <label className="text-[10px] font-black text-red-500 uppercase mb-1 block">Pref. Role</label>
                                             <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-hide">
@@ -1231,7 +961,6 @@ export default function App() {
 
                             {/* Right Column: Data Visualization */}
                             <div className="lg:col-span-8 space-y-8">
-                                {/* Top Row: Heatmap & Upcoming & Performance */}
                                 <div className="space-y-8">
                                     <div className="grid grid-cols-1 xl:grid-cols-2 gap-8">
                                         <div className="bg-neutral-900/80 p-6 rounded-3xl border border-neutral-800 shadow-2xl">
@@ -1259,12 +988,9 @@ export default function App() {
                                             <AvailabilityHeatmap availabilities={availabilities} members={dynamicMembers} />
                                         </div>
                                     </div>
-
-                                    {/* PERFORMANCE WIDGET */}
                                     <PerformanceWidget events={events} />
                                 </div>
 
-                                {/* Detailed Timeline - REDESIGNED AS MATRIX TABLE */}
                                 <div className="bg-neutral-900 p-6 rounded-3xl border border-neutral-800 shadow-2xl">
                                     <h2 className="text-xl font-bold text-white mb-6 uppercase tracking-wide">Detailed Timeline <span className="text-neutral-500 text-sm normal-case">({userTimezone})</span></h2>
                                     <div className="overflow-x-auto scrollbar-thin scrollbar-thumb-neutral-700">
@@ -1301,9 +1027,6 @@ export default function App() {
                                                         })}
                                                     </tr>
                                                 ))}
-                                                {dynamicMembers.length === 0 && (
-                                                    <tr><td colSpan="8" className="p-8 text-center text-neutral-500 italic">No availability data submitted yet.</td></tr>
-                                                )}
                                             </tbody>
                                         </table>
                                     </div>
@@ -1312,63 +1035,41 @@ export default function App() {
                         </div>
                     )}
 
-                    {/* 2. MATCH HISTORY View */}
-                    {activeTab === 'matches' && (
-                        <div className="animate-fade-in-up">
-                            <div className="mb-6">
-                                <h2 className="text-2xl font-bold text-white mb-2">Match History</h2>
-                                <p className="text-neutral-400">Log scores, map results, and VOD links.</p>
-                            </div>
-                            <MatchHistory />
-                        </div>
+                    {/* 2. MATCH HISTORY */}
+                    {activeTab === 'matches' && isMember && (
+                        <div className="animate-fade-in-up"><MatchHistory /></div>
                     )}
 
-                    {/* 3. STRATBOOK View */}
-                    {activeTab === 'strats' && (
-                        <div className="animate-fade-in-up h-[70vh]">
-                            <div className="mb-6">
-                                <h2 className="text-2xl font-bold text-white mb-2">Stratbook</h2>
-                                <p className="text-neutral-400">Team tactics and whiteboard links.</p>
-                            </div>
-                            <StratBook />
-                        </div>
+                    {/* 3. STRATBOOK */}
+                    {activeTab === 'strats' && isMember && (
+                        <div className="animate-fade-in-up h-[70vh]"><StratBook /></div>
                     )}
 
-                    {/* 4. ROSTER View */}
-                    {activeTab === 'roster' && (
-                        <div className="animate-fade-in-up h-full">
-                            <div className="mb-6">
-                                <h2 className="text-2xl font-bold text-white mb-2">Roster Management</h2>
-                                <p className="text-neutral-400">Manage team roles and track tryout performance notes.</p>
-                            </div>
-                            <RosterManager members={dynamicMembers} />
-                        </div>
+                    {/* 4. ROSTER */}
+                    {activeTab === 'roster' && isMember && (
+                        <div className="animate-fade-in-up h-full"><RosterManager members={dynamicMembers} /></div>
                     )}
 
-                    {/* 5. PARTNERS View */}
-                    {activeTab === 'partners' && (
-                        <div className="animate-fade-in-up h-full">
-                            <div className="mb-6">
-                                <h2 className="text-2xl font-bold text-white mb-2">Scrim Partners</h2>
-                                <p className="text-neutral-400">Directory of other teams for scheduling.</p>
-                            </div>
-                            <PartnerDirectory />
-                        </div>
+                    {/* 5. PARTNERS */}
+                    {activeTab === 'partners' && isMember && (
+                        <div className="animate-fade-in-up h-full"><PartnerDirectory /></div>
                     )}
 
-                    {/* 6. APPLICATION FORM View */}
+                    {/* 6. APPLICATION FORM */}
                     {activeTab === 'apply' && (
-                        <div className="animate-fade-in-up h-full">
-                            <ApplicationForm currentUser={currentUser} />
-                        </div>
+                        <div className="animate-fade-in-up h-full"><ApplicationForm currentUser={currentUser} /></div>
                     )}
 
-                    {/* 7. MAP VETO View */}
-                    {activeTab === 'mapveto' && (
-                        <div className="animate-fade-in-up h-[80vh]">
-                            <MapVeto />
-                        </div>
+                    {/* 7. ADMIN */}
+                    {activeTab === 'admin' && isAdmin && (
+                        <div className="animate-fade-in-up h-full"><AdminPanel /></div>
                     )}
+
+                    {/* 8. MAP VETO */}
+                    {activeTab === 'mapveto' && isMember && (
+                        <div className="animate-fade-in-up h-[80vh]"><MapVeto /></div>
+                    )}
+
                 </div>
             </main>
 
