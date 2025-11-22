@@ -1,9 +1,9 @@
 ﻿/*
-Syrix Team Availability - v2.0 (DESIGN OVERHAUL)
-- FEATURE: "Agent Cards" UI for Team Comps (mimics in-game select).
-- VISUAL: Enhanced Glassmorphism across all cards.
-- UX: Improved Match History visuals (Win/Loss coloring).
-- LOGIC: All original database connections maintained.
+Syrix Team Availability - v2.1 (THEME UPDATE & NEW AGENT)
+- NEW AGENT: Added "Veto" (Sentinel) to the agent pool.
+- DESIGN: "Team Comps" overhauled with "Agent Card" visual selectors.
+- UX: Map selector now uses "Pills" style with active glow effects.
+- VISUAL: Enhanced glassmorphism and "Syrix Red" accents throughout.
 */
 
 import React, { useState, useEffect, useMemo } from 'react';
@@ -35,7 +35,15 @@ const SHORT_DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 const MAPS = ["Ascent", "Bind", "Breeze", "Fracture", "Haven", "Icebox", "Lotus", "Pearl", "Split", "Sunset", "Abyss"];
 const ROLES = ["Flex", "Duelist", "Initiator", "Controller", "Sentinel"];
 const RANKS = ["Unranked", "Iron", "Bronze", "Silver", "Gold", "Platinum", "Diamond", "Ascendant", "Immortal", "Radiant"];
-const AGENTS = ["Jett", "Raze", "Reyna", "Yoru", "Phoenix", "Neon", "Iso", "Omen", "Astra", "Brimstone", "Viper", "Harbor", "Clove", "Sova", "Fade", "Skye", "Breach", "KAY/O", "Gekko", "Killjoy", "Cypher", "Sage", "Chamber", "Deadlock", "Vyse"];
+
+// UPDATED AGENT LIST: Included 'Veto'
+const AGENTS = [
+    "Jett", "Raze", "Reyna", "Yoru", "Phoenix", "Neon", "Iso", // Duelists
+    "Omen", "Astra", "Brimstone", "Viper", "Harbor", "Clove",  // Controllers
+    "Sova", "Fade", "Skye", "Breach", "KAY/O", "Gekko",        // Initiators
+    "Killjoy", "Cypher", "Sage", "Chamber", "Deadlock", "Vyse", "Veto" // Sentinels
+];
+
 const timezones = ["UTC", "GMT", "Europe/London", "Europe/Paris", "Europe/Berlin", "America/New_York", "America/Chicago", "America/Denver", "America/Los_Angeles", "Asia/Tokyo", "Australia/Sydney"];
 
 // --- Utility Functions ---
@@ -187,7 +195,6 @@ function NextMatchCountdown({ events }) {
     if (!nextEvent) return null;
     return (
         <div className="bg-gradient-to-r from-red-950 via-black to-black p-6 rounded-3xl border border-red-600/40 shadow-2xl shadow-red-900/20 mb-8 flex flex-col md:flex-row justify-between items-center gap-6 relative overflow-hidden group">
-            {/* Background Animation Pulse */}
             <div className="absolute top-0 right-0 w-96 h-96 bg-red-600/10 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2 pointer-events-none animate-pulse"></div>
             <div className="z-10 text-center md:text-left">
                 <div className="text-xs text-red-500 font-black uppercase tracking-[0.2em] mb-2">Next Match vs {nextEvent.opponent}</div>
@@ -226,61 +233,72 @@ function TeamComps({ members }) {
     const deleteComp = async (id) => await deleteDoc(doc(db, 'comps', id));
     const currentMapComps = comps.filter(c => c.map === selectedMap);
 
-    // Helper for Agent Cards
+    // --- Agent Card Sub-Component ---
     const AgentCard = ({ index }) => (
-        <div className="relative group h-48 bg-gradient-to-b from-neutral-900 to-black border border-neutral-800 rounded-xl overflow-hidden transition-all hover:border-red-600 hover:shadow-lg hover:shadow-red-900/20 flex flex-col">
-            {/* Stylized Background Effect */}
-            <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-neutral-800/40 to-transparent opacity-50"></div>
+        <div className="relative group h-56 bg-gradient-to-b from-neutral-900 to-black border border-neutral-800 rounded-2xl overflow-hidden transition-all hover:border-red-600 hover:shadow-[0_0_30px_rgba(220,38,38,0.2)] flex flex-col">
+            {/* Background Pulse */}
+            <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,_var(--tw-gradient-stops))] from-neutral-800/30 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500"></div>
 
-            {/* Agent Select Area */}
-            <div className="flex-1 relative flex flex-col justify-center items-center p-2 z-10 border-b border-neutral-800 group-hover:border-red-900/50 transition-colors">
-                <label className="text-[9px] font-bold text-neutral-500 uppercase tracking-widest mb-1">Role {index + 1}</label>
-                <select
-                    value={newComp.agents[index]}
-                    onChange={e => { const a = [...newComp.agents]; a[index] = e.target.value; setNewComp({ ...newComp, agents: a }); }}
-                    className="appearance-none bg-transparent text-center font-black text-xl sm:text-2xl uppercase text-white outline-none cursor-pointer w-full focus:text-red-500 transition-colors"
-                    style={{ textAlignLast: 'center' }}
-                >
-                    <option value="" className="bg-neutral-900 text-neutral-500">SELECT</option>
-                    {AGENTS.map(ag => <option key={ag} value={ag} className="bg-neutral-900">{ag}</option>)}
-                </select>
-                <div className="absolute bottom-2 left-1/2 -translate-x-1/2 w-8 h-0.5 bg-red-600 rounded-full opacity-0 group-hover:opacity-100 transition-opacity"></div>
+            {/* AGENT SELECTOR (Top Section) */}
+            <div className="flex-1 relative flex flex-col justify-center items-center p-4 z-10 border-b border-neutral-800 group-hover:border-red-900/50 transition-colors">
+                <label className="text-[10px] font-black text-neutral-600 uppercase tracking-[0.2em] mb-2 group-hover:text-red-500 transition-colors">Role {index + 1}</label>
+
+                {/* Hidden Select styling trick */}
+                <div className="relative w-full text-center">
+                    <select
+                        value={newComp.agents[index]}
+                        onChange={e => { const a = [...newComp.agents]; a[index] = e.target.value; setNewComp({ ...newComp, agents: a }); }}
+                        className="appearance-none bg-transparent absolute inset-0 w-full h-full opacity-0 cursor-pointer z-20"
+                    >
+                        <option value="">Select</option>
+                        {AGENTS.map(ag => <option key={ag} value={ag}>{ag}</option>)}
+                    </select>
+                    <div className={`text-2xl sm:text-3xl font-black uppercase tracking-tighter transition-all ${newComp.agents[index] ? 'text-white scale-110' : 'text-neutral-700'}`}>
+                        {newComp.agents[index] || "SELECT"}
+                    </div>
+                    <div className="mt-2 text-[10px] text-neutral-500 font-mono group-hover:text-neutral-300">
+                        {newComp.agents[index] ? 'CLICK TO CHANGE' : 'CLICK TO PICK AGENT'}
+                    </div>
+                </div>
             </div>
 
-            {/* Player Select Area */}
-            <div className="h-12 relative bg-neutral-900/50 flex items-center justify-center z-10">
+            {/* PLAYER SELECTOR (Bottom Section) */}
+            <div className="h-14 relative bg-neutral-900/80 flex items-center justify-center z-10 backdrop-blur-sm">
                 <select
                     value={newComp.players[index]}
                     onChange={e => { const p = [...newComp.players]; p[index] = e.target.value; setNewComp({ ...newComp, players: p }); }}
-                    className="appearance-none bg-transparent text-center text-xs font-bold text-neutral-400 uppercase outline-none cursor-pointer w-full h-full hover:text-white transition-colors"
+                    className="appearance-none bg-transparent text-center text-xs font-bold text-neutral-400 uppercase outline-none cursor-pointer w-full h-full hover:text-white hover:bg-white/5 transition-all tracking-wider"
                     style={{ textAlignLast: 'center' }}
                 >
-                    <option value="" className="bg-neutral-900">ASSIGN PLAYER</option>
+                    <option value="" className="bg-neutral-900">Assign Player</option>
                     {members.map(m => <option key={m} value={m} className="bg-neutral-900">{m}</option>)}
                 </select>
+                {/* Visual indicator arrow */}
+                <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-neutral-600 text-[10px]">▼</div>
             </div>
         </div>
     );
 
     return (
-        <div className="flex flex-col h-full space-y-6">
-            <div className="flex justify-between items-end">
-                <h3 className="text-4xl font-black text-white italic tracking-tighter">
+        <div className="flex flex-col h-full space-y-8">
+            {/* Header */}
+            <div className="flex flex-col md:flex-row justify-between items-end md:items-center gap-4 border-b border-neutral-800 pb-6">
+                <h3 className="text-4xl font-black text-white italic tracking-tighter flex items-center gap-3">
                     <span className="text-red-600 text-5xl">/</span> TACTICAL COMPS
                 </h3>
             </div>
 
-            {/* Map Selector - Styled Pills */}
-            <div className="flex overflow-x-auto gap-2 pb-2 scrollbar-hide snap-x border-b border-neutral-800/50 py-4">
+            {/* Map Selection Pills */}
+            <div className="flex flex-wrap gap-2">
                 {MAPS.map(m => (
                     <button
                         key={m}
                         onClick={() => setSelectedMap(m)}
                         className={`
-                            relative px-6 py-2 rounded-full text-xs font-bold uppercase tracking-widest whitespace-nowrap transition-all snap-start
+                            px-6 py-2 rounded-full text-xs font-bold uppercase tracking-widest transition-all transform
                             ${selectedMap === m
-                                ? 'bg-red-600 text-white shadow-[0_0_20px_rgba(220,38,38,0.5)] border border-red-400'
-                                : 'bg-neutral-900/50 border border-neutral-800 text-neutral-500 hover:text-white hover:bg-neutral-800'
+                                ? 'bg-red-600 text-white shadow-[0_0_15px_rgba(220,38,38,0.6)] scale-105 border border-red-400'
+                                : 'bg-neutral-900 border border-neutral-800 text-neutral-500 hover:bg-neutral-800 hover:text-white hover:border-neutral-600'
                             }
                         `}
                     >
@@ -289,55 +307,60 @@ function TeamComps({ members }) {
                 ))}
             </div>
 
-            {/* Builder Section */}
-            <div className="bg-black/40 p-6 rounded-3xl border border-neutral-800 backdrop-blur-sm relative overflow-hidden">
-                <div className="absolute top-0 right-0 w-32 h-32 bg-red-600/5 rounded-full blur-3xl pointer-events-none"></div>
+            {/* Builder UI */}
+            <div className="bg-black/40 p-8 rounded-[2rem] border border-neutral-800 relative overflow-hidden shadow-2xl">
+                <div className="absolute top-0 right-0 w-64 h-64 bg-red-600/5 rounded-full blur-[80px] pointer-events-none"></div>
 
-                <div className="flex justify-between items-center mb-6 relative z-10">
-                    <h4 className="text-sm font-bold text-neutral-300 uppercase tracking-widest flex items-center gap-2">
-                        <span className="w-2 h-2 bg-red-500 rounded-full animate-pulse"></span>
-                        Designing for <span className="text-white">{selectedMap}</span>
-                    </h4>
+                <div className="flex justify-between items-center mb-8 relative z-10">
+                    <div className="flex items-center gap-3">
+                        <span className="flex h-3 w-3 relative">
+                            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-500 opacity-75"></span>
+                            <span className="relative inline-flex rounded-full h-3 w-3 bg-red-600"></span>
+                        </span>
+                        <h4 className="text-sm font-bold text-neutral-300 uppercase tracking-widest">
+                            Design {selectedMap} Strategy
+                        </h4>
+                    </div>
                     <button
                         onClick={saveComp}
-                        className="bg-white hover:bg-neutral-200 text-black font-black px-6 py-2 rounded-lg text-xs uppercase tracking-[0.2em] transition-all shadow-lg transform active:scale-95"
+                        className="bg-white hover:bg-neutral-200 text-black font-black px-8 py-3 rounded-xl text-xs uppercase tracking-[0.2em] transition-all shadow-lg hover:shadow-xl hover:-translate-y-0.5 active:translate-y-0"
                     >
                         Save Loadout
                     </button>
                 </div>
 
-                {/* The Grid of 5 Cards */}
-                <div className="grid grid-cols-2 md:grid-cols-5 gap-3 md:gap-4">
+                <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
                     {Array.from({ length: 5 }).map((_, i) => (
                         <AgentCard key={i} index={i} />
                     ))}
                 </div>
             </div>
 
-            {/* Display Area */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 overflow-y-auto pb-10 pr-1 custom-scrollbar">
+            {/* Saved Comps List */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
                 {currentMapComps.map(comp => (
-                    <div key={comp.id} className="bg-neutral-900/80 rounded-2xl border border-neutral-800 overflow-hidden relative group hover:border-red-900/50 transition-all">
-                        {/* Header */}
-                        <div className="bg-black/50 px-4 py-2 flex justify-between items-center border-b border-neutral-800">
-                            <div className="text-[10px] font-mono text-neutral-500 uppercase tracking-widest">COMP ID: {comp.id.substring(0, 6)}</div>
-                            <button onClick={() => deleteComp(comp.id)} className="text-neutral-600 hover:text-red-500 font-bold px-2 transition-colors">DELETE</button>
+                    <div key={comp.id} className="bg-neutral-900/60 rounded-2xl border border-neutral-800 overflow-hidden relative group hover:border-red-600/40 transition-all shadow-lg">
+                        <div className="bg-black/40 px-5 py-3 flex justify-between items-center border-b border-neutral-800 group-hover:bg-red-900/10 transition-colors">
+                            <div className="flex items-center gap-2">
+                                <div className="w-1.5 h-1.5 bg-red-600 rounded-full"></div>
+                                <div className="text-[10px] font-mono text-neutral-400 uppercase tracking-widest">ID: {comp.id.substring(0, 6)}</div>
+                            </div>
+                            <button onClick={() => deleteComp(comp.id)} className="text-neutral-600 hover:text-white font-bold text-[10px] bg-neutral-800 hover:bg-red-600 px-2 py-1 rounded transition-all">DELETE</button>
                         </div>
-                        {/* Body */}
-                        <div className="p-4 grid grid-cols-5 gap-1 divide-x divide-neutral-800">
+                        <div className="p-5 grid grid-cols-5 gap-2 divide-x divide-neutral-800/50">
                             {comp.agents.map((agent, i) => (
-                                <div key={i} className="text-center flex flex-col justify-center items-center">
-                                    <div className="text-xs md:text-sm font-black text-white uppercase tracking-tight mb-1 drop-shadow-md">{agent}</div>
-                                    <div className="text-[8px] text-neutral-500 font-mono uppercase tracking-widest truncate w-full px-1">{comp.players[i] || '-'}</div>
+                                <div key={i} className="text-center flex flex-col justify-center items-center gap-1">
+                                    <div className="text-xs sm:text-sm font-black text-white uppercase tracking-tight drop-shadow-sm">{agent}</div>
+                                    <div className="text-[9px] text-neutral-500 font-mono uppercase tracking-widest truncate w-full">{comp.players[i] || '-'}</div>
                                 </div>
                             ))}
                         </div>
                     </div>
                 ))}
                 {currentMapComps.length === 0 && (
-                    <div className="col-span-full flex flex-col items-center justify-center py-12 text-neutral-700">
-                        <div className="text-4xl mb-2 opacity-20">🗺️</div>
-                        <p className="italic text-sm">No tactical data found for {selectedMap}.</p>
+                    <div className="col-span-full py-12 border border-dashed border-neutral-800 rounded-2xl flex flex-col items-center justify-center text-neutral-600">
+                        <span className="text-3xl mb-2 opacity-30">📋</span>
+                        <p className="text-sm italic font-medium">No saved compositions for {selectedMap}.</p>
                     </div>
                 )}
             </div>
