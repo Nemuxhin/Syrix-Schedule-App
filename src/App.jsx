@@ -1,8 +1,8 @@
 ﻿/*
-Syrix Team Availability - v3.1 (VISIBILITY FIX)
-- UX FIX: Agent Select cards now have high-contrast empty states (dashed box).
-- STYLE: Agent names are brighter and have a red accent underline when selected.
-- THEME: Maintained the v3.0 Red & Black "Syrix" aesthetic.
+Syrix Team Availability - v3.2 (AGENT SELECT FIX)
+- UX: Replaced native Agent <select> with a custom Visual Grid Menu.
+- VISUAL: High-contrast agent picker with Red/Black theme.
+- FIX: Player dropdown options now force-styled to black/white for readability.
 */
 
 import React, { useState, useEffect, useMemo } from 'react';
@@ -236,6 +236,7 @@ function TeamComps({ members }) {
     const [comps, setComps] = useState([]);
     const [selectedMap, setSelectedMap] = useState(MAPS[0]);
     const [newComp, setNewComp] = useState({ agents: Array(5).fill(''), players: Array(5).fill('') });
+    const [activeDropdown, setActiveDropdown] = useState(null); // Track which card's menu is open
 
     useEffect(() => {
         const unsub = onSnapshot(collection(db, 'comps'), (snap) => {
@@ -255,54 +256,79 @@ function TeamComps({ members }) {
     const deleteComp = async (id) => await deleteDoc(doc(db, 'comps', id));
     const currentMapComps = comps.filter(c => c.map === selectedMap);
 
-    const AgentCard = ({ index }) => (
-        <div className="relative group h-64 bg-neutral-900/80 border border-white/10 rounded-2xl overflow-hidden transition-all hover:border-red-600 hover:shadow-[0_0_30px_rgba(220,38,38,0.3)] flex flex-col">
-            {/* Background Accent */}
-            <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,_var(--tw-gradient-stops))] from-red-900/10 via-transparent to-transparent"></div>
+    // --- CUSTOM AGENT CARD COMPONENT ---
+    const AgentCard = ({ index }) => {
+        const isOpen = activeDropdown === index;
 
-            {/* AGENT PICKER SECTION */}
-            <div className="flex-1 relative flex flex-col justify-center items-center p-4 z-10 border-b border-white/5 group-hover:border-red-900/50 transition-colors">
-                {/* Role Label - Always Visible, Red Accent */}
-                <label className="text-[10px] font-black text-red-500 uppercase tracking-[0.2em] mb-3">
-                    Role {index + 1}
-                </label>
+        const handleAgentSelect = (agent) => {
+            const a = [...newComp.agents];
+            a[index] = agent;
+            setNewComp({ ...newComp, agents: a });
+            setActiveDropdown(null);
+        };
 
-                <div className="relative w-full text-center group-hover:-translate-y-1 transition-transform duration-300">
-                    <select
-                        value={newComp.agents[index]}
-                        onChange={e => { const a = [...newComp.agents]; a[index] = e.target.value; setNewComp({ ...newComp, agents: a }); }}
-                        className="appearance-none bg-transparent absolute inset-0 w-full h-full opacity-0 cursor-pointer z-20"
-                    >
-                        <option value="">Select Agent</option>
-                        {AGENTS.map(ag => <option key={ag} value={ag}>{ag}</option>)}
-                    </select>
+        return (
+            <div className="relative group h-64 bg-neutral-900/80 border border-white/10 rounded-2xl overflow-hidden transition-all hover:border-red-600 hover:shadow-[0_0_30px_rgba(220,38,38,0.3)] flex flex-col">
 
-                    {/* VISUAL TEXT - BRIGHTER AND CLEARER */}
+                {/* --- AGENT SELECTION AREA (CLICK TO OPEN MENU) --- */}
+                <div
+                    onClick={() => setActiveDropdown(isOpen ? null : index)}
+                    className="flex-1 relative flex flex-col justify-center items-center p-4 z-10 border-b border-white/5 cursor-pointer group-hover:bg-white/5 transition-colors"
+                >
+                    <label className="text-[10px] font-black text-red-500 uppercase tracking-[0.2em] mb-3">Role {index + 1}</label>
+
                     {newComp.agents[index] ? (
-                        // SELECTED STATE
-                        <div className="flex flex-col items-center">
-                            <div className="text-3xl sm:text-4xl font-black text-white uppercase tracking-tighter drop-shadow-[0_0_10px_rgba(255,255,255,0.5)] scale-110 transition-transform">
+                        <div className="flex flex-col items-center animate-fade-in-up">
+                            <div className="text-3xl sm:text-4xl font-black text-white uppercase tracking-tighter drop-shadow-[0_0_10px_rgba(255,255,255,0.5)]">
                                 {newComp.agents[index]}
                             </div>
                             <div className="mt-2 h-0.5 w-8 bg-red-600 rounded-full shadow-[0_0_8px_red]"></div>
                         </div>
                     ) : (
-                        // UNSELECTED STATE - FIXED VISIBILITY
-                        <div className="flex flex-col items-center justify-center border-2 border-dashed border-neutral-700 rounded-xl p-4 w-full hover:border-red-500/50 hover:bg-white/5 transition-all">
-                            <span className="text-2xl text-neutral-500 group-hover:text-white transition-colors mb-1">+</span>
-                            <span className="text-xs font-bold text-neutral-400 uppercase tracking-widest group-hover:text-white">Select Agent</span>
+                        <div className="flex flex-col items-center justify-center border-2 border-dashed border-neutral-700 rounded-xl p-4 w-full h-full hover:border-red-500/50 transition-all opacity-60 hover:opacity-100">
+                            <span className="text-2xl text-neutral-400 mb-1">+</span>
+                            <span className="text-[10px] font-bold text-neutral-400 uppercase tracking-widest">Select Agent</span>
                         </div>
                     )}
                 </div>
-            </div>
 
-            {/* PLAYER PICKER SECTION */}
-            <div className="h-14 relative bg-black flex items-center justify-center z-10">
-                <select value={newComp.players[index]} onChange={e => { const p = [...newComp.players]; p[index] = e.target.value; setNewComp({ ...newComp, players: p }); }} className="appearance-none bg-transparent text-center text-xs font-bold text-neutral-500 uppercase outline-none cursor-pointer w-full h-full hover:text-white transition-all tracking-wider hover:bg-white/5" style={{ textAlignLast: 'center' }}><option value="" className="bg-neutral-900">Assign Player</option>{members.map(m => <option key={m} value={m} className="bg-neutral-900">{m}</option>)}</select>
-                <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-neutral-700 text-[10px]">▼</div>
+                {/* --- CUSTOM DROPDOWN MENU (OVERLAY) --- */}
+                {isOpen && (
+                    <div className="absolute inset-0 bg-neutral-950 z-50 flex flex-col animate-fade-in">
+                        <div className="flex justify-between items-center p-3 border-b border-white/10 bg-neutral-900">
+                            <span className="text-xs font-bold text-white uppercase tracking-widest">Pick Agent</span>
+                            <button onClick={(e) => { e.stopPropagation(); setActiveDropdown(null); }} className="text-neutral-500 hover:text-red-500 text-lg leading-none">×</button>
+                        </div>
+                        <div className="flex-1 overflow-y-auto p-2 grid grid-cols-2 gap-1 custom-scrollbar">
+                            {AGENTS.map(agent => (
+                                <button
+                                    key={agent}
+                                    onClick={(e) => { e.stopPropagation(); handleAgentSelect(agent); }}
+                                    className={`text-[10px] font-bold uppercase py-2 rounded border border-transparent hover:border-red-900 transition-all ${newComp.agents[index] === agent ? 'bg-red-700 text-white' : 'text-neutral-400 hover:text-white hover:bg-neutral-800'}`}
+                                >
+                                    {agent}
+                                </button>
+                            ))}
+                        </div>
+                    </div>
+                )}
+
+                {/* --- PLAYER SELECTOR (BOTTOM) --- */}
+                <div className="h-16 relative bg-black flex items-center justify-center z-20 border-t border-white/5">
+                    <select
+                        value={newComp.players[index]}
+                        onChange={e => { const p = [...newComp.players]; p[index] = e.target.value; setNewComp({ ...newComp, players: p }); }}
+                        className="appearance-none bg-transparent text-center text-xs font-bold text-neutral-500 uppercase outline-none cursor-pointer w-full h-full hover:text-white transition-all tracking-wider hover:bg-white/5"
+                        style={{ textAlignLast: 'center' }}
+                    >
+                        <option value="" className="bg-black text-neutral-500">Assign Player</option>
+                        {members.map(m => <option key={m} value={m} className="bg-neutral-900 text-white">{m}</option>)}
+                    </select>
+                    <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-neutral-700 text-[10px]">▼</div>
+                </div>
             </div>
-        </div>
-    );
+        );
+    };
 
     return (
         <div className="flex flex-col h-full space-y-8">
@@ -320,7 +346,12 @@ function TeamComps({ members }) {
                     <div className="flex items-center gap-3"><span className="flex h-3 w-3 relative"><span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-500 opacity-75"></span><span className="relative inline-flex rounded-full h-3 w-3 bg-red-600"></span></span><h4 className="text-sm font-bold text-neutral-300 uppercase tracking-widest">Design {selectedMap} Strategy</h4></div>
                     <ButtonPrimary onClick={saveComp} className="text-xs py-2">Save Loadout</ButtonPrimary>
                 </div>
-                <div className="grid grid-cols-2 md:grid-cols-5 gap-4">{Array.from({ length: 5 }).map((_, i) => (<AgentCard key={i} index={i} />))}</div>
+                {/* Close dropdowns if clicking background */}
+                <div className="grid grid-cols-2 md:grid-cols-5 gap-4" onClick={() => setActiveDropdown(null)}>
+                    {Array.from({ length: 5 }).map((_, i) => (
+                        <div key={i} onClick={e => e.stopPropagation()}><AgentCard index={i} /></div>
+                    ))}
+                </div>
             </div>
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
                 {currentMapComps.map(comp => (
