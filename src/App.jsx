@@ -1,9 +1,11 @@
 ﻿/*
-Syrix Team Availability - FINAL PREMIUM BUILD (FULL SCREEN & FIXED)
-- LAYOUT: Fixed "App-like" layout (Header fixed, content scrolls).
-- FIX: "Inset-0" applied to remove all outer grey borders/margins.
-- DESIGN: Customized scrollbars to match Red/Black theme.
-- FEATURE: All previous features (Match History, Stratbook, etc.) preserved.
+Syrix Team Availability - FINAL PREMIUM BUILD (ALL FEATURES COMPLETE)
+- FEATURE: Captain's Message (Pinned Announcements).
+- FEATURE: Team Performance Analytics.
+- FEATURE: Match History & Stratbook.
+- FEATURE: Partner Directory.
+- FEATURE: Roster w/ Game IDs.
+- DESIGN: Syrix Red/Black Premium Theme.
 */
 
 import React, { useState, useEffect, useMemo } from 'react';
@@ -98,10 +100,166 @@ function Modal({ isOpen, onClose, onConfirm, title, children }) {
     );
 }
 
+// --- NEW FEATURE: Captain's Message ---
+function CaptainsMessage() {
+    const [message, setMessage] = useState({ text: "Welcome to the team hub! Set your availability below.", updatedBy: "System" });
+    const [isEditing, setIsEditing] = useState(false);
+    const [draft, setDraft] = useState("");
+    const auth = getAuth();
+
+    useEffect(() => {
+        const unsub = onSnapshot(doc(db, 'general', 'captain_message'), (docSnap) => {
+            if (docSnap.exists()) {
+                setMessage(docSnap.data());
+            }
+        });
+        return () => unsub();
+    }, []);
+
+    const handleSave = async () => {
+        if (!draft.trim()) return;
+        const user = auth.currentUser;
+        await setDoc(doc(db, 'general', 'captain_message'), {
+            text: draft,
+            updatedBy: user ? user.displayName : "Unknown",
+            updatedAt: new Date().toISOString()
+        });
+        setIsEditing(false);
+    };
+
+    return (
+        <div className="bg-gradient-to-br from-red-900/40 to-black p-6 rounded-3xl border border-red-900/50 shadow-xl relative overflow-hidden group">
+            {/* Decorative Element */}
+            <div className="absolute -right-6 -top-6 w-32 h-32 bg-red-600/20 rounded-full blur-3xl"></div>
+
+            <div className="flex justify-between items-start mb-3 relative z-10">
+                <h2 className="text-lg font-black text-white uppercase tracking-wider flex items-center gap-2">
+                    <span className="text-2xl">📢</span> Captain's Message
+                </h2>
+                {!isEditing && (
+                    <button onClick={() => { setDraft(message.text); setIsEditing(true); }} className="text-xs text-neutral-400 hover:text-white transition-colors bg-black/40 px-2 py-1 rounded border border-neutral-700">
+                        Edit
+                    </button>
+                )}
+            </div>
+
+            {isEditing ? (
+                <div className="relative z-10 animate-fade-in">
+                    <textarea
+                        value={draft}
+                        onChange={(e) => setDraft(e.target.value)}
+                        className="w-full bg-black/50 border border-red-900/50 rounded-xl p-3 text-white text-sm focus:border-red-500 outline-none resize-none mb-2 h-24 placeholder-neutral-500"
+                        placeholder="Post an announcement..."
+                    />
+                    <div className="flex justify-end gap-2">
+                        <button onClick={() => setIsEditing(false)} className="text-xs text-neutral-400 hover:text-white px-3 py-1">Cancel</button>
+                        <button onClick={handleSave} className="bg-red-600 hover:bg-red-500 text-white text-xs font-bold px-4 py-2 rounded-lg transition-all shadow-lg">Post</button>
+                    </div>
+                </div>
+            ) : (
+                <div className="relative z-10">
+                    <p className="text-slate-200 text-sm leading-relaxed whitespace-pre-wrap font-medium tracking-wide">
+                        "{message.text}"
+                    </p>
+                    <div className="mt-4 flex items-center gap-2 text-[10px] text-neutral-500 font-mono uppercase">
+                        <div className="w-1.5 h-1.5 bg-green-500 rounded-full animate-pulse"></div>
+                        Posted by {message.updatedBy}
+                    </div>
+                </div>
+            )}
+        </div>
+    );
+}
+
+function PerformanceWidget({ events }) {
+    const stats = useMemo(() => {
+        let wins = 0;
+        let losses = 0;
+        let draws = 0;
+        const mapStats = {};
+
+        const playedMatches = events.filter(e => e.result && e.result.myScore !== '');
+
+        playedMatches.forEach(m => {
+            const my = parseInt(m.result.myScore);
+            const enemy = parseInt(m.result.enemyScore);
+            const map = m.result.map;
+
+            if (!mapStats[map]) mapStats[map] = { played: 0, wins: 0 };
+            mapStats[map].played++;
+
+            if (my > enemy) {
+                wins++;
+                mapStats[map].wins++;
+            } else if (my < enemy) {
+                losses++;
+            } else {
+                draws++;
+            }
+        });
+
+        let bestMap = 'N/A';
+        let bestWinRate = -1;
+
+        Object.keys(mapStats).forEach(map => {
+            const rate = mapStats[map].wins / mapStats[map].played;
+            if (rate > bestWinRate || (rate === bestWinRate && mapStats[map].played > mapStats[bestMap]?.played)) {
+                bestWinRate = rate;
+                bestMap = map;
+            }
+        });
+
+        const totalGames = wins + losses + draws;
+        const overallWinRate = totalGames > 0 ? Math.round((wins / totalGames) * 100) : 0;
+
+        return { wins, losses, draws, overallWinRate, bestMap, bestMapStats: mapStats[bestMap] };
+    }, [events]);
+
+    return (
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+            <div className="bg-neutral-900/80 p-4 rounded-2xl border border-neutral-800 shadow-lg flex flex-col justify-between">
+                <div className="text-xs font-bold text-neutral-500 uppercase tracking-widest">Win Rate</div>
+                <div className="text-3xl font-black text-white mt-1">{stats.overallWinRate}%</div>
+                <div className="w-full bg-neutral-800 h-1.5 rounded-full mt-3 overflow-hidden">
+                    <div className="bg-red-600 h-full rounded-full" style={{ width: `${stats.overallWinRate}%` }}></div>
+                </div>
+            </div>
+
+            <div className="bg-neutral-900/80 p-4 rounded-2xl border border-neutral-800 shadow-lg flex flex-col justify-between">
+                <div className="text-xs font-bold text-neutral-500 uppercase tracking-widest">Record</div>
+                <div className="flex items-baseline gap-1 mt-1">
+                    <span className="text-3xl font-black text-green-500">{stats.wins}</span>
+                    <span className="text-xl font-bold text-neutral-600">-</span>
+                    <span className="text-3xl font-black text-red-500">{stats.losses}</span>
+                </div>
+                <div className="text-[10px] text-neutral-400 font-mono uppercase mt-2">W - L</div>
+            </div>
+
+            <div className="bg-neutral-900/80 p-4 rounded-2xl border border-neutral-800 shadow-lg flex flex-col justify-between col-span-2 md:col-span-1">
+                <div className="text-xs font-bold text-neutral-500 uppercase tracking-widest">Best Map</div>
+                <div className="text-2xl font-black text-white mt-1 truncate">{stats.bestMap}</div>
+                {stats.bestMap !== 'N/A' && (
+                    <div className="text-xs text-green-500 font-bold mt-2">
+                        {Math.round((stats.bestMapStats.wins / stats.bestMapStats.played) * 100)}% Win Rate
+                        <span className="text-neutral-600 ml-1">({stats.bestMapStats.wins}/{stats.bestMapStats.played})</span>
+                    </div>
+                )}
+            </div>
+
+            <div className="bg-neutral-900/80 p-4 rounded-2xl border border-neutral-800 shadow-lg flex flex-col justify-between hidden lg:flex">
+                <div className="text-xs font-bold text-neutral-500 uppercase tracking-widest">Matches Logged</div>
+                <div className="text-3xl font-black text-white mt-1">{stats.wins + stats.losses + stats.draws}</div>
+                <div className="text-[10px] text-neutral-500 mt-2">Total Scrims/Games</div>
+            </div>
+        </div>
+    );
+}
+
 function RosterManager({ members }) {
     const [rosterData, setRosterData] = useState({});
     const [selectedMember, setSelectedMember] = useState(null);
     const [role, setRole] = useState('Tryout');
+    const [gameId, setGameId] = useState('');
     const [notes, setNotes] = useState('');
     const [status, setStatus] = useState('idle');
 
@@ -117,7 +275,7 @@ function RosterManager({ members }) {
     const handleSave = async () => {
         if (!selectedMember) return;
         setStatus('saving');
-        await setDoc(doc(db, 'roster', selectedMember), { role, notes }, { merge: true });
+        await setDoc(doc(db, 'roster', selectedMember), { role, notes, gameId }, { merge: true });
         setStatus('success');
         setTimeout(() => setStatus('idle'), 1500);
     };
@@ -130,10 +288,18 @@ function RosterManager({ members }) {
                     {members.map(m => (
                         <div
                             key={m}
-                            onClick={() => { setSelectedMember(m); setRole(rosterData[m]?.role || 'Tryout'); setNotes(rosterData[m]?.notes || ''); }}
+                            onClick={() => {
+                                setSelectedMember(m);
+                                setRole(rosterData[m]?.role || 'Tryout');
+                                setNotes(rosterData[m]?.notes || '');
+                                setGameId(rosterData[m]?.gameId || '');
+                            }}
                             className={`p-3 rounded-xl cursor-pointer border transition-all flex justify-between items-center ${selectedMember === m ? 'bg-red-900/20 border-red-600' : 'bg-black/40 border-neutral-800 hover:border-neutral-600'}`}
                         >
-                            <span className="font-bold text-neutral-200">{m}</span>
+                            <div>
+                                <div className="font-bold text-neutral-200">{m}</div>
+                                {rosterData[m]?.gameId && <div className="text-[9px] text-neutral-500 font-mono">{rosterData[m].gameId}</div>}
+                            </div>
                             <span className={`text-[10px] px-2 py-1 rounded font-bold uppercase ${(rosterData[m]?.role === 'Captain') ? 'bg-yellow-600/20 text-yellow-500' :
                                     (rosterData[m]?.role === 'Main') ? 'bg-green-600/20 text-green-500' :
                                         'bg-red-600/20 text-red-500'
@@ -156,7 +322,7 @@ function RosterManager({ members }) {
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
                             <div>
                                 <label className="block text-xs font-bold text-neutral-500 uppercase mb-2">Assign Role</label>
-                                <div className="grid grid-cols-2 gap-2">
+                                <div className="grid grid-cols-2 gap-2 mb-4">
                                     {['Captain', 'Main', 'Sub', 'Tryout'].map(r => (
                                         <button
                                             key={r}
@@ -167,13 +333,22 @@ function RosterManager({ members }) {
                                         </button>
                                     ))}
                                 </div>
+
+                                <label className="block text-xs font-bold text-neutral-500 uppercase mb-2">In-Game ID (Riot ID)</label>
+                                <input
+                                    type="text"
+                                    placeholder="Syrix#NA1"
+                                    value={gameId}
+                                    onChange={(e) => setGameId(e.target.value)}
+                                    className="w-full p-3 bg-black border border-neutral-800 rounded-xl text-white text-sm focus:border-red-600 focus:ring-1 focus:ring-red-600 outline-none"
+                                />
                             </div>
                             <div>
                                 <label className="block text-xs font-bold text-neutral-500 uppercase mb-2">Performance Notes</label>
                                 <textarea
                                     value={notes}
                                     onChange={(e) => setNotes(e.target.value)}
-                                    className="w-full h-32 p-3 bg-black border border-neutral-800 rounded-xl text-white text-sm focus:border-red-600 focus:ring-1 focus:ring-red-600 outline-none resize-none"
+                                    className="w-full h-40 p-3 bg-black border border-neutral-800 rounded-xl text-white text-sm focus:border-red-600 focus:ring-1 focus:ring-red-600 outline-none resize-none"
                                     placeholder="Enter notes about gameplay, communication, availability..."
                                 />
                             </div>
@@ -698,6 +873,9 @@ export default function App() {
                         <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 animate-fade-in-up">
                             {/* Left Column: Availability & Event Ops */}
                             <div className="lg:col-span-4 space-y-8">
+                                {/* Captains Message */}
+                                <CaptainsMessage />
+
                                 <div className="bg-neutral-900/50 p-6 rounded-3xl border border-neutral-800 shadow-xl backdrop-blur-sm relative overflow-hidden group">
                                     <div className="absolute top-0 left-0 w-1 h-full bg-red-600/50 group-hover:bg-red-600 transition-colors"></div>
                                     <h2 className="text-xl font-bold text-white mb-6 uppercase tracking-wide flex items-center gap-2">Set Availability</h2>
@@ -747,31 +925,37 @@ export default function App() {
 
                             {/* Right Column: Data Visualization */}
                             <div className="lg:col-span-8 space-y-8">
-                                <div className="grid grid-cols-1 xl:grid-cols-2 gap-8">
-                                    <div className="bg-neutral-900/80 p-6 rounded-3xl border border-neutral-800 shadow-2xl">
-                                        <h2 className="text-lg font-bold text-white mb-4 flex justify-between items-center uppercase tracking-wide">
-                                            <span>Upcoming Events</span>
-                                            <span className="text-[10px] bg-red-900/30 text-red-400 border border-red-900/50 px-2 py-1 rounded font-bold">{events.length} ACTIVE</span>
-                                        </h2>
-                                        <div className="space-y-3 max-h-64 overflow-y-auto pr-2 scrollbar-thin scrollbar-thumb-neutral-700">
-                                            {events.length === 0 ? <p className="text-neutral-600 text-sm italic p-4 text-center">No scheduled events.</p> : events.map(ev => (
-                                                <div key={ev.id} className="p-3 bg-black/40 rounded-xl border border-neutral-800 flex justify-between items-center group hover:border-red-900/50 transition-colors">
-                                                    <div>
-                                                        <div className="font-bold text-white text-sm group-hover:text-red-400 transition-colors">{ev.type} <span className="text-neutral-500">vs</span> {ev.opponent || 'TBD'}</div>
-                                                        <div className="text-xs text-neutral-400 mt-1">{ev.date} @ <span className="text-white font-mono">{ev.time}</span></div>
+                                {/* Top Row: Heatmap & Upcoming & Performance */}
+                                <div className="space-y-8">
+                                    <div className="grid grid-cols-1 xl:grid-cols-2 gap-8">
+                                        <div className="bg-neutral-900/80 p-6 rounded-3xl border border-neutral-800 shadow-2xl">
+                                            <h2 className="text-lg font-bold text-white mb-4 flex justify-between items-center uppercase tracking-wide">
+                                                <span>Upcoming Events</span>
+                                                <span className="text-[10px] bg-red-900/30 text-red-400 border border-red-900/50 px-2 py-1 rounded font-bold">{events.length} ACTIVE</span>
+                                            </h2>
+                                            <div className="space-y-3 max-h-64 overflow-y-auto pr-2 scrollbar-thin scrollbar-thumb-neutral-700">
+                                                {events.length === 0 ? <p className="text-neutral-600 text-sm italic p-4 text-center">No scheduled events.</p> : events.map(ev => (
+                                                    <div key={ev.id} className="p-3 bg-black/40 rounded-xl border border-neutral-800 flex justify-between items-center group hover:border-red-900/50 transition-colors">
+                                                        <div>
+                                                            <div className="font-bold text-white text-sm group-hover:text-red-400 transition-colors">{ev.type} <span className="text-neutral-500">vs</span> {ev.opponent || 'TBD'}</div>
+                                                            <div className="text-xs text-neutral-400 mt-1">{ev.date} @ <span className="text-white font-mono">{ev.time}</span></div>
+                                                        </div>
+                                                        <div className="flex items-center gap-2">
+                                                            <div className="text-[9px] bg-neutral-800 text-neutral-400 px-2 py-1 rounded uppercase font-bold tracking-wider">By {ev.scheduledBy || 'Admin'}</div>
+                                                            <button onClick={() => openModal('Delete Event', 'Are you sure you want to remove this event?', () => deleteEvent(ev.id))} className="text-neutral-600 hover:text-red-500 p-1 rounded transition-colors">×</button>
+                                                        </div>
                                                     </div>
-                                                    <div className="flex items-center gap-2">
-                                                        <div className="text-[9px] bg-neutral-800 text-neutral-400 px-2 py-1 rounded uppercase font-bold tracking-wider">By {ev.scheduledBy || 'Admin'}</div>
-                                                        <button onClick={() => openModal('Delete Event', 'Are you sure you want to remove this event?', () => deleteEvent(ev.id))} className="text-neutral-600 hover:text-red-500 p-1 rounded transition-colors">×</button>
-                                                    </div>
-                                                </div>
-                                            ))}
+                                                ))}
+                                            </div>
+                                        </div>
+                                        <div className="bg-neutral-900/50 p-6 rounded-3xl border border-neutral-800">
+                                            <h2 className="text-lg font-bold text-white mb-4 uppercase tracking-wide">Availability Heatmap</h2>
+                                            <AvailabilityHeatmap availabilities={availabilities} members={dynamicMembers} />
                                         </div>
                                     </div>
-                                    <div className="bg-neutral-900/50 p-6 rounded-3xl border border-neutral-800">
-                                        <h2 className="text-lg font-bold text-white mb-4 uppercase tracking-wide">Availability Heatmap</h2>
-                                        <AvailabilityHeatmap availabilities={availabilities} members={dynamicMembers} />
-                                    </div>
+
+                                    {/* PERFORMANCE WIDGET */}
+                                    <PerformanceWidget events={events} />
                                 </div>
 
                                 {/* Detailed Timeline - REDESIGNED AS MATRIX TABLE */}
