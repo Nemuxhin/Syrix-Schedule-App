@@ -1,9 +1,9 @@
 ﻿/*
-Syrix Team Availability - FINAL ULTIMATE BUILD (STRICT ACCESS)
-- FIX: Strict Role Check (User must have a 'role' in DB to see dashboard).
-- FIX: Seamless redirect to Apply tab for new users (no error flash).
-- FIX: Date/Timezone math hardened to prevent day-shifting.
-- DESIGN: Premium Red/Black Theme maintained.
+Syrix Team Availability - FINAL SECURE BUILD
+- SECURITY: Strict View Guard implemented. Non-members CANNOT render dashboard components.
+- FIX: Added 'membershipLoading' state to prevent UI flashing.
+- FIX: Profile editing locked for non-members to prevent database pollution.
+- DESIGN: Maintained Red/Black theme.
 */
 
 import React, { useState, useEffect, useMemo } from 'react';
@@ -28,7 +28,7 @@ const auth = getAuth(app);
 
 const discordWebhookUrl = "https://discord.com/api/webhooks/1427426922228351042/lqw36ZxOPEnC3qK45b3vnqZvbkaYhzIxqb-uS1tex6CGOvmLYs19OwKZvslOVABdpHnD";
 
-// STRICT ADMIN LIST (Case sensitive if needed, but we handle leniently)
+// STRICT ADMIN LIST (Case sensitive matches)
 const ADMINS = ["Nemuxhin", "Tawz", "tawz", "nemuxhin"];
 
 const DAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
@@ -42,78 +42,46 @@ const RANKS = ["Unranked", "Iron", "Bronze", "Silver", "Gold", "Platinum", "Diam
 function timeToMinutes(t) { if (!t || t === '24:00') return 1440; const [h, m] = t.split(":").map(Number); return h * 60 + m; }
 function minutesToTime(m) { const minutes = m % 1440; const hh = Math.floor(minutes / 60).toString().padStart(2, '0'); const mm = (minutes % 60).toString().padStart(2, '0'); return `${hh}:${mm}`; }
 
-// --- Enhanced Date/Time Logic ---
-// We anchor everything to a fixed reference date to avoid weekly drift issues
-const getReferenceDateForDay = (dayName) => {
-    const dayIndex = DAYS.indexOf(dayName);
+const getNextDateForDay = (dayName) => {
+    const days = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+    const targetIndex = days.indexOf(dayName);
     const today = new Date();
-    const currentDayIndex = today.getDay() === 0 ? 6 : today.getDay() - 1; // Make Sunday 6, Mon 0
-
-    // Calculate offset to the target day in the current week
-    const diff = dayIndex - currentDayIndex;
-    const targetDate = new Date(today);
-    targetDate.setDate(today.getDate() + diff);
-    return targetDate;
+    const currentDayIndex = today.getDay();
+    let distance = targetIndex - currentDayIndex;
+    const d = new Date(today);
+    d.setDate(today.getDate() + distance);
+    return d;
 };
 
 const convertToGMT = (day, time) => {
-    const localDate = getReferenceDateForDay(day);
+    const targetDate = getNextDateForDay(day);
     const [hours, minutes] = time.split(':').map(Number);
-    localDate.setHours(hours, minutes, 0, 0);
-
-    // Convert the LOCAL time to UTC parts
-    const utcDayIndex = localDate.getUTCDay(); // 0 (Sun) - 6 (Sat)
-    // Map JS UTC Day index back to our DAYS array (Mon-Sun)
-    // JS: 0=Sun, 1=Mon... 
-    // Our: 0=Mon... 
-    // Conversion: (utcDayIndex + 6) % 7
-    const ourDayIndex = (utcDayIndex + 6) % 7;
-
-    const gmtHours = String(localDate.getUTCHours()).padStart(2, '0');
-    const gmtMinutes = String(localDate.getUTCMinutes()).padStart(2, '0');
-
-    return { day: DAYS[ourDayIndex], time: `${gmtHours}:${gmtMinutes}` };
+    targetDate.setHours(hours, minutes, 0, 0);
+    const utcDayIndex = targetDate.getUTCDay();
+    const jsDays = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+    const gmtDay = jsDays[utcDayIndex];
+    const gmtHours = String(targetDate.getUTCHours()).padStart(2, '0');
+    const gmtMinutes = String(targetDate.getUTCMinutes()).padStart(2, '0');
+    return { day: gmtDay, time: `${gmtHours}:${gmtMinutes}` };
 };
 
 const convertFromGMT = (day, time, timezone) => {
     if (!day || !time) return { day: '', time: '' };
-
-    const dayIndex = DAYS.indexOf(day); // Our index 0-6 (Mon-Sun)
-    // Convert to JS Day Index (Sun=0, Mon=1) -> (dayIndex + 1) % 7
-    const jsDayIndex = (dayIndex + 1) % 7;
-
-    // Find the next instance of this UTC day
-    const now = new Date();
-    const currentJsDay = now.getUTCDay();
-    let distance = jsDayIndex - currentJsDay;
-    // Align to current week mostly
-    const gmtDate = new Date(now);
-    gmtDate.setUTCDate(now.getUTCDate() + distance);
-
+    const jsDays = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+    const targetIndex = jsDays.indexOf(day);
+    const today = new Date();
+    const currentDayIndex = today.getUTCDay();
+    const distance = targetIndex - currentDayIndex;
+    const gmtDate = new Date(today);
+    gmtDate.setUTCDate(today.getUTCDate() + distance);
     const [hours, minutes] = time.split(':').map(Number);
     gmtDate.setUTCHours(hours, minutes, 0, 0);
-
-    const formatter = new Intl.DateTimeFormat('en-US', {
-        timeZone: timezone,
-        weekday: 'long',
-        hour: '2-digit',
-        minute: '2-digit',
-        hour12: false,
-        hourCycle: 'h23' // Force 0-23 format
-    });
-
+    const formatter = new Intl.DateTimeFormat('en-US', { timeZone: timezone, weekday: 'long', hour: '2-digit', minute: '2-digit', hour12: false });
     const parts = formatter.formatToParts(gmtDate);
     const part = (type) => parts.find(p => p.type === type)?.value;
-
     let localHours = part('hour');
     if (localHours === '24') localHours = '00';
-    // Ensure double digits for time input compatibility
-    if (localHours.length === 1) localHours = '0' + localHours;
-
-    return {
-        day: part('weekday'),
-        time: `${localHours}:${part('minute')}`
-    };
+    return { day: part('weekday'), time: `${localHours}:${part('minute')}` };
 };
 
 // --- Components ---
@@ -136,7 +104,6 @@ function Modal({ isOpen, onClose, onConfirm, title, children }) {
 
 function AdminPanel() {
     const [applications, setApplications] = useState([]);
-
     useEffect(() => {
         const unsub = onSnapshot(collection(db, 'applications'), (snap) => {
             const apps = [];
@@ -155,7 +122,6 @@ function AdminPanel() {
         });
         await deleteDoc(doc(db, 'applications', app.id));
     };
-
     const rejectApplicant = async (id) => { await deleteDoc(doc(db, 'applications', id)); };
 
     return (
@@ -187,7 +153,6 @@ function ProfileModal({ isOpen, onClose, currentUser }) {
     const [rank, setRank] = useState("Unranked");
     const [agents, setAgents] = useState("");
     const [status, setStatus] = useState("idle");
-
     const handleSave = async () => {
         setStatus("saving");
         try {
@@ -196,9 +161,7 @@ function ProfileModal({ isOpen, onClose, currentUser }) {
             setTimeout(() => { setStatus("idle"); onClose(); }, 1000);
         } catch (e) { console.error(e); setStatus("idle"); }
     };
-
     if (!isOpen) return null;
-
     return (
         <div className="fixed inset-0 bg-black/90 z-[100] flex justify-center items-center backdrop-blur-md p-4">
             <div className="bg-neutral-900 rounded-2xl shadow-2xl p-6 w-full max-w-md border border-neutral-800 animate-fade-in-up">
@@ -222,7 +185,8 @@ function ApplicationForm({ currentUser }) {
         setStatus('saving');
         const appData = { ...form, user: currentUser.displayName, uid: currentUser.uid, submittedAt: new Date().toISOString() };
         await addDoc(collection(db, 'applications'), appData);
-        // Webhook code omitted for brevity but would go here
+        const content = { embeds: [{ title: `📄 New Team Application: ${currentUser.displayName}`, color: 16776960, fields: [{ name: 'Rank', value: form.rank, inline: true }, { name: 'Role', value: form.role, inline: true }, { name: 'Tracker', value: form.tracker }, { name: 'Experience', value: form.exp || 'None provided' }, { name: 'Why Join?', value: form.why }], timestamp: new Date().toISOString() }] };
+        try { await fetch(discordWebhookUrl, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(content) }); } catch (e) { console.error(e); }
         setStatus('success');
         setForm({ tracker: '', rank: 'Unranked', role: 'Flex', exp: '', why: '' });
     };
@@ -261,9 +225,6 @@ function MapVeto() {
         </div>
     );
 }
-
-// ... (CaptainsMessage, PerformanceWidget, RosterManager, MatchHistory, StratBook, PartnerDirectory, ScrimScheduler, AvailabilityHeatmap, LoginScreen - ALL PRESERVED)
-// I will paste the unchanged components below for completeness so the file works instantly.
 
 function CaptainsMessage() {
     const [message, setMessage] = useState({ text: "Welcome to the team hub!", updatedBy: "System" });
@@ -574,6 +535,7 @@ export default function App() {
     const [saveStatus, setSaveStatus] = useState('idle');
     const [userTimezone, setUserTimezone] = useState(localStorage.getItem('timezone') || Intl.DateTimeFormat().resolvedOptions().timeZone);
     const [authLoading, setAuthLoading] = useState(true);
+    const [membershipLoading, setMembershipLoading] = useState(false); // NEW
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [isProfileOpen, setIsProfileOpen] = useState(false);
     const [modalContent, setModalContent] = useState({});
@@ -598,16 +560,21 @@ export default function App() {
 
     // Data Listeners & Access Control
     useEffect(() => {
-        if (!currentUser) return;
+        if (!currentUser) {
+            setMembershipLoading(false);
+            return;
+        }
+
+        setMembershipLoading(true);
 
         // Strict Access Control: Must have a ROLE in the roster to see dashboard
         const checkMembership = onSnapshot(doc(db, 'roster', currentUser.displayName), (docSnap) => {
-            const isAuthorized = (docSnap.exists() && docSnap.data().role) || ADMINS.includes(currentUser.displayName);
+            // Case insensitive admin check
+            const isAdmin = ADMINS.some(admin => admin.toLowerCase() === currentUser.displayName.toLowerCase());
+            const isAuthorized = (docSnap.exists() && docSnap.data().role) || isAdmin;
+
             setIsMember(isAuthorized);
-            // Force non-members to the Apply tab, avoiding any "Access Denied" flash
-            if (!isAuthorized && activeTab !== 'apply') setActiveTab('apply');
-            // If authorized and stuck on apply, move to dashboard
-            if (isAuthorized && activeTab === 'apply') setActiveTab('dashboard');
+            setMembershipLoading(false); // Loaded
         });
 
         const unsubAvail = onSnapshot(collection(db, 'availabilities'), (snap) => {
@@ -658,7 +625,7 @@ export default function App() {
         return `https://cdn.discordapp.com/embed/avatars/${Math.floor(Math.random() * 5)}.png`;
     };
 
-    const isAdmin = useMemo(() => currentUser && ADMINS.includes(currentUser.displayName), [currentUser]);
+    const isAdmin = useMemo(() => currentUser && ADMINS.some(a => a.toLowerCase() === currentUser.displayName.toLowerCase()), [currentUser]);
 
     // Actions
     const openModal = (title, message, onConfirm) => { setModalContent({ title, children: message, onConfirm }); setIsModalOpen(true); };
@@ -716,10 +683,28 @@ export default function App() {
         setIsModalOpen(false);
     };
 
-    if (authLoading) return <div className="fixed inset-0 h-full w-full bg-black flex items-center justify-center text-red-600 font-bold text-xl animate-pulse">LOADING SYRIX HUB...</div>;
+    if (authLoading || (currentUser && membershipLoading)) return <div className="fixed inset-0 h-full w-full bg-black flex items-center justify-center text-red-600 font-bold text-xl animate-pulse">LOADING SYRIX HUB...</div>;
     if (!currentUser) return <LoginScreen signIn={signIn} />;
 
-    // Nav Button Helper
+    // VIEW GUARD: If NOT a member, FORCE Apply View
+    if (!isMember) {
+        return (
+            <div className="fixed inset-0 h-full w-full bg-black text-neutral-200 font-sans selection:bg-red-500/30 flex flex-col overflow-hidden">
+                <header className="flex-none flex justify-between items-center px-8 py-4 border-b border-red-900/30 bg-black/90 backdrop-blur-md z-40">
+                    <h1 className="text-3xl font-black tracking-tighter text-white">SYRIX <span className="text-red-600">HUB</span></h1>
+                    <div className="flex items-center gap-4">
+                        <img src={getAvatar()} className="w-10 h-10 rounded-full border-2 border-red-600" alt="Profile" />
+                        <button onClick={handleSignOut} className="text-[10px] text-neutral-400 hover:text-red-500 font-bold uppercase tracking-wide">Log Out</button>
+                    </div>
+                </header>
+                <main className="flex-1 overflow-y-auto p-6 flex items-center justify-center">
+                    <ApplicationForm currentUser={currentUser} />
+                </main>
+            </div>
+        );
+    }
+
+    // Helper for Main Nav
     const NavBtn = ({ id, label }) => (
         <button onClick={() => setActiveTab(id)} className={`text-xs font-bold uppercase tracking-widest pb-1 border-b-2 transition-all ${activeTab === id ? 'text-red-500 border-red-500' : 'text-neutral-500 border-transparent hover:text-neutral-300'}`}>
             {label}
@@ -732,34 +717,26 @@ export default function App() {
             <header className="flex-none flex flex-col md:flex-row justify-between items-center px-8 py-4 gap-4 border-b border-red-900/30 bg-black/90 backdrop-blur-md z-40">
                 <div>
                     <h1 className="text-3xl font-black tracking-tighter text-white">SYRIX <span className="text-red-600">HUB</span></h1>
-
-                    {/* RESTRICTED NAVIGATION */}
                     <div className="flex gap-6 mt-2 overflow-x-auto pb-1 scrollbar-hide">
-                        {isMember ? (
-                            <>
-                                <NavBtn id="dashboard" label="Dashboard" />
-                                <NavBtn id="matches" label="Matches" />
-                                <NavBtn id="strats" label="Stratbook" />
-                                <NavBtn id="roster" label="Roster" />
-                                <NavBtn id="partners" label="Partners" />
-                                <NavBtn id="mapveto" label="Map Veto" />
-                                {isAdmin && <NavBtn id="admin" label="Admin" />}
-                            </>
-                        ) : (
-                            <NavBtn id="apply" label="Apply" />
-                        )}
+                        <NavBtn id="dashboard" label="Dashboard" />
+                        <NavBtn id="matches" label="Matches" />
+                        <NavBtn id="strats" label="Stratbook" />
+                        <NavBtn id="roster" label="Roster" />
+                        <NavBtn id="partners" label="Partners" />
+                        <NavBtn id="mapveto" label="Map Veto" />
+                        {isAdmin && <NavBtn id="admin" label="Admin" />}
                     </div>
                 </div>
                 <div className="flex items-center gap-4 bg-neutral-900/80 p-2 rounded-2xl border border-neutral-800 backdrop-blur-sm shadow-lg">
                     <img
                         src={getAvatar()}
-                        onClick={() => isMember && setIsProfileOpen(true)}
+                        onClick={() => setIsProfileOpen(true)}
                         onError={(e) => { e.target.onerror = null; e.target.src = "https://cdn.discordapp.com/embed/avatars/1.png"; }}
-                        className={`w-10 h-10 rounded-full border-2 border-red-600 shadow-red-600/50 shadow-sm transition-transform ${isMember ? 'cursor-pointer hover:scale-105' : 'opacity-50'}`}
+                        className="w-10 h-10 rounded-full border-2 border-red-600 shadow-red-600/50 shadow-sm cursor-pointer hover:scale-105 transition-transform"
                         alt="Profile"
                     />
                     <div className="pr-4 border-r border-neutral-700 mr-2">
-                        <div className="text-sm font-bold text-white cursor-pointer" onClick={() => isMember && setIsProfileOpen(true)}>{currentUser.displayName}</div>
+                        <div className="text-sm font-bold text-white cursor-pointer" onClick={() => setIsProfileOpen(true)}>{currentUser.displayName}</div>
                         <button onClick={handleSignOut} className="text-[10px] text-neutral-400 hover:text-red-500 transition-colors font-bold uppercase tracking-wide">Log Out</button>
                     </div>
                     <select value={userTimezone} onChange={e => { setUserTimezone(e.target.value); localStorage.setItem('timezone', e.target.value); }} className="bg-black border border-neutral-800 text-xs rounded-lg p-2 text-neutral-400 outline-none focus:border-red-600 transition-colors">
@@ -773,7 +750,7 @@ export default function App() {
                 <div className="max-w-[1920px] mx-auto">
 
                     {/* 1. DASHBOARD (Home) */}
-                    {activeTab === 'dashboard' && isMember && (
+                    {activeTab === 'dashboard' && (
                         <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 animate-fade-in-up">
                             {/* Left Column: Availability & Event Ops */}
                             <div className="lg:col-span-4 space-y-8">
@@ -898,6 +875,9 @@ export default function App() {
                                                         })}
                                                     </tr>
                                                 ))}
+                                                {dynamicMembers.length === 0 && (
+                                                    <tr><td colSpan="8" className="p-8 text-center text-neutral-500 italic">No availability data submitted yet.</td></tr>
+                                                )}
                                             </tbody>
                                         </table>
                                     </div>
@@ -926,17 +906,12 @@ export default function App() {
                         <div className="animate-fade-in-up h-full"><PartnerDirectory /></div>
                     )}
 
-                    {/* 6. APPLICATION FORM */}
-                    {activeTab === 'apply' && (
-                        <div className="animate-fade-in-up h-full"><ApplicationForm currentUser={currentUser} /></div>
-                    )}
-
-                    {/* 7. ADMIN */}
+                    {/* 6. ADMIN */}
                     {activeTab === 'admin' && isAdmin && (
                         <div className="animate-fade-in-up h-full"><AdminPanel /></div>
                     )}
 
-                    {/* 8. MAP VETO */}
+                    {/* 7. MAP VETO */}
                     {activeTab === 'mapveto' && isMember && (
                         <div className="animate-fade-in-up h-[80vh]"><MapVeto /></div>
                     )}
