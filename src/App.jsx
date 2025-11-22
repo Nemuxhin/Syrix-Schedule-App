@@ -1,11 +1,9 @@
 ﻿/*
-Syrix Team Availability - FINAL PREMIUM BUILD (ALL FEATURES COMPLETE)
-- FEATURE: Captain's Message (Pinned Announcements).
-- FEATURE: Team Performance Analytics.
-- FEATURE: Match History & Stratbook.
-- FEATURE: Partner Directory.
-- FEATURE: Roster w/ Game IDs.
-- DESIGN: Syrix Red/Black Premium Theme.
+Syrix Team Availability - FINAL PREMIUM BUILD (MANUAL MATCH LOGGING ADDED)
+- FEATURE: Added "Log Past Match" button to Match History tab.
+- FEATURE: Ability to manually input scores/maps for unscheduled games.
+- FIX: Refined Discord PFP logic to use Provider UID for CDN links.
+- DESIGN: Syrix Red/Black Premium Theme maintained.
 */
 
 import React, { useState, useEffect, useMemo } from 'react';
@@ -380,11 +378,28 @@ function MatchHistory() {
     const [editingId, setEditingId] = useState(null);
     const [editForm, setEditForm] = useState({ myScore: '', enemyScore: '', map: MAPS[0], vod: '' });
 
+    // NEW: Manual Match Log State
+    const [isAdding, setIsAdding] = useState(false);
+    const [newMatch, setNewMatch] = useState({
+        type: 'Scrim',
+        opponent: '',
+        date: new Date().toISOString().split('T')[0],
+        time: '20:00',
+        myScore: '',
+        enemyScore: '',
+        map: MAPS[0],
+        vod: ''
+    });
+
     useEffect(() => {
         const unsub = onSnapshot(collection(db, 'events'), (snap) => {
             const evs = [];
             snap.forEach(doc => evs.push({ id: doc.id, ...doc.data() }));
-            const past = evs.filter(e => new Date(e.date + 'T' + e.time) < new Date());
+            // We show all events that have either passed OR have a result logged
+            const past = evs.filter(e => {
+                if (e.result) return true; // Explicitly logged result
+                return new Date(e.date + 'T' + e.time) < new Date(); // Time passed
+            });
             past.sort((a, b) => new Date(b.date) - new Date(a.date));
             setMatches(past);
         });
@@ -398,11 +413,57 @@ function MatchHistory() {
         setEditingId(null);
     };
 
+    const handleManualAdd = async () => {
+        if (!newMatch.opponent || !newMatch.date) return;
+
+        await addDoc(collection(db, 'events'), {
+            type: newMatch.type,
+            opponent: newMatch.opponent,
+            date: newMatch.date,
+            time: newMatch.time,
+            scheduledBy: "Manual Log",
+            result: {
+                myScore: newMatch.myScore,
+                enemyScore: newMatch.enemyScore,
+                map: newMatch.map,
+                vod: newMatch.vod
+            }
+        });
+        setIsAdding(false);
+        // Reset form
+        setNewMatch({ type: 'Scrim', opponent: '', date: '', time: '20:00', myScore: '', enemyScore: '', map: MAPS[0], vod: '' });
+    };
+
     return (
         <div className="bg-neutral-900 p-6 rounded-3xl border border-neutral-800/50 shadow-2xl">
-            <h3 className="text-2xl font-black text-white mb-6 flex items-center gap-3">
-                <span className="text-red-600">MATCH</span> HISTORY
-            </h3>
+            <div className="flex justify-between items-center mb-6">
+                <h3 className="text-2xl font-black text-white flex items-center gap-3">
+                    <span className="text-red-600">MATCH</span> HISTORY
+                </h3>
+                <button onClick={() => setIsAdding(!isAdding)} className="bg-neutral-800 hover:bg-neutral-700 text-white text-xs font-bold px-4 py-2 rounded-lg border border-neutral-700 transition-all">
+                    {isAdding ? 'Cancel' : '+ LOG PAST MATCH'}
+                </button>
+            </div>
+
+            {/* MANUAL LOGGING FORM */}
+            {isAdding && (
+                <div className="mb-8 bg-neutral-800/50 p-4 rounded-xl border border-red-900/30 animate-fade-in">
+                    <h4 className="text-sm font-bold text-white mb-3 uppercase tracking-wider">Log Unscheduled Match</h4>
+                    <div className="grid grid-cols-1 md:grid-cols-4 gap-3 mb-3">
+                        <input type="text" placeholder="Opponent" value={newMatch.opponent} onChange={e => setNewMatch({ ...newMatch, opponent: e.target.value })} className="bg-black text-white text-sm p-2 rounded border border-neutral-700 outline-none focus:border-red-600" />
+                        <input type="date" value={newMatch.date} onChange={e => setNewMatch({ ...newMatch, date: e.target.value })} className="bg-black text-white text-sm p-2 rounded border border-neutral-700 outline-none focus:border-red-600" />
+                        <select value={newMatch.map} onChange={e => setNewMatch({ ...newMatch, map: e.target.value })} className="bg-black text-white text-sm p-2 rounded border border-neutral-700 outline-none focus:border-red-600">{MAPS.map(map => <option key={map}>{map}</option>)}</select>
+                        <div className="flex gap-2">
+                            <input type="number" placeholder="Us" value={newMatch.myScore} onChange={e => setNewMatch({ ...newMatch, myScore: e.target.value })} className="w-1/2 bg-black text-white text-sm p-2 rounded border border-neutral-700 outline-none focus:border-red-600" />
+                            <input type="number" placeholder="Them" value={newMatch.enemyScore} onChange={e => setNewMatch({ ...newMatch, enemyScore: e.target.value })} className="w-1/2 bg-black text-white text-sm p-2 rounded border border-neutral-700 outline-none focus:border-red-600" />
+                        </div>
+                    </div>
+                    <div className="flex justify-end">
+                        <button onClick={handleManualAdd} className="bg-red-600 hover:bg-red-500 text-white font-bold px-6 py-2 rounded-lg shadow-lg transition-all">Save Log</button>
+                    </div>
+                </div>
+            )}
+
             <div className="space-y-4">
                 {matches.length === 0 && <p className="text-neutral-500 italic">No past matches found.</p>}
                 {matches.map(m => (
@@ -766,10 +827,26 @@ export default function App() {
 
     const getAvatar = () => {
         if (!currentUser) return null;
+
+        // 1. Try direct URL first
         if (currentUser.photoURL && currentUser.photoURL.startsWith('http')) return currentUser.photoURL;
+
+        // 2. Check provider data deep dive (best bet for Discord)
         const discordData = currentUser.providerData.find(p => p.providerId === 'oidc.discord');
-        if (discordData && discordData.photoURL) return discordData.photoURL;
-        if (currentUser.photoURL) return `https://cdn.discordapp.com/avatars/${currentUser.uid}/${currentUser.photoURL}.png`;
+        if (discordData) {
+            // If we have a discord user ID, construct it manually to be safe
+            // Sometimes discordData.photoURL is just the hash
+            if (discordData.uid && discordData.photoURL) {
+                return `https://cdn.discordapp.com/avatars/${discordData.uid}/${discordData.photoURL}.png`;
+            }
+        }
+
+        // 3. Fallback for basic Firebase auth object if hash exists
+        if (currentUser.photoURL && currentUser.uid) {
+            return `https://cdn.discordapp.com/avatars/${currentUser.uid}/${currentUser.photoURL}.png`;
+        }
+
+        // 4. Generic Fallback
         return `https://cdn.discordapp.com/embed/avatars/${Math.floor(Math.random() * 5)}.png`;
     };
 
