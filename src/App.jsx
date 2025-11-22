@@ -1,8 +1,8 @@
 ﻿/*
-Syrix Team Availability - v4.2 (CANVAS & SIZING FIXES)
-- FIX: Drawing line now tracks cursor perfectly (Coordinate Mapping).
-- UI: Increased StratBook size and map visibility.
-- FEATURE: Added Touch support for drawing on mobile/tablet.
+Syrix Team Availability - v4.3 (STRAT VIEWING, EDITING & VODS)
+- STRATBOOK: Added ability to list and VIEW saved drawings.
+- MATCHES: Added "Edit" mode to fix scores/details.
+- VODS: Added VOD Link field and "Watch" button to matches.
 */
 
 import React, { useState, useEffect, useMemo, useRef } from 'react';
@@ -131,26 +131,18 @@ const useValorantData = () => {
     useEffect(() => {
         const fetchAssets = async () => {
             try {
-                // Agents
                 const agentRes = await fetch('https://valorant-api.com/v1/agents');
                 const agentData = await agentRes.json();
                 const aMap = {};
-                agentData.data.forEach(agent => {
-                    aMap[agent.displayName] = agent.fullPortrait || agent.displayIcon;
-                });
+                agentData.data.forEach(agent => { aMap[agent.displayName] = agent.fullPortrait || agent.displayIcon; });
                 setAgentImages(aMap);
 
-                // Maps - NOW FETCHING displayIcon FOR SCHEMATICS
                 const mapRes = await fetch('https://valorant-api.com/v1/maps');
                 const mapData = await mapRes.json();
                 const mMap = {};
-                mapData.data.forEach(map => {
-                    mMap[map.displayName] = map.displayIcon; // Changed from splash to displayIcon
-                });
+                mapData.data.forEach(map => { mMap[map.displayName] = map.displayIcon; });
                 setMapImages(mMap);
-            } catch (e) {
-                console.error("Failed to fetch Valorant assets", e);
-            }
+            } catch (e) { console.error("Failed to fetch Valorant assets", e); }
         };
         fetchAssets();
     }, []);
@@ -159,14 +151,10 @@ const useValorantData = () => {
 
 // --- ANIMATED STAMPS ---
 const VictoryStamp = () => (
-    <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-50 border-8 border-green-500 text-green-500 font-black text-5xl md:text-7xl p-4 uppercase tracking-tighter -rotate-12 opacity-0 animate-stamp-in pointer-events-none mix-blend-screen">
-        VICTORY
-    </div>
+    <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-50 border-8 border-green-500 text-green-500 font-black text-5xl md:text-7xl p-4 uppercase tracking-tighter -rotate-12 opacity-0 animate-stamp-in pointer-events-none mix-blend-screen">VICTORY</div>
 );
 const DefeatStamp = () => (
-    <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-50 border-8 border-red-600 text-red-600 font-black text-5xl md:text-7xl p-4 uppercase tracking-tighter rotate-12 opacity-0 animate-stamp-in pointer-events-none mix-blend-screen">
-        DEFEAT
-    </div>
+    <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-50 border-8 border-red-600 text-red-600 font-black text-5xl md:text-7xl p-4 uppercase tracking-tighter rotate-12 opacity-0 animate-stamp-in pointer-events-none mix-blend-screen">DEFEAT</div>
 );
 
 // --- COMPONENTS ---
@@ -258,48 +246,20 @@ function TeamComps({ members }) {
         return (
             <div className="relative group h-64 bg-neutral-900/80 border border-white/10 rounded-2xl overflow-hidden transition-all hover:border-red-600 hover:shadow-[0_0_30px_rgba(220,38,38,0.3)] flex flex-col">
                 {selectedAgent && agentImage && (
-                    <div className="absolute inset-0 z-0">
-                        <img src={agentImage} alt={selectedAgent} className="w-full h-full object-cover opacity-40 group-hover:opacity-60 transition-opacity mix-blend-luminosity" style={{ objectPosition: 'center top' }} />
-                        <div className="absolute inset-0 bg-gradient-to-b from-transparent via-neutral-900/50 to-neutral-950"></div>
-                    </div>
+                    <div className="absolute inset-0 z-0"><img src={agentImage} alt={selectedAgent} className="w-full h-full object-cover opacity-40 group-hover:opacity-60 transition-opacity mix-blend-luminosity" style={{ objectPosition: 'center top' }} /><div className="absolute inset-0 bg-gradient-to-b from-transparent via-neutral-900/50 to-neutral-950"></div></div>
                 )}
-
                 <div onClick={() => setActiveDropdown(isOpen ? null : index)} className="flex-1 relative flex flex-col justify-center items-center p-4 z-10 border-b border-white/5 cursor-pointer">
                     <label className="text-[10px] font-black text-red-500 uppercase tracking-[0.2em] mb-3 z-20 drop-shadow-md">Role {index + 1}</label>
                     {selectedAgent ? (
-                        <div className="flex flex-col items-center animate-fade-in-up z-20">
-                            <div className="text-3xl sm:text-4xl font-black text-white uppercase tracking-tighter drop-shadow-[0_0_10px_rgba(0,0,0,0.8)]">{selectedAgent}</div>
-                            <div className="mt-2 h-0.5 w-8 bg-red-600 rounded-full shadow-[0_0_8px_red]"></div>
-                        </div>
+                        <div className="flex flex-col items-center animate-fade-in-up z-20"><div className="text-3xl sm:text-4xl font-black text-white uppercase tracking-tighter drop-shadow-[0_0_10px_rgba(0,0,0,0.8)]">{selectedAgent}</div><div className="mt-2 h-0.5 w-8 bg-red-600 rounded-full shadow-[0_0_8px_red]"></div></div>
                     ) : (
-                        <div className="flex flex-col items-center justify-center border-2 border-dashed border-neutral-700 rounded-xl p-4 w-full h-full hover:border-red-500/50 transition-all opacity-60 hover:opacity-100">
-                            <span className="text-2xl text-neutral-400 mb-1">+</span>
-                            <span className="text-[10px] font-bold text-neutral-400 uppercase tracking-widest">Select Agent</span>
-                        </div>
+                        <div className="flex flex-col items-center justify-center border-2 border-dashed border-neutral-700 rounded-xl p-4 w-full h-full hover:border-red-500/50 transition-all opacity-60 hover:opacity-100"><span className="text-2xl text-neutral-400 mb-1">+</span><span className="text-[10px] font-bold text-neutral-400 uppercase tracking-widest">Select Agent</span></div>
                     )}
                 </div>
-
                 {isOpen && (
-                    <div className="absolute inset-0 bg-neutral-950 z-50 flex flex-col animate-fade-in">
-                        <div className="flex justify-between items-center p-3 border-b border-white/10 bg-neutral-900">
-                            <span className="text-xs font-bold text-white uppercase tracking-widest">Pick Agent</span>
-                            <button onClick={(e) => { e.stopPropagation(); setActiveDropdown(null); }} className="text-neutral-500 hover:text-red-500 text-lg leading-none">×</button>
-                        </div>
-                        <div className="flex-1 overflow-y-auto p-2 grid grid-cols-2 gap-1 custom-scrollbar">
-                            {AGENT_NAMES.map(agent => (
-                                <button key={agent} onClick={(e) => { e.stopPropagation(); const a = [...newComp.agents]; a[index] = agent; setNewComp({ ...newComp, agents: a }); setActiveDropdown(null); }} className={`text-[10px] font-bold uppercase py-2 rounded border border-transparent hover:border-red-900 transition-all ${newComp.agents[index] === agent ? 'bg-red-700 text-white' : 'text-neutral-400 hover:text-white hover:bg-neutral-800'}`}>{agent}</button>
-                            ))}
-                        </div>
-                    </div>
+                    <div className="absolute inset-0 bg-neutral-950 z-50 flex flex-col animate-fade-in"><div className="flex justify-between items-center p-3 border-b border-white/10 bg-neutral-900"><span className="text-xs font-bold text-white uppercase tracking-widest">Pick Agent</span><button onClick={(e) => { e.stopPropagation(); setActiveDropdown(null); }} className="text-neutral-500 hover:text-red-500 text-lg leading-none">×</button></div><div className="flex-1 overflow-y-auto p-2 grid grid-cols-2 gap-1 custom-scrollbar">{AGENT_NAMES.map(agent => (<button key={agent} onClick={(e) => { e.stopPropagation(); const a = [...newComp.agents]; a[index] = agent; setNewComp({ ...newComp, agents: a }); setActiveDropdown(null); }} className={`text-[10px] font-bold uppercase py-2 rounded border border-transparent hover:border-red-900 transition-all ${newComp.agents[index] === agent ? 'bg-red-700 text-white' : 'text-neutral-400 hover:text-white hover:bg-neutral-800'}`}>{agent}</button>))}</div></div>
                 )}
-
-                <div className="h-16 relative bg-black/80 backdrop-blur flex items-center justify-center z-20 border-t border-white/5">
-                    <select value={newComp.players[index]} onChange={e => { const p = [...newComp.players]; p[index] = e.target.value; setNewComp({ ...newComp, players: p }); }} className="appearance-none bg-transparent text-center text-xs font-bold text-neutral-500 uppercase outline-none cursor-pointer w-full h-full hover:text-white transition-all tracking-wider" style={{ textAlignLast: 'center' }}>
-                        <option value="" className="bg-neutral-900">Assign Player</option>
-                        {members.map(m => <option key={m} value={m} className="bg-neutral-900">{m}</option>)}
-                    </select>
-                    <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-neutral-700 text-[10px]">▼</div>
-                </div>
+                <div className="h-16 relative bg-black/80 backdrop-blur flex items-center justify-center z-20 border-t border-white/5"><select value={newComp.players[index]} onChange={e => { const p = [...newComp.players]; p[index] = e.target.value; setNewComp({ ...newComp, players: p }); }} className="appearance-none bg-transparent text-center text-xs font-bold text-neutral-500 uppercase outline-none cursor-pointer w-full h-full hover:text-white transition-all tracking-wider" style={{ textAlignLast: 'center' }}><option value="" className="bg-neutral-900">Assign Player</option>{members.map(m => <option key={m} value={m} className="bg-neutral-900">{m}</option>)}</select><div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-neutral-700 text-[10px]">▼</div></div>
             </div>
         );
     };
@@ -405,52 +365,61 @@ function PerformanceWidget({ events }) {
     );
 }
 
-// --- UPDATED: StratBook with Canvas + External Links (Feature 5) ---
+// --- UPDATED: StratBook (Saved Strats + Canvas) ---
 function StratBook() {
     const [selectedMap, setSelectedMap] = useState(MAPS[0]);
     const canvasRef = useRef(null);
     const [isDrawing, setIsDrawing] = useState(false);
     const { mapImages } = useValorantData();
     const [color, setColor] = useState('#ef4444');
+
+    // Data States
     const [links, setLinks] = useState([]);
+    const [savedStrats, setSavedStrats] = useState([]);
+    const [viewingStrat, setViewingStrat] = useState(null); // URL of strat to view
     const [newLink, setNewLink] = useState({ title: '', url: '' });
 
+    // Fetch Links & Saved Strats
     useEffect(() => {
-        const q = query(collection(db, 'strat_links'), where("map", "==", selectedMap));
-        const unsub = onSnapshot(q, (snap) => {
-            const l = []; snap.forEach(doc => l.push({ id: doc.id, ...doc.data() }));
-            setLinks(l);
+        const qLinks = query(collection(db, 'strat_links'), where("map", "==", selectedMap));
+        const unsubLinks = onSnapshot(qLinks, (snap) => {
+            const l = []; snap.forEach(doc => l.push({ id: doc.id, ...doc.data() })); setLinks(l);
         });
-        return () => unsub();
+
+        const qStrats = query(collection(db, 'strats'), where("map", "==", selectedMap));
+        const unsubStrats = onSnapshot(qStrats, (snap) => {
+            const s = []; snap.forEach(doc => s.push({ id: doc.id, ...doc.data() }));
+            // Sort by date desc
+            s.sort((a, b) => new Date(b.date) - new Date(a.date));
+            setSavedStrats(s);
+        });
+
+        return () => { unsubLinks(); unsubStrats(); };
     }, [selectedMap]);
 
     const addLink = async () => { if (!newLink.title || !newLink.url) return; await addDoc(collection(db, 'strat_links'), { ...newLink, map: selectedMap }); setNewLink({ title: '', url: '' }); };
     const deleteLink = async (id) => await deleteDoc(doc(db, 'strat_links', id));
+    const deleteStrat = async (id) => { if (viewingStrat) setViewingStrat(null); await deleteDoc(doc(db, 'strats', id)); };
 
+    // Canvas Logic
     const getPos = (e) => {
         const rect = canvasRef.current.getBoundingClientRect();
         const x = (e.clientX - rect.left) * (canvasRef.current.width / rect.width);
         const y = (e.clientY - rect.top) * (canvasRef.current.height / rect.height);
         return { x, y };
     };
-
     const startDraw = (e) => {
         const ctx = canvasRef.current.getContext('2d');
         const pos = getPos(e.nativeEvent ? e.nativeEvent : e.touches[0]);
-        ctx.beginPath();
-        ctx.moveTo(pos.x, pos.y);
-        setIsDrawing(true);
+        ctx.beginPath(); ctx.moveTo(pos.x, pos.y); setIsDrawing(true);
     };
-
     const draw = (e) => {
         if (!isDrawing) return;
         const ctx = canvasRef.current.getContext('2d');
         const pos = getPos(e.nativeEvent ? e.nativeEvent : e.touches[0]);
         ctx.strokeStyle = color; ctx.lineWidth = 3; ctx.lineCap = 'round';
-        ctx.lineTo(pos.x, pos.y);
-        ctx.stroke();
+        ctx.lineTo(pos.x, pos.y); ctx.stroke();
     };
-
     const stopDraw = () => setIsDrawing(false);
     const clearCanvas = () => { const ctx = canvasRef.current.getContext('2d'); ctx.clearRect(0, 0, canvasRef.current.width, canvasRef.current.height); };
     const saveStrat = async () => { const dataUrl = canvasRef.current.toDataURL(); await addDoc(collection(db, 'strats'), { map: selectedMap, image: dataUrl, date: new Date().toISOString() }); alert('Strat Saved!'); };
@@ -459,33 +428,84 @@ function StratBook() {
         <div className="h-full flex flex-col gap-6">
             <Card className="flex-1 flex flex-col min-h-[600px]">
                 <div className="flex justify-between items-center mb-4">
-                    <h3 className="text-2xl font-black text-white">TACTICAL BOARD</h3>
-                    <div className="flex gap-2"><button onClick={() => setColor('#ef4444')} className="w-6 h-6 rounded-full bg-red-500 border border-white"></button><button onClick={() => setColor('#3b82f6')} className="w-6 h-6 rounded-full bg-blue-500 border border-white"></button><button onClick={() => setColor('#ffffff')} className="w-6 h-6 rounded-full bg-white border border-white"></button><ButtonSecondary onClick={clearCanvas} className="text-xs py-1 px-3">Clear</ButtonSecondary><ButtonPrimary onClick={saveStrat} className="text-xs py-1 px-3">Save</ButtonPrimary></div>
+                    <h3 className="text-2xl font-black text-white">TACTICAL BOARD {viewingStrat && <span className="text-red-500 text-sm ml-2">(VIEWING SAVED)</span>}</h3>
+                    <div className="flex gap-2">
+                        {!viewingStrat ? (
+                            <>
+                                <button onClick={() => setColor('#ef4444')} className="w-6 h-6 rounded-full bg-red-500 border border-white"></button>
+                                <button onClick={() => setColor('#3b82f6')} className="w-6 h-6 rounded-full bg-blue-500 border border-white"></button>
+                                <button onClick={() => setColor('#ffffff')} className="w-6 h-6 rounded-full bg-white border border-white"></button>
+                                <ButtonSecondary onClick={clearCanvas} className="text-xs py-1 px-3">Clear</ButtonSecondary>
+                                <ButtonPrimary onClick={saveStrat} className="text-xs py-1 px-3">Save</ButtonPrimary>
+                            </>
+                        ) : (
+                            <ButtonSecondary onClick={() => setViewingStrat(null)} className="text-xs py-1 px-3 bg-red-900/50 border-red-500 text-white">Close View</ButtonSecondary>
+                        )}
+                    </div>
                 </div>
-                <div className="flex overflow-x-auto gap-2 pb-4 mb-4">{MAPS.map(m => <button key={m} onClick={() => { setSelectedMap(m); clearCanvas(); }} className={`px-3 py-1 rounded-full text-xs font-bold ${selectedMap === m ? 'bg-red-600 text-white' : 'bg-black text-neutral-500'}`}>{m}</button>)}</div>
+                <div className="flex overflow-x-auto gap-2 pb-4 mb-4">{MAPS.map(m => <button key={m} onClick={() => { setSelectedMap(m); clearCanvas(); setViewingStrat(null); }} className={`px-3 py-1 rounded-full text-xs font-bold ${selectedMap === m ? 'bg-red-600 text-white' : 'bg-black text-neutral-500'}`}>{m}</button>)}</div>
+
                 <div className="relative flex-1 bg-neutral-900 rounded-2xl overflow-hidden border border-neutral-800">
+                    {/* 1. Map Background */}
                     {mapImages[selectedMap] && <img src={mapImages[selectedMap]} alt="Map" className="absolute inset-0 w-full h-full object-contain opacity-90 pointer-events-none" />}
+
+                    {/* 2. Canvas (Drawing Layer) - Hidden if Viewing */}
                     <canvas
-                        ref={canvasRef} width={1280} height={720} className="absolute inset-0 w-full h-full cursor-crosshair z-10 touch-none"
+                        ref={canvasRef} width={1280} height={720}
+                        className={`absolute inset-0 w-full h-full cursor-crosshair z-10 touch-none ${viewingStrat ? 'hidden' : 'block'}`}
                         onMouseDown={startDraw} onMouseMove={draw} onMouseUp={stopDraw} onMouseLeave={stopDraw}
                         onTouchStart={startDraw} onTouchMove={draw} onTouchEnd={stopDraw}
                     />
+
+                    {/* 3. Saved Strat Overlay (Viewing Layer) */}
+                    {viewingStrat && (
+                        <div className="absolute inset-0 z-20 bg-black/50 flex items-center justify-center p-4">
+                            <img src={viewingStrat} alt="Saved Strat" className="max-w-full max-h-full border border-red-500 shadow-2xl rounded-xl" />
+                        </div>
+                    )}
                 </div>
             </Card>
-            <Card>
-                <h4 className="text-lg font-bold text-white mb-4">EXTERNAL STRATEGY LINKS ({selectedMap})</h4>
-                <div className="flex gap-2 mb-4"><Input placeholder="Title (e.g. A Split - Valoplant)" value={newLink.title} onChange={e => setNewLink({ ...newLink, title: e.target.value })} className="flex-1" /><Input placeholder="URL" value={newLink.url} onChange={e => setNewLink({ ...newLink, url: e.target.value })} className="flex-1" /><ButtonPrimary onClick={addLink} className="text-xs py-2">Add Link</ButtonPrimary></div>
-                <div className="space-y-2 max-h-40 overflow-y-auto custom-scrollbar">{links.length === 0 && <p className="text-neutral-500 italic text-sm">No links added for {selectedMap}.</p>}{links.map(link => (<div key={link.id} className="flex justify-between items-center bg-black/50 p-3 rounded-lg border border-neutral-800 hover:border-red-900 transition-colors"><a href={link.url} target="_blank" rel="noreferrer" className="text-red-500 font-bold hover:underline text-sm">{link.title}</a><button onClick={() => deleteLink(link.id)} className="text-neutral-600 hover:text-red-500">×</button></div>))}</div>
-            </Card>
+
+            {/* Bottom Section: Two Columns */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                {/* Left: External Links */}
+                <Card>
+                    <h4 className="text-lg font-bold text-white mb-4">EXTERNAL LINKS</h4>
+                    <div className="flex gap-2 mb-4"><Input placeholder="Title" value={newLink.title} onChange={e => setNewLink({ ...newLink, title: e.target.value })} className="flex-1" /><Input placeholder="URL" value={newLink.url} onChange={e => setNewLink({ ...newLink, url: e.target.value })} className="flex-1" /><ButtonPrimary onClick={addLink} className="text-xs py-2">Add</ButtonPrimary></div>
+                    <div className="space-y-2 max-h-40 overflow-y-auto custom-scrollbar">{links.map(link => (<div key={link.id} className="flex justify-between items-center bg-black/50 p-3 rounded-lg border border-neutral-800 hover:border-red-900 transition-colors"><a href={link.url} target="_blank" rel="noreferrer" className="text-red-500 font-bold hover:underline text-sm">{link.title}</a><button onClick={() => deleteLink(link.id)} className="text-neutral-600 hover:text-red-500">×</button></div>))}</div>
+                </Card>
+
+                {/* Right: Saved Drawings List */}
+                <Card>
+                    <h4 className="text-lg font-bold text-white mb-4">SAVED DRAWINGS</h4>
+                    <div className="space-y-2 max-h-56 overflow-y-auto custom-scrollbar">
+                        {savedStrats.length === 0 && <p className="text-neutral-500 italic text-sm">No saved drawings for this map.</p>}
+                        {savedStrats.map((strat, index) => (
+                            <div key={strat.id} onClick={() => setViewingStrat(strat.image)} className="flex justify-between items-center bg-black/50 p-3 rounded-lg border border-neutral-800 hover:border-red-500 cursor-pointer group transition-colors">
+                                <div className="flex items-center gap-3">
+                                    <div className="text-xs text-neutral-400 group-hover:text-white font-mono">{new Date(strat.date).toLocaleDateString()} {new Date(strat.date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</div>
+                                    <span className="text-[10px] bg-neutral-800 text-neutral-300 px-2 py-0.5 rounded">Strat #{savedStrats.length - index}</span>
+                                </div>
+                                <button onClick={(e) => { e.stopPropagation(); deleteStrat(strat.id); }} className="text-neutral-600 hover:text-red-500 px-2 font-bold">DEL</button>
+                            </div>
+                        ))}
+                    </div>
+                </Card>
+            </div>
         </div>
     );
 }
 
+// --- UPDATED: Match History with Editing & VODs ---
 function MatchHistory() {
     const [matches, setMatches] = useState([]);
     const [isAdding, setIsAdding] = useState(false);
     const [expandedId, setExpandedId] = useState(null);
-    const [newMatch, setNewMatch] = useState({ opponent: '', date: '', myScore: '', enemyScore: '', atkScore: '', defScore: '', map: MAPS[0] });
+    const [newMatch, setNewMatch] = useState({ opponent: '', date: '', myScore: '', enemyScore: '', atkScore: '', defScore: '', map: MAPS[0], vod: '' });
+
+    // Editing State
+    const [editingId, setEditingId] = useState(null);
+    const [editForm, setEditForm] = useState({});
 
     useEffect(() => {
         const unsub = onSnapshot(collection(db, 'events'), (snap) => {
@@ -494,19 +514,117 @@ function MatchHistory() {
         }); return () => unsub();
     }, []);
 
-    const handleAdd = async () => { await addDoc(collection(db, 'events'), { type: 'Scrim', opponent: newMatch.opponent, date: newMatch.date, result: { ...newMatch } }); setIsAdding(false); };
-    const getResultColor = (my, enemy) => { const m = parseInt(my); const e = parseInt(enemy); if (m > e) return 'border-l-4 border-l-green-500'; if (m < e) return 'border-l-4 border-l-red-600'; return 'border-l-4 border-l-neutral-500'; };
+    const handleAdd = async () => {
+        await addDoc(collection(db, 'events'), { type: 'Scrim', opponent: newMatch.opponent, date: newMatch.date, result: { ...newMatch } });
+        setIsAdding(false);
+        setNewMatch({ opponent: '', date: '', myScore: '', enemyScore: '', atkScore: '', defScore: '', map: MAPS[0], vod: '' });
+    };
+
+    const startEdit = (match) => {
+        setEditingId(match.id);
+        setEditForm({
+            opponent: match.opponent,
+            date: match.date,
+            ...match.result // Spread result fields (myScore, enemyScore, etc.)
+        });
+    };
+
+    const saveEdit = async () => {
+        const { opponent, date, ...resultData } = editForm;
+        await updateDoc(doc(db, 'events', editingId), {
+            opponent,
+            date,
+            result: resultData
+        });
+        setEditingId(null);
+    };
+
+    const getResultColor = (my, enemy) => {
+        const m = parseInt(my); const e = parseInt(enemy);
+        if (m > e) return 'border-l-4 border-l-green-500';
+        if (m < e) return 'border-l-4 border-l-red-600';
+        return 'border-l-4 border-l-neutral-500';
+    };
 
     return (
         <Card>
             <div className="flex justify-between items-center mb-6"><h3 className="text-2xl font-black text-white flex items-center gap-3"><span className="text-red-600">MATCH</span> HISTORY</h3><ButtonSecondary onClick={() => setIsAdding(!isAdding)} className="text-xs">{isAdding ? 'Cancel' : '+ Log Match'}</ButtonSecondary></div>
-            {isAdding && (<div className="mb-6 bg-black/50 p-4 rounded-xl border border-white/10 space-y-2"><div className="grid grid-cols-2 gap-2"><Input placeholder="Opponent" value={newMatch.opponent} onChange={e => setNewMatch({ ...newMatch, opponent: e.target.value })} /><Input type="date" value={newMatch.date} onChange={e => setNewMatch({ ...newMatch, date: e.target.value })} className="[color-scheme:dark]" /></div><div className="grid grid-cols-4 gap-2"><Input placeholder="Us" value={newMatch.myScore} onChange={e => setNewMatch({ ...newMatch, myScore: e.target.value })} /><Input placeholder="Them" value={newMatch.enemyScore} onChange={e => setNewMatch({ ...newMatch, enemyScore: e.target.value })} /><Input placeholder="Atk Wins" value={newMatch.atkScore} onChange={e => setNewMatch({ ...newMatch, atkScore: e.target.value })} /><Input placeholder="Def Wins" value={newMatch.defScore} onChange={e => setNewMatch({ ...newMatch, defScore: e.target.value })} /></div><ButtonPrimary onClick={handleAdd} className="w-full py-2 text-xs">Save Result</ButtonPrimary></div>)}
-            <div className="space-y-4">{matches.map(m => (<div key={m.id} onClick={() => setExpandedId(expandedId === m.id ? null : m.id)} className={`bg-black/40 border border-neutral-800 p-4 rounded-xl relative overflow-hidden cursor-pointer hover:bg-neutral-900 transition-all ${m.result ? getResultColor(m.result.myScore, m.result.enemyScore) : ''}`}>{expandedId === m.id && (parseInt(m.result.myScore) > parseInt(m.result.enemyScore) ? <VictoryStamp /> : <DefeatStamp />)}<div className="flex justify-between items-center relative z-10"><div><div className="text-sm font-bold text-white">{m.opponent}</div><div className="text-xs text-neutral-500">{m.date} • {m.result.map}</div></div><div className={`text-2xl font-black ${parseInt(m.result.myScore) > parseInt(m.result.enemyScore) ? 'text-green-500' : 'text-red-500'}`}>{m.result.myScore} - {m.result.enemyScore}</div></div>{expandedId === m.id && (<div className="mt-4 pt-4 border-t border-neutral-800 grid grid-cols-2 gap-4 text-center"><div className="bg-neutral-900 p-2 rounded"><div className="text-[10px] text-neutral-500 uppercase font-bold">Attack</div><div className="text-white font-bold">{m.result.atkScore || '-'}</div></div><div className="bg-neutral-900 p-2 rounded"><div className="text-[10px] text-neutral-500 uppercase font-bold">Defense</div><div className="text-white font-bold">{m.result.defScore || '-'}</div></div></div>)}</div>))}</div>
+
+            {/* ADD FORM */}
+            {isAdding && (
+                <div className="mb-6 bg-black/50 p-4 rounded-xl border border-white/10 space-y-2 animate-fade-in">
+                    <div className="grid grid-cols-2 gap-2"><Input placeholder="Opponent" value={newMatch.opponent} onChange={e => setNewMatch({ ...newMatch, opponent: e.target.value })} /><Input type="date" value={newMatch.date} onChange={e => setNewMatch({ ...newMatch, date: e.target.value })} className="[color-scheme:dark]" /></div>
+                    <div className="grid grid-cols-2 gap-2"><Select value={newMatch.map} onChange={e => setNewMatch({ ...newMatch, map: e.target.value })}>{MAPS.map(m => <option key={m}>{m}</option>)}</Select><Input placeholder="VOD Link (YouTube/Twitch)" value={newMatch.vod} onChange={e => setNewMatch({ ...newMatch, vod: e.target.value })} /></div>
+                    <div className="grid grid-cols-4 gap-2">
+                        <Input placeholder="Us" value={newMatch.myScore} onChange={e => setNewMatch({ ...newMatch, myScore: e.target.value })} />
+                        <Input placeholder="Them" value={newMatch.enemyScore} onChange={e => setNewMatch({ ...newMatch, enemyScore: e.target.value })} />
+                        <Input placeholder="Atk Wins" value={newMatch.atkScore} onChange={e => setNewMatch({ ...newMatch, atkScore: e.target.value })} />
+                        <Input placeholder="Def Wins" value={newMatch.defScore} onChange={e => setNewMatch({ ...newMatch, defScore: e.target.value })} />
+                    </div>
+                    <ButtonPrimary onClick={handleAdd} className="w-full py-2 text-xs">Save Result</ButtonPrimary>
+                </div>
+            )}
+
+            <div className="space-y-4">
+                {matches.map(m => {
+                    const isEditing = editingId === m.id;
+
+                    if (isEditing) {
+                        // EDIT MODE CARD
+                        return (
+                            <div key={m.id} className="bg-neutral-900 border border-red-600 p-4 rounded-xl space-y-2">
+                                <div className="flex justify-between mb-2"><span className="text-red-500 font-bold text-xs uppercase">Editing Match</span><button onClick={() => setEditingId(null)} className="text-neutral-500 hover:text-white">Cancel</button></div>
+                                <div className="grid grid-cols-2 gap-2"><Input value={editForm.opponent} onChange={e => setEditForm({ ...editForm, opponent: e.target.value })} /><Input type="date" value={editForm.date} onChange={e => setEditForm({ ...editForm, date: e.target.value })} className="[color-scheme:dark]" /></div>
+                                <div className="grid grid-cols-2 gap-2"><Select value={editForm.map} onChange={e => setEditForm({ ...editForm, map: e.target.value })}>{MAPS.map(map => <option key={map}>{map}</option>)}</Select><Input placeholder="VOD Link" value={editForm.vod} onChange={e => setEditForm({ ...editForm, vod: e.target.value })} /></div>
+                                <div className="grid grid-cols-4 gap-2">
+                                    <Input placeholder="Us" value={editForm.myScore} onChange={e => setEditForm({ ...editForm, myScore: e.target.value })} />
+                                    <Input placeholder="Them" value={editForm.enemyScore} onChange={e => setEditForm({ ...editForm, enemyScore: e.target.value })} />
+                                    <Input placeholder="Atk" value={editForm.atkScore} onChange={e => setEditForm({ ...editForm, atkScore: e.target.value })} />
+                                    <Input placeholder="Def" value={editForm.defScore} onChange={e => setEditForm({ ...editForm, defScore: e.target.value })} />
+                                </div>
+                                <ButtonPrimary onClick={saveEdit} className="w-full py-2 text-xs">Save Changes</ButtonPrimary>
+                            </div>
+                        );
+                    }
+
+                    // NORMAL DISPLAY CARD
+                    return (
+                        <div key={m.id} onClick={() => setExpandedId(expandedId === m.id ? null : m.id)} className={`bg-black/40 border border-neutral-800 p-4 rounded-xl relative overflow-hidden cursor-pointer hover:bg-neutral-900 transition-all ${m.result ? getResultColor(m.result.myScore, m.result.enemyScore) : ''}`}>
+                            {/* Stamps */}
+                            {expandedId === m.id && (parseInt(m.result.myScore) > parseInt(m.result.enemyScore) ? <VictoryStamp /> : <DefeatStamp />)}
+
+                            <div className="flex justify-between items-center relative z-10">
+                                <div>
+                                    <div className="text-sm font-bold text-white flex items-center gap-2">
+                                        {m.opponent}
+                                        {m.result.vod && <a href={m.result.vod} target="_blank" rel="noreferrer" onClick={e => e.stopPropagation()} className="text-[9px] bg-red-600 text-white px-2 py-0.5 rounded hover:bg-red-500">▶ WATCH VOD</a>}
+                                    </div>
+                                    <div className="text-xs text-neutral-500">{m.date} • {m.result.map}</div>
+                                </div>
+                                <div className="flex items-center gap-4">
+                                    <div className={`text-2xl font-black ${parseInt(m.result.myScore) > parseInt(m.result.enemyScore) ? 'text-green-500' : 'text-red-500'}`}>
+                                        {m.result.myScore} - {m.result.enemyScore}
+                                    </div>
+                                    {/* Edit Button */}
+                                    <button onClick={(e) => { e.stopPropagation(); startEdit(m); }} className="text-neutral-600 hover:text-white p-1">✏️</button>
+                                </div>
+                            </div>
+                            {expandedId === m.id && (
+                                <div className="mt-4 pt-4 border-t border-neutral-800 grid grid-cols-2 gap-4 text-center">
+                                    <div className="bg-neutral-900 p-2 rounded"><div className="text-[10px] text-neutral-500 uppercase font-bold">Attack</div><div className="text-white font-bold">{m.result.atkScore || '-'}</div></div>
+                                    <div className="bg-neutral-900 p-2 rounded"><div className="text-[10px] text-neutral-500 uppercase font-bold">Defense</div><div className="text-white font-bold">{m.result.defScore || '-'}</div></div>
+                                </div>
+                            )}
+                        </div>
+                    );
+                })}
+            </div>
         </Card>
     );
 }
 
 function RosterManager({ members }) {
+    // ... (Same as v4.0)
     const [rosterData, setRosterData] = useState({});
     const [mode, setMode] = useState('edit'); // 'edit' or 'compare'
     const [compare1, setCompare1] = useState('');
@@ -519,14 +637,62 @@ function RosterManager({ members }) {
 
     return (
         <div className="h-full flex flex-col gap-6">
-            <div className="flex gap-4 border-b border-white/10 pb-4"><button onClick={() => setMode('edit')} className={`text-sm font-bold uppercase ${mode === 'edit' ? 'text-red-500' : 'text-neutral-500'}`}>Edit Mode</button><button onClick={() => setMode('compare')} className={`text-sm font-bold uppercase ${mode === 'compare' ? 'text-red-500' : 'text-neutral-500'}`}>Compare Players</button></div>
+            <div className="flex gap-4 border-b border-white/10 pb-4">
+                <button onClick={() => setMode('edit')} className={`text-sm font-bold uppercase ${mode === 'edit' ? 'text-red-500' : 'text-neutral-500'}`}>Edit Mode</button>
+                <button onClick={() => setMode('compare')} className={`text-sm font-bold uppercase ${mode === 'compare' ? 'text-red-500' : 'text-neutral-500'}`}>Compare Players</button>
+            </div>
+
             {mode === 'edit' ? (
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 h-full">
-                    <div className="lg:col-span-1 bg-neutral-900/80 p-6 rounded-3xl border border-white/5"><h3 className="text-white font-bold mb-4">Members</h3><div className="space-y-2 overflow-y-auto h-96 custom-scrollbar">{members.map(m => (<div key={m} onClick={() => { setSelectedMember(m); setRole(rosterData[m]?.role || 'Tryout'); setNotes(rosterData[m]?.notes || ''); setGameId(rosterData[m]?.gameId || ''); }} className={`p-3 rounded-xl cursor-pointer border transition-all flex justify-between items-center ${selectedMember === m ? 'bg-red-900/20 border-red-600' : 'bg-black border-neutral-800'}`}><span className="text-white font-bold">{m}</span><span className="text-xs text-neutral-500 uppercase">{rosterData[m]?.role}</span></div>))}</div></div>
-                    <Card className="lg:col-span-2">{selectedMember ? (<div className="space-y-6"><h3 className="text-2xl font-black text-white">Managing: <span className="text-red-500">{selectedMember}</span></h3><div className="grid grid-cols-2 gap-4"><div><label className="block text-xs font-bold text-neutral-500 mb-1">Role</label><Select value={role} onChange={e => setRole(e.target.value)}>{['Captain', 'Main', 'Sub', 'Tryout'].map(r => <option key={r}>{r}</option>)}</Select></div><div><label className="block text-xs font-bold text-neutral-500 mb-1">Riot ID</label><Input value={gameId} onChange={e => setGameId(e.target.value)} /></div></div><textarea className="w-full h-40 bg-black border border-neutral-800 rounded-xl p-3 text-white" value={notes} onChange={e => setNotes(e.target.value)} placeholder="Notes..." /><ButtonPrimary onClick={handleSave} className="w-full py-3">Save Changes</ButtonPrimary></div>) : <div className="h-full flex items-center justify-center text-neutral-500">Select a player</div>}</Card>
+                    <div className="lg:col-span-1 bg-neutral-900/80 p-6 rounded-3xl border border-white/5">
+                        <h3 className="text-white font-bold mb-4">Members</h3>
+                        <div className="space-y-2 overflow-y-auto h-96 custom-scrollbar">
+                            {members.map(m => (
+                                <div key={m} onClick={() => { setSelectedMember(m); setRole(rosterData[m]?.role || 'Tryout'); setNotes(rosterData[m]?.notes || ''); setGameId(rosterData[m]?.gameId || ''); }} className={`p-3 rounded-xl cursor-pointer border transition-all flex justify-between items-center ${selectedMember === m ? 'bg-red-900/20 border-red-600' : 'bg-black border-neutral-800'}`}>
+                                    <span className="text-white font-bold">{m}</span>
+                                    <span className="text-xs text-neutral-500 uppercase">{rosterData[m]?.role}</span>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                    <Card className="lg:col-span-2">
+                        {selectedMember ? (
+                            <div className="space-y-6">
+                                <h3 className="text-2xl font-black text-white">Managing: <span className="text-red-500">{selectedMember}</span></h3>
+                                <div className="grid grid-cols-2 gap-4">
+                                    <div><label className="block text-xs font-bold text-neutral-500 mb-1">Role</label><Select value={role} onChange={e => setRole(e.target.value)}>{['Captain', 'Main', 'Sub', 'Tryout'].map(r => <option key={r}>{r}</option>)}</Select></div>
+                                    <div><label className="block text-xs font-bold text-neutral-500 mb-1">Riot ID</label><Input value={gameId} onChange={e => setGameId(e.target.value)} /></div>
+                                </div>
+                                <textarea className="w-full h-40 bg-black border border-neutral-800 rounded-xl p-3 text-white" value={notes} onChange={e => setNotes(e.target.value)} placeholder="Notes..." />
+                                <ButtonPrimary onClick={handleSave} className="w-full py-3">Save Changes</ButtonPrimary>
+                            </div>
+                        ) : <div className="h-full flex items-center justify-center text-neutral-500">Select a player</div>}
+                    </Card>
                 </div>
             ) : (
-                <div className="grid grid-cols-2 gap-8 h-full">{[setCompare1, setCompare2].map((setter, i) => (<Card key={i} className="h-full"><Select onChange={e => setter(e.target.value)} className="mb-6"><option>Select Player</option>{members.map(m => <option key={m}>{m}</option>)}</Select>{((i === 0 ? compare1 : compare2) && rosterData[i === 0 ? compare1 : compare2]) && (<div className="space-y-4 text-center"><div className="w-24 h-24 mx-auto bg-red-600 rounded-full flex items-center justify-center text-3xl font-black text-white border-4 border-black shadow-xl">{(i === 0 ? compare1 : compare2)[0]}</div><div className="text-3xl font-black text-white uppercase">{(i === 0 ? compare1 : compare2)}</div><div className="flex justify-center gap-2"><span className="bg-neutral-800 px-3 py-1 rounded text-xs font-bold text-white">{rosterData[i === 0 ? compare1 : compare2]?.rank || 'Unranked'}</span><span className="bg-red-900/50 px-3 py-1 rounded text-xs font-bold text-red-400">{rosterData[i === 0 ? compare1 : compare2]?.role || 'Member'}</span></div><div className="p-4 bg-black/50 rounded-xl border border-neutral-800 text-left"><div className="text-[10px] text-neutral-500 uppercase font-bold mb-2">Performance Notes</div><p className="text-sm text-neutral-300 italic">"{rosterData[i === 0 ? compare1 : compare2]?.notes || 'No notes available.'}"</p></div></div>)}</Card>))}</div>
+                <div className="grid grid-cols-2 gap-8 h-full">
+                    {[setCompare1, setCompare2].map((setter, i) => (
+                        <Card key={i} className="h-full">
+                            <Select onChange={e => setter(e.target.value)} className="mb-6"><option>Select Player</option>{members.map(m => <option key={m}>{m}</option>)}</Select>
+                            {((i === 0 ? compare1 : compare2) && rosterData[i === 0 ? compare1 : compare2]) && (
+                                <div className="space-y-4 text-center">
+                                    <div className="w-24 h-24 mx-auto bg-red-600 rounded-full flex items-center justify-center text-3xl font-black text-white border-4 border-black shadow-xl">
+                                        {(i === 0 ? compare1 : compare2)[0]}
+                                    </div>
+                                    <div className="text-3xl font-black text-white uppercase">{(i === 0 ? compare1 : compare2)}</div>
+                                    <div className="flex justify-center gap-2">
+                                        <span className="bg-neutral-800 px-3 py-1 rounded text-xs font-bold text-white">{rosterData[i === 0 ? compare1 : compare2]?.rank || 'Unranked'}</span>
+                                        <span className="bg-red-900/50 px-3 py-1 rounded text-xs font-bold text-red-400">{rosterData[i === 0 ? compare1 : compare2]?.role || 'Member'}</span>
+                                    </div>
+                                    <div className="p-4 bg-black/50 rounded-xl border border-neutral-800 text-left">
+                                        <div className="text-[10px] text-neutral-500 uppercase font-bold mb-2">Performance Notes</div>
+                                        <p className="text-sm text-neutral-300 italic">"{rosterData[i === 0 ? compare1 : compare2]?.notes || 'No notes available.'}"</p>
+                                    </div>
+                                </div>
+                            )}
+                        </Card>
+                    ))}
+                </div>
             )}
         </div>
     );
