@@ -1,8 +1,8 @@
 ﻿/*
-Syrix Team Availability - v4.1 (STRATBOOK OVERHAUL)
-- MAPS: Now fetches "displayIcon" (Top-Down Schematic) from API instead of art.
-- FEATURES: Added "External Links" section to StratBook for Valoplant/Docs.
-- THEME: Maintained Red/Black aesthetic.
+Syrix Team Availability - v4.2 (CANVAS & SIZING FIXES)
+- FIX: Drawing line now tracks cursor perfectly (Coordinate Mapping).
+- UI: Increased StratBook size and map visibility.
+- FEATURE: Added Touch support for drawing on mobile/tablet.
 */
 
 import React, { useState, useEffect, useMemo, useRef } from 'react';
@@ -338,7 +338,6 @@ function AdminPanel() {
     );
 }
 
-// ... (ProfileModal, ApplicationForm, MapVeto, CaptainsMessage remain same as v4.0)
 function ProfileModal({ isOpen, onClose, currentUser }) {
     const [rank, setRank] = useState("Unranked"); const [agents, setAgents] = useState(""); const [status, setStatus] = useState("idle");
     const handleSave = async () => { setStatus("saving"); try { await setDoc(doc(db, 'roster', currentUser.displayName), { rank, agents }, { merge: true }); setStatus("success"); setTimeout(() => { setStatus("idle"); onClose(); }, 1000); } catch (e) { console.error(e); setStatus("idle"); } };
@@ -369,24 +368,23 @@ function CaptainsMessage() {
 
 function PerformanceWidget({ events }) {
     const stats = useMemo(() => {
-        let wins = 0, losses = 0, draws = 0;
+        let wins = 0, losses = 0;
         let atkWins = 0, atkPlayed = 0, defWins = 0, defPlayed = 0;
         const mapStats = {};
 
         events.filter(e => e.result && e.result.myScore).forEach(m => {
             const my = parseInt(m.result.myScore); const enemy = parseInt(m.result.enemyScore);
-            if (my > enemy) wins++; else if (my < enemy) losses++; else draws++;
+            if (my > enemy) wins++; else if (my < enemy) losses++;
 
             if (!mapStats[m.result.map]) mapStats[m.result.map] = { played: 0, wins: 0 };
             mapStats[m.result.map].played++;
             if (my > enemy) mapStats[m.result.map].wins++;
 
-            // Atk/Def Splits
-            if (m.result.atkScore) { atkWins += parseInt(m.result.atkScore); atkPlayed += 12; } // Approx 12 rounds/half
+            if (m.result.atkScore) { atkWins += parseInt(m.result.atkScore); atkPlayed += 12; }
             if (m.result.defScore) { defWins += parseInt(m.result.defScore); defPlayed += 12; }
         });
 
-        const totalGames = wins + losses + draws;
+        const totalGames = wins + losses;
         const overallWinRate = totalGames > 0 ? Math.round((wins / totalGames) * 100) : 0;
         const atkWinRate = atkPlayed > 0 ? Math.round((atkWins / atkPlayed) * 100) : 0;
         const defWinRate = defPlayed > 0 ? Math.round((defWins / defPlayed) * 100) : 0;
@@ -414,113 +412,79 @@ function StratBook() {
     const [isDrawing, setIsDrawing] = useState(false);
     const { mapImages } = useValorantData();
     const [color, setColor] = useState('#ef4444');
-
-    // External Links State
     const [links, setLinks] = useState([]);
     const [newLink, setNewLink] = useState({ title: '', url: '' });
 
-    // Fetch Links
     useEffect(() => {
         const q = query(collection(db, 'strat_links'), where("map", "==", selectedMap));
         const unsub = onSnapshot(q, (snap) => {
-            const l = [];
-            snap.forEach(doc => l.push({ id: doc.id, ...doc.data() }));
+            const l = []; snap.forEach(doc => l.push({ id: doc.id, ...doc.data() }));
             setLinks(l);
         });
         return () => unsub();
     }, [selectedMap]);
 
-    const addLink = async () => {
-        if (!newLink.title || !newLink.url) return;
-        await addDoc(collection(db, 'strat_links'), { ...newLink, map: selectedMap });
-        setNewLink({ title: '', url: '' });
-    };
-
+    const addLink = async () => { if (!newLink.title || !newLink.url) return; await addDoc(collection(db, 'strat_links'), { ...newLink, map: selectedMap }); setNewLink({ title: '', url: '' }); };
     const deleteLink = async (id) => await deleteDoc(doc(db, 'strat_links', id));
 
-    // Canvas Logic
+    const getPos = (e) => {
+        const rect = canvasRef.current.getBoundingClientRect();
+        const x = (e.clientX - rect.left) * (canvasRef.current.width / rect.width);
+        const y = (e.clientY - rect.top) * (canvasRef.current.height / rect.height);
+        return { x, y };
+    };
+
     const startDraw = (e) => {
         const ctx = canvasRef.current.getContext('2d');
+        const pos = getPos(e.nativeEvent ? e.nativeEvent : e.touches[0]);
         ctx.beginPath();
-        ctx.moveTo(e.nativeEvent.offsetX, e.nativeEvent.offsetY);
+        ctx.moveTo(pos.x, pos.y);
         setIsDrawing(true);
     };
+
     const draw = (e) => {
         if (!isDrawing) return;
         const ctx = canvasRef.current.getContext('2d');
+        const pos = getPos(e.nativeEvent ? e.nativeEvent : e.touches[0]);
         ctx.strokeStyle = color; ctx.lineWidth = 3; ctx.lineCap = 'round';
-        ctx.lineTo(e.nativeEvent.offsetX, e.nativeEvent.offsetY);
+        ctx.lineTo(pos.x, pos.y);
         ctx.stroke();
     };
+
     const stopDraw = () => setIsDrawing(false);
-    const clearCanvas = () => {
-        const ctx = canvasRef.current.getContext('2d');
-        ctx.clearRect(0, 0, canvasRef.current.width, canvasRef.current.height);
-    };
-    const saveStrat = async () => {
-        const dataUrl = canvasRef.current.toDataURL();
-        await addDoc(collection(db, 'strats'), { map: selectedMap, image: dataUrl, date: new Date().toISOString() });
-        alert('Strat Saved!');
-    };
+    const clearCanvas = () => { const ctx = canvasRef.current.getContext('2d'); ctx.clearRect(0, 0, canvasRef.current.width, canvasRef.current.height); };
+    const saveStrat = async () => { const dataUrl = canvasRef.current.toDataURL(); await addDoc(collection(db, 'strats'), { map: selectedMap, image: dataUrl, date: new Date().toISOString() }); alert('Strat Saved!'); };
 
     return (
         <div className="h-full flex flex-col gap-6">
-            <Card className="flex-1 flex flex-col">
+            <Card className="flex-1 flex flex-col min-h-[600px]">
                 <div className="flex justify-between items-center mb-4">
                     <h3 className="text-2xl font-black text-white">TACTICAL BOARD</h3>
-                    <div className="flex gap-2">
-                        <button onClick={() => setColor('#ef4444')} className="w-6 h-6 rounded-full bg-red-500 border border-white"></button>
-                        <button onClick={() => setColor('#3b82f6')} className="w-6 h-6 rounded-full bg-blue-500 border border-white"></button>
-                        <button onClick={() => setColor('#ffffff')} className="w-6 h-6 rounded-full bg-white border border-white"></button>
-                        <ButtonSecondary onClick={clearCanvas} className="text-xs py-1 px-3">Clear</ButtonSecondary>
-                        <ButtonPrimary onClick={saveStrat} className="text-xs py-1 px-3">Save</ButtonPrimary>
-                    </div>
+                    <div className="flex gap-2"><button onClick={() => setColor('#ef4444')} className="w-6 h-6 rounded-full bg-red-500 border border-white"></button><button onClick={() => setColor('#3b82f6')} className="w-6 h-6 rounded-full bg-blue-500 border border-white"></button><button onClick={() => setColor('#ffffff')} className="w-6 h-6 rounded-full bg-white border border-white"></button><ButtonSecondary onClick={clearCanvas} className="text-xs py-1 px-3">Clear</ButtonSecondary><ButtonPrimary onClick={saveStrat} className="text-xs py-1 px-3">Save</ButtonPrimary></div>
                 </div>
                 <div className="flex overflow-x-auto gap-2 pb-4 mb-4">{MAPS.map(m => <button key={m} onClick={() => { setSelectedMap(m); clearCanvas(); }} className={`px-3 py-1 rounded-full text-xs font-bold ${selectedMap === m ? 'bg-red-600 text-white' : 'bg-black text-neutral-500'}`}>{m}</button>)}</div>
-
                 <div className="relative flex-1 bg-neutral-900 rounded-2xl overflow-hidden border border-neutral-800">
-                    {/* Background Map Image (DisplayIcon) */}
-                    {mapImages[selectedMap] && <img src={mapImages[selectedMap]} alt="Map" className="absolute inset-0 w-full h-full object-contain opacity-70 pointer-events-none" />}
+                    {mapImages[selectedMap] && <img src={mapImages[selectedMap]} alt="Map" className="absolute inset-0 w-full h-full object-contain opacity-90 pointer-events-none" />}
                     <canvas
-                        ref={canvasRef}
-                        width={800}
-                        height={450}
-                        className="absolute inset-0 w-full h-full cursor-crosshair z-10"
-                        onMouseDown={startDraw}
-                        onMouseMove={draw}
-                        onMouseUp={stopDraw}
-                        onMouseLeave={stopDraw}
+                        ref={canvasRef} width={1280} height={720} className="absolute inset-0 w-full h-full cursor-crosshair z-10 touch-none"
+                        onMouseDown={startDraw} onMouseMove={draw} onMouseUp={stopDraw} onMouseLeave={stopDraw}
+                        onTouchStart={startDraw} onTouchMove={draw} onTouchEnd={stopDraw}
                     />
                 </div>
             </Card>
-
-            {/* External Links Section */}
             <Card>
                 <h4 className="text-lg font-bold text-white mb-4">EXTERNAL STRATEGY LINKS ({selectedMap})</h4>
-                <div className="flex gap-2 mb-4">
-                    <Input placeholder="Title (e.g. A Split - Valoplant)" value={newLink.title} onChange={e => setNewLink({ ...newLink, title: e.target.value })} className="flex-1" />
-                    <Input placeholder="URL" value={newLink.url} onChange={e => setNewLink({ ...newLink, url: e.target.value })} className="flex-1" />
-                    <ButtonPrimary onClick={addLink} className="text-xs py-2">Add Link</ButtonPrimary>
-                </div>
-                <div className="space-y-2 max-h-40 overflow-y-auto custom-scrollbar">
-                    {links.length === 0 && <p className="text-neutral-500 italic text-sm">No links added for {selectedMap}.</p>}
-                    {links.map(link => (
-                        <div key={link.id} className="flex justify-between items-center bg-black/50 p-3 rounded-lg border border-neutral-800 hover:border-red-900 transition-colors">
-                            <a href={link.url} target="_blank" rel="noreferrer" className="text-red-500 font-bold hover:underline text-sm">{link.title}</a>
-                            <button onClick={() => deleteLink(link.id)} className="text-neutral-600 hover:text-red-500">×</button>
-                        </div>
-                    ))}
-                </div>
+                <div className="flex gap-2 mb-4"><Input placeholder="Title (e.g. A Split - Valoplant)" value={newLink.title} onChange={e => setNewLink({ ...newLink, title: e.target.value })} className="flex-1" /><Input placeholder="URL" value={newLink.url} onChange={e => setNewLink({ ...newLink, url: e.target.value })} className="flex-1" /><ButtonPrimary onClick={addLink} className="text-xs py-2">Add Link</ButtonPrimary></div>
+                <div className="space-y-2 max-h-40 overflow-y-auto custom-scrollbar">{links.length === 0 && <p className="text-neutral-500 italic text-sm">No links added for {selectedMap}.</p>}{links.map(link => (<div key={link.id} className="flex justify-between items-center bg-black/50 p-3 rounded-lg border border-neutral-800 hover:border-red-900 transition-colors"><a href={link.url} target="_blank" rel="noreferrer" className="text-red-500 font-bold hover:underline text-sm">{link.title}</a><button onClick={() => deleteLink(link.id)} className="text-neutral-600 hover:text-red-500">×</button></div>))}</div>
             </Card>
         </div>
     );
 }
 
 function MatchHistory() {
-    // ... (Same as v4.0)
     const [matches, setMatches] = useState([]);
     const [isAdding, setIsAdding] = useState(false);
-    const [expandedId, setExpandedId] = useState(null); // For stamps
+    const [expandedId, setExpandedId] = useState(null);
     const [newMatch, setNewMatch] = useState({ opponent: '', date: '', myScore: '', enemyScore: '', atkScore: '', defScore: '', map: MAPS[0] });
 
     useEffect(() => {
@@ -530,69 +494,19 @@ function MatchHistory() {
         }); return () => unsub();
     }, []);
 
-    const handleAdd = async () => {
-        await addDoc(collection(db, 'events'), { type: 'Scrim', opponent: newMatch.opponent, date: newMatch.date, result: { ...newMatch } });
-        setIsAdding(false);
-    };
-
-    const getResultColor = (my, enemy) => {
-        const m = parseInt(my); const e = parseInt(enemy);
-        if (m > e) return 'border-l-4 border-l-green-500';
-        if (m < e) return 'border-l-4 border-l-red-600';
-        return 'border-l-4 border-l-neutral-500';
-    };
+    const handleAdd = async () => { await addDoc(collection(db, 'events'), { type: 'Scrim', opponent: newMatch.opponent, date: newMatch.date, result: { ...newMatch } }); setIsAdding(false); };
+    const getResultColor = (my, enemy) => { const m = parseInt(my); const e = parseInt(enemy); if (m > e) return 'border-l-4 border-l-green-500'; if (m < e) return 'border-l-4 border-l-red-600'; return 'border-l-4 border-l-neutral-500'; };
 
     return (
         <Card>
             <div className="flex justify-between items-center mb-6"><h3 className="text-2xl font-black text-white flex items-center gap-3"><span className="text-red-600">MATCH</span> HISTORY</h3><ButtonSecondary onClick={() => setIsAdding(!isAdding)} className="text-xs">{isAdding ? 'Cancel' : '+ Log Match'}</ButtonSecondary></div>
-            {isAdding && (
-                <div className="mb-6 bg-black/50 p-4 rounded-xl border border-white/10 space-y-2">
-                    <div className="grid grid-cols-2 gap-2"><Input placeholder="Opponent" value={newMatch.opponent} onChange={e => setNewMatch({ ...newMatch, opponent: e.target.value })} /><Input type="date" value={newMatch.date} onChange={e => setNewMatch({ ...newMatch, date: e.target.value })} className="[color-scheme:dark]" /></div>
-                    <div className="grid grid-cols-4 gap-2">
-                        <Input placeholder="Us" value={newMatch.myScore} onChange={e => setNewMatch({ ...newMatch, myScore: e.target.value })} />
-                        <Input placeholder="Them" value={newMatch.enemyScore} onChange={e => setNewMatch({ ...newMatch, enemyScore: e.target.value })} />
-                        <Input placeholder="Atk Wins" value={newMatch.atkScore} onChange={e => setNewMatch({ ...newMatch, atkScore: e.target.value })} />
-                        <Input placeholder="Def Wins" value={newMatch.defScore} onChange={e => setNewMatch({ ...newMatch, defScore: e.target.value })} />
-                    </div>
-                    <ButtonPrimary onClick={handleAdd} className="w-full py-2 text-xs">Save Result</ButtonPrimary>
-                </div>
-            )}
-            <div className="space-y-4">
-                {matches.map(m => (
-                    <div key={m.id} onClick={() => setExpandedId(expandedId === m.id ? null : m.id)} className="bg-black/40 border border-neutral-800 p-4 rounded-xl relative overflow-hidden cursor-pointer hover:bg-neutral-900 transition-all">
-                        {/* Feature 4: Stamps */}
-                        {expandedId === m.id && (parseInt(m.result.myScore) > parseInt(m.result.enemyScore) ? <VictoryStamp /> : <DefeatStamp />)}
-
-                        <div className="flex justify-between items-center relative z-10">
-                            <div>
-                                <div className="text-sm font-bold text-white">{m.opponent}</div>
-                                <div className="text-xs text-neutral-500">{m.date} • {m.result.map}</div>
-                            </div>
-                            <div className={`text-2xl font-black ${parseInt(m.result.myScore) > parseInt(m.result.enemyScore) ? 'text-green-500' : 'text-red-500'}`}>
-                                {m.result.myScore} - {m.result.enemyScore}
-                            </div>
-                        </div>
-                        {expandedId === m.id && (
-                            <div className="mt-4 pt-4 border-t border-neutral-800 grid grid-cols-2 gap-4 text-center">
-                                <div className="bg-neutral-900 p-2 rounded">
-                                    <div className="text-[10px] text-neutral-500 uppercase font-bold">Attack</div>
-                                    <div className="text-white font-bold">{m.result.atkScore || '-'}</div>
-                                </div>
-                                <div className="bg-neutral-900 p-2 rounded">
-                                    <div className="text-[10px] text-neutral-500 uppercase font-bold">Defense</div>
-                                    <div className="text-white font-bold">{m.result.defScore || '-'}</div>
-                                </div>
-                            </div>
-                        )}
-                    </div>
-                ))}
-            </div>
+            {isAdding && (<div className="mb-6 bg-black/50 p-4 rounded-xl border border-white/10 space-y-2"><div className="grid grid-cols-2 gap-2"><Input placeholder="Opponent" value={newMatch.opponent} onChange={e => setNewMatch({ ...newMatch, opponent: e.target.value })} /><Input type="date" value={newMatch.date} onChange={e => setNewMatch({ ...newMatch, date: e.target.value })} className="[color-scheme:dark]" /></div><div className="grid grid-cols-4 gap-2"><Input placeholder="Us" value={newMatch.myScore} onChange={e => setNewMatch({ ...newMatch, myScore: e.target.value })} /><Input placeholder="Them" value={newMatch.enemyScore} onChange={e => setNewMatch({ ...newMatch, enemyScore: e.target.value })} /><Input placeholder="Atk Wins" value={newMatch.atkScore} onChange={e => setNewMatch({ ...newMatch, atkScore: e.target.value })} /><Input placeholder="Def Wins" value={newMatch.defScore} onChange={e => setNewMatch({ ...newMatch, defScore: e.target.value })} /></div><ButtonPrimary onClick={handleAdd} className="w-full py-2 text-xs">Save Result</ButtonPrimary></div>)}
+            <div className="space-y-4">{matches.map(m => (<div key={m.id} onClick={() => setExpandedId(expandedId === m.id ? null : m.id)} className={`bg-black/40 border border-neutral-800 p-4 rounded-xl relative overflow-hidden cursor-pointer hover:bg-neutral-900 transition-all ${m.result ? getResultColor(m.result.myScore, m.result.enemyScore) : ''}`}>{expandedId === m.id && (parseInt(m.result.myScore) > parseInt(m.result.enemyScore) ? <VictoryStamp /> : <DefeatStamp />)}<div className="flex justify-between items-center relative z-10"><div><div className="text-sm font-bold text-white">{m.opponent}</div><div className="text-xs text-neutral-500">{m.date} • {m.result.map}</div></div><div className={`text-2xl font-black ${parseInt(m.result.myScore) > parseInt(m.result.enemyScore) ? 'text-green-500' : 'text-red-500'}`}>{m.result.myScore} - {m.result.enemyScore}</div></div>{expandedId === m.id && (<div className="mt-4 pt-4 border-t border-neutral-800 grid grid-cols-2 gap-4 text-center"><div className="bg-neutral-900 p-2 rounded"><div className="text-[10px] text-neutral-500 uppercase font-bold">Attack</div><div className="text-white font-bold">{m.result.atkScore || '-'}</div></div><div className="bg-neutral-900 p-2 rounded"><div className="text-[10px] text-neutral-500 uppercase font-bold">Defense</div><div className="text-white font-bold">{m.result.defScore || '-'}</div></div></div>)}</div>))}</div>
         </Card>
     );
 }
 
 function RosterManager({ members }) {
-    // ... (Same as v4.0)
     const [rosterData, setRosterData] = useState({});
     const [mode, setMode] = useState('edit'); // 'edit' or 'compare'
     const [compare1, setCompare1] = useState('');
@@ -605,62 +519,14 @@ function RosterManager({ members }) {
 
     return (
         <div className="h-full flex flex-col gap-6">
-            <div className="flex gap-4 border-b border-white/10 pb-4">
-                <button onClick={() => setMode('edit')} className={`text-sm font-bold uppercase ${mode === 'edit' ? 'text-red-500' : 'text-neutral-500'}`}>Edit Mode</button>
-                <button onClick={() => setMode('compare')} className={`text-sm font-bold uppercase ${mode === 'compare' ? 'text-red-500' : 'text-neutral-500'}`}>Compare Players</button>
-            </div>
-
+            <div className="flex gap-4 border-b border-white/10 pb-4"><button onClick={() => setMode('edit')} className={`text-sm font-bold uppercase ${mode === 'edit' ? 'text-red-500' : 'text-neutral-500'}`}>Edit Mode</button><button onClick={() => setMode('compare')} className={`text-sm font-bold uppercase ${mode === 'compare' ? 'text-red-500' : 'text-neutral-500'}`}>Compare Players</button></div>
             {mode === 'edit' ? (
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 h-full">
-                    <div className="lg:col-span-1 bg-neutral-900/80 p-6 rounded-3xl border border-white/5">
-                        <h3 className="text-white font-bold mb-4">Members</h3>
-                        <div className="space-y-2 overflow-y-auto h-96 custom-scrollbar">
-                            {members.map(m => (
-                                <div key={m} onClick={() => { setSelectedMember(m); setRole(rosterData[m]?.role || 'Tryout'); setNotes(rosterData[m]?.notes || ''); setGameId(rosterData[m]?.gameId || ''); }} className={`p-3 rounded-xl cursor-pointer border transition-all flex justify-between items-center ${selectedMember === m ? 'bg-red-900/20 border-red-600' : 'bg-black border-neutral-800'}`}>
-                                    <span className="text-white font-bold">{m}</span>
-                                    <span className="text-xs text-neutral-500 uppercase">{rosterData[m]?.role}</span>
-                                </div>
-                            ))}
-                        </div>
-                    </div>
-                    <Card className="lg:col-span-2">
-                        {selectedMember ? (
-                            <div className="space-y-6">
-                                <h3 className="text-2xl font-black text-white">Managing: <span className="text-red-500">{selectedMember}</span></h3>
-                                <div className="grid grid-cols-2 gap-4">
-                                    <div><label className="block text-xs font-bold text-neutral-500 mb-1">Role</label><Select value={role} onChange={e => setRole(e.target.value)}>{['Captain', 'Main', 'Sub', 'Tryout'].map(r => <option key={r}>{r}</option>)}</Select></div>
-                                    <div><label className="block text-xs font-bold text-neutral-500 mb-1">Riot ID</label><Input value={gameId} onChange={e => setGameId(e.target.value)} /></div>
-                                </div>
-                                <textarea className="w-full h-40 bg-black border border-neutral-800 rounded-xl p-3 text-white" value={notes} onChange={e => setNotes(e.target.value)} placeholder="Notes..." />
-                                <ButtonPrimary onClick={handleSave} className="w-full py-3">Save Changes</ButtonPrimary>
-                            </div>
-                        ) : <div className="h-full flex items-center justify-center text-neutral-500">Select a player</div>}
-                    </Card>
+                    <div className="lg:col-span-1 bg-neutral-900/80 p-6 rounded-3xl border border-white/5"><h3 className="text-white font-bold mb-4">Members</h3><div className="space-y-2 overflow-y-auto h-96 custom-scrollbar">{members.map(m => (<div key={m} onClick={() => { setSelectedMember(m); setRole(rosterData[m]?.role || 'Tryout'); setNotes(rosterData[m]?.notes || ''); setGameId(rosterData[m]?.gameId || ''); }} className={`p-3 rounded-xl cursor-pointer border transition-all flex justify-between items-center ${selectedMember === m ? 'bg-red-900/20 border-red-600' : 'bg-black border-neutral-800'}`}><span className="text-white font-bold">{m}</span><span className="text-xs text-neutral-500 uppercase">{rosterData[m]?.role}</span></div>))}</div></div>
+                    <Card className="lg:col-span-2">{selectedMember ? (<div className="space-y-6"><h3 className="text-2xl font-black text-white">Managing: <span className="text-red-500">{selectedMember}</span></h3><div className="grid grid-cols-2 gap-4"><div><label className="block text-xs font-bold text-neutral-500 mb-1">Role</label><Select value={role} onChange={e => setRole(e.target.value)}>{['Captain', 'Main', 'Sub', 'Tryout'].map(r => <option key={r}>{r}</option>)}</Select></div><div><label className="block text-xs font-bold text-neutral-500 mb-1">Riot ID</label><Input value={gameId} onChange={e => setGameId(e.target.value)} /></div></div><textarea className="w-full h-40 bg-black border border-neutral-800 rounded-xl p-3 text-white" value={notes} onChange={e => setNotes(e.target.value)} placeholder="Notes..." /><ButtonPrimary onClick={handleSave} className="w-full py-3">Save Changes</ButtonPrimary></div>) : <div className="h-full flex items-center justify-center text-neutral-500">Select a player</div>}</Card>
                 </div>
             ) : (
-                <div className="grid grid-cols-2 gap-8 h-full">
-                    {[setCompare1, setCompare2].map((setter, i) => (
-                        <Card key={i} className="h-full">
-                            <Select onChange={e => setter(e.target.value)} className="mb-6"><option>Select Player</option>{members.map(m => <option key={m}>{m}</option>)}</Select>
-                            {((i === 0 ? compare1 : compare2) && rosterData[i === 0 ? compare1 : compare2]) && (
-                                <div className="space-y-4 text-center">
-                                    <div className="w-24 h-24 mx-auto bg-red-600 rounded-full flex items-center justify-center text-3xl font-black text-white border-4 border-black shadow-xl">
-                                        {(i === 0 ? compare1 : compare2)[0]}
-                                    </div>
-                                    <div className="text-3xl font-black text-white uppercase">{(i === 0 ? compare1 : compare2)}</div>
-                                    <div className="flex justify-center gap-2">
-                                        <span className="bg-neutral-800 px-3 py-1 rounded text-xs font-bold text-white">{rosterData[i === 0 ? compare1 : compare2]?.rank || 'Unranked'}</span>
-                                        <span className="bg-red-900/50 px-3 py-1 rounded text-xs font-bold text-red-400">{rosterData[i === 0 ? compare1 : compare2]?.role || 'Member'}</span>
-                                    </div>
-                                    <div className="p-4 bg-black/50 rounded-xl border border-neutral-800 text-left">
-                                        <div className="text-[10px] text-neutral-500 uppercase font-bold mb-2">Performance Notes</div>
-                                        <p className="text-sm text-neutral-300 italic">"{rosterData[i === 0 ? compare1 : compare2]?.notes || 'No notes available.'}"</p>
-                                    </div>
-                                </div>
-                            )}
-                        </Card>
-                    ))}
-                </div>
+                <div className="grid grid-cols-2 gap-8 h-full">{[setCompare1, setCompare2].map((setter, i) => (<Card key={i} className="h-full"><Select onChange={e => setter(e.target.value)} className="mb-6"><option>Select Player</option>{members.map(m => <option key={m}>{m}</option>)}</Select>{((i === 0 ? compare1 : compare2) && rosterData[i === 0 ? compare1 : compare2]) && (<div className="space-y-4 text-center"><div className="w-24 h-24 mx-auto bg-red-600 rounded-full flex items-center justify-center text-3xl font-black text-white border-4 border-black shadow-xl">{(i === 0 ? compare1 : compare2)[0]}</div><div className="text-3xl font-black text-white uppercase">{(i === 0 ? compare1 : compare2)}</div><div className="flex justify-center gap-2"><span className="bg-neutral-800 px-3 py-1 rounded text-xs font-bold text-white">{rosterData[i === 0 ? compare1 : compare2]?.rank || 'Unranked'}</span><span className="bg-red-900/50 px-3 py-1 rounded text-xs font-bold text-red-400">{rosterData[i === 0 ? compare1 : compare2]?.role || 'Member'}</span></div><div className="p-4 bg-black/50 rounded-xl border border-neutral-800 text-left"><div className="text-[10px] text-neutral-500 uppercase font-bold mb-2">Performance Notes</div><p className="text-sm text-neutral-300 italic">"{rosterData[i === 0 ? compare1 : compare2]?.notes || 'No notes available.'}"</p></div></div>)}</Card>))}</div>
             )}
         </div>
     );
@@ -741,7 +607,7 @@ export default function App() {
                 </div>}
                 {activeTab === 'comps' && <div className="animate-fade-in-up h-full"><TeamComps members={dynamicMembers} /></div>}
                 {activeTab === 'matches' && <div className="animate-fade-in-up"><MatchHistory /></div>}
-                {activeTab === 'strats' && <div className="animate-fade-in-up h-[70vh]"><StratBook /></div>}
+                {activeTab === 'strats' && <div className="animate-fade-in-up h-[85vh]"><StratBook /></div>}
                 {activeTab === 'roster' && <div className="animate-fade-in-up h-full"><RosterManager members={dynamicMembers} /></div>}
                 {activeTab === 'partners' && <div className="animate-fade-in-up h-full"><PartnerDirectory /></div>}
                 {activeTab === 'admin' && <div className="animate-fade-in-up h-full"><AdminPanel /></div>}
