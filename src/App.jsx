@@ -1,9 +1,9 @@
 ﻿/*
-Syrix Team Availability - v5.0 (VALOPLANT UPDATE)
-- STRATBOOK 2.0: Full "Tactical Planner" functionality.
-- DRAG & DROP: Drag Agents and Utility icons onto the map.
-- SMART LAYERS: Draw lines AND move icons simultaneously.
-- EXPORT: Merges Map, Drawings, and Icons into one saved image.
+Syrix Team Availability - v5.1 (STABILIZED & ROBUST)
+- FIX: Added safety checks for Canvas/Container refs to prevent crashes.
+- FIX: Role Icons now handle custom roles gracefully.
+- FIX: Image export now handles missing assets without freezing.
+- THEME: Red & Black Glassmorphism maintained.
 */
 
 import React, { useState, useEffect, useMemo, useRef } from 'react';
@@ -57,7 +57,8 @@ const RoleIcons = {
     Initiator: <svg viewBox="0 0 24 24" fill="currentColor" className="w-4 h-4"><path d="M12 2l-9 4v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V6l-9-4zm0 2.18l7 3.12v4.7c0 4.67-3.13 8.96-7 10.1-3.87-1.14-7-5.43-7-10.1v-4.7l7-3.12z" /></svg>,
     Controller: <svg viewBox="0 0 24 24" fill="currentColor" className="w-4 h-4"><circle cx="12" cy="12" r="10" opacity="0.3" /><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8z" /></svg>,
     Sentinel: <svg viewBox="0 0 24 24" fill="currentColor" className="w-4 h-4"><path d="M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4zm0 2.18l7 3.12v4.7c0 4.67-3.13 8.96-7 10.1-3.87-1.14-7-5.43-7-10.1v-4.7l7-3.12z" /><rect x="11" y="7" width="2" height="10" /></svg>,
-    Flex: <span className="font-bold text-xs">FLX</span>
+    Flex: <span className="font-bold text-xs">FLX</span>,
+    Unknown: <span className="font-bold text-xs">?</span>
 };
 
 // --- Utility Functions ---
@@ -132,13 +133,13 @@ const useValorantData = () => {
                 const agentRes = await fetch('https://valorant-api.com/v1/agents');
                 const agentData = await agentRes.json();
                 const aMap = {};
-                agentData.data.forEach(agent => { aMap[agent.displayName] = agent.displayIcon; });
+                if (agentData.data) agentData.data.forEach(agent => { aMap[agent.displayName] = agent.fullPortrait || agent.displayIcon; });
                 setAgentImages(aMap);
 
                 const mapRes = await fetch('https://valorant-api.com/v1/maps');
                 const mapData = await mapRes.json();
                 const mMap = {};
-                mapData.data.forEach(map => { mMap[map.displayName] = map.displayIcon; });
+                if (mapData.data) mapData.data.forEach(map => { mMap[map.displayName] = map.displayIcon; });
                 setMapImages(mMap);
             } catch (e) { console.error("Failed to fetch Valorant assets", e); }
         };
@@ -148,12 +149,8 @@ const useValorantData = () => {
 };
 
 // --- ANIMATED STAMPS ---
-const VictoryStamp = () => (
-    <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-50 border-8 border-green-500 text-green-500 font-black text-5xl md:text-7xl p-4 uppercase tracking-tighter -rotate-12 opacity-0 animate-stamp-in pointer-events-none mix-blend-screen">VICTORY</div>
-);
-const DefeatStamp = () => (
-    <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-50 border-8 border-red-600 text-red-600 font-black text-5xl md:text-7xl p-4 uppercase tracking-tighter rotate-12 opacity-0 animate-stamp-in pointer-events-none mix-blend-screen">DEFEAT</div>
-);
+const VictoryStamp = () => <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-50 border-8 border-green-500 text-green-500 font-black text-5xl md:text-7xl p-4 uppercase tracking-tighter -rotate-12 opacity-0 animate-stamp-in pointer-events-none mix-blend-screen">VICTORY</div>;
+const DefeatStamp = () => <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-50 border-8 border-red-600 text-red-600 font-black text-5xl md:text-7xl p-4 uppercase tracking-tighter rotate-12 opacity-0 animate-stamp-in pointer-events-none mix-blend-screen">DEFEAT</div>;
 
 // --- COMPONENTS ---
 
@@ -173,6 +170,97 @@ function Modal({ isOpen, onClose, onConfirm, title, children }) {
     );
 }
 
+function LeaveLogger({ members }) {
+    const [leaves, setLeaves] = useState([]);
+    const [newLeave, setNewLeave] = useState({ start: '', end: '', reason: '' });
+    const { currentUser } = getAuth();
+    useEffect(() => {
+        const unsub = onSnapshot(collection(db, 'leaves'), (snap) => {
+            const l = []; snap.forEach(doc => l.push({ id: doc.id, ...doc.data() }));
+            l.sort((a, b) => new Date(a.start) - new Date(b.start));
+            setLeaves(l.filter(leave => new Date(leave.end) >= new Date()));
+        });
+        return () => unsub();
+    }, []);
+    const addLeave = async () => { if (!newLeave.start || !newLeave.end) return; await addDoc(collection(db, 'leaves'), { ...newLeave, user: currentUser.displayName, timestamp: new Date().toISOString() }); setNewLeave({ start: '', end: '', reason: '' }); };
+    const deleteLeave = async (id) => await deleteDoc(doc(db, 'leaves', id));
+    return (
+        <Card className="border-red-900/20">
+            <h3 className="text-lg font-black text-white mb-4 border-b border-red-900/30 pb-2 uppercase tracking-widest flex items-center gap-2"><span className="text-xl">🏖️</span> Absence Log</h3>
+            <div className="space-y-3 mb-4"><div className="grid grid-cols-2 gap-2"><Input type="date" value={newLeave.start} onChange={e => setNewLeave({ ...newLeave, start: e.target.value })} className="[color-scheme:dark]" /><Input type="date" value={newLeave.end} onChange={e => setNewLeave({ ...newLeave, end: e.target.value })} className="[color-scheme:dark]" /></div><Input type="text" placeholder="Reason" value={newLeave.reason} onChange={e => setNewLeave({ ...newLeave, reason: e.target.value })} /><ButtonSecondary onClick={addLeave} className="w-full text-xs py-3">Log Absence</ButtonSecondary></div>
+            <div className="space-y-2 max-h-40 overflow-y-auto pr-2 custom-scrollbar">{leaves.length === 0 && <p className="text-neutral-600 italic text-xs text-center py-2">No upcoming absences.</p>}{leaves.map(l => (<div key={l.id} className="p-3 bg-black border border-neutral-800 rounded-lg flex justify-between items-center text-xs hover:border-red-900/50 transition-colors group"><div><span className="font-bold text-red-500 mr-2">{l.user}</span><span className="text-neutral-400">{l.start} - {l.end}</span><div className="text-neutral-500 italic mt-0.5">{l.reason}</div></div>{(l.user === currentUser?.displayName || ADMINS.includes(currentUser?.displayName)) && (<button onClick={() => deleteLeave(l.id)} className="text-neutral-600 hover:text-red-500 font-bold px-2 opacity-0 group-hover:opacity-100 transition-opacity">✕</button>)}</div>))}</div>
+        </Card>
+    );
+}
+
+function NextMatchCountdown({ events }) {
+    const [timeLeft, setTimeLeft] = useState('');
+    const nextEvent = useMemo(() => { const now = new Date(); return events.find(e => new Date(e.date + 'T' + e.time) > now); }, [events]);
+    useEffect(() => {
+        if (!nextEvent) { setTimeLeft(''); return; }
+        const target = new Date(nextEvent.date + 'T' + nextEvent.time);
+        const interval = setInterval(() => {
+            const now = new Date(); const diff = target - now;
+            if (diff <= 0) { setTimeLeft('NOW'); return; }
+            const d = Math.floor(diff / (1000 * 60 * 60 * 24)); const h = Math.floor((diff / (1000 * 60 * 60)) % 24); const m = Math.floor((diff / 1000 / 60) % 60); const s = Math.floor((diff / 1000) % 60);
+            setTimeLeft(`${d}d ${h}h ${m}m ${s}s`);
+        }, 1000);
+        return () => clearInterval(interval);
+    }, [nextEvent]);
+    if (!nextEvent) return null;
+    return (
+        <div className="bg-gradient-to-r from-black via-neutral-950 to-black p-6 rounded-3xl border border-red-900/40 shadow-2xl shadow-red-900/20 mb-8 flex flex-col md:flex-row justify-between items-center gap-6 relative overflow-hidden group">
+            <div className="absolute top-0 right-0 w-96 h-96 bg-red-600/10 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2 pointer-events-none animate-pulse"></div>
+            <div className="z-10 text-center md:text-left"><div className="text-xs text-red-500 font-black uppercase tracking-[0.2em] mb-2">Next Match vs {nextEvent.opponent}</div><div className="text-3xl md:text-4xl font-black text-white italic tracking-tighter">{nextEvent.date} @ {nextEvent.time}</div><div className="text-neutral-500 text-sm font-mono mt-1 uppercase tracking-widest">Type: {nextEvent.type}</div></div>
+            <div className="z-10"><div className="text-5xl md:text-7xl font-black text-transparent bg-clip-text bg-gradient-to-b from-white to-neutral-500 font-mono tracking-tighter tabular-nums drop-shadow-sm">{timeLeft}</div></div>
+        </div>
+    );
+}
+
+function TeamComps({ members }) {
+    const [comps, setComps] = useState([]);
+    const [selectedMap, setSelectedMap] = useState(MAPS[0]);
+    const [newComp, setNewComp] = useState({ agents: Array(5).fill(''), players: Array(5).fill('') });
+    const [activeDropdown, setActiveDropdown] = useState(null);
+    const { agentImages } = useValorantData();
+
+    useEffect(() => { const unsub = onSnapshot(collection(db, 'comps'), (snap) => { const c = []; snap.forEach(doc => c.push({ id: doc.id, ...doc.data() })); setComps(c); }); return () => unsub(); }, []);
+    const saveComp = async () => { if (newComp.agents.some(a => !a)) return; await addDoc(collection(db, 'comps'), { map: selectedMap, ...newComp }); setNewComp({ agents: Array(5).fill(''), players: Array(5).fill('') }); };
+    const deleteComp = async (id) => await deleteDoc(doc(db, 'comps', id));
+    const currentMapComps = comps.filter(c => c.map === selectedMap);
+
+    const AgentCard = ({ index }) => {
+        const isOpen = activeDropdown === index;
+        const selectedAgent = newComp.agents[index];
+        const agentImage = agentImages[selectedAgent];
+
+        return (
+            <div className="relative group h-64 bg-neutral-900/80 border border-white/10 rounded-2xl overflow-hidden transition-all hover:border-red-600 hover:shadow-[0_0_30px_rgba(220,38,38,0.3)] flex flex-col">
+                {selectedAgent && agentImage && (<div className="absolute inset-0 z-0"><img src={agentImage} alt={selectedAgent} className="w-full h-full object-cover opacity-40 group-hover:opacity-60 transition-opacity mix-blend-luminosity" style={{ objectPosition: 'center top' }} /><div className="absolute inset-0 bg-gradient-to-b from-transparent via-neutral-900/50 to-neutral-950"></div></div>)}
+                <div onClick={() => setActiveDropdown(isOpen ? null : index)} className="flex-1 relative flex flex-col justify-center items-center p-4 z-10 border-b border-white/5 cursor-pointer">
+                    <label className="text-[10px] font-black text-red-500 uppercase tracking-[0.2em] mb-3 z-20 drop-shadow-md">Role {index + 1}</label>
+                    {selectedAgent ? (<div className="flex flex-col items-center animate-fade-in-up z-20"><div className="text-3xl sm:text-4xl font-black text-white uppercase tracking-tighter drop-shadow-[0_0_10px_rgba(0,0,0,0.8)]">{selectedAgent}</div><div className="mt-2 h-0.5 w-8 bg-red-600 rounded-full shadow-[0_0_8px_red]"></div></div>) : (<div className="flex flex-col items-center justify-center border-2 border-dashed border-neutral-700 rounded-xl p-4 w-full h-full hover:border-red-500/50 transition-all opacity-60 hover:opacity-100"><span className="text-2xl text-neutral-400 mb-1">+</span><span className="text-[10px] font-bold text-neutral-400 uppercase tracking-widest">Select Agent</span></div>)}
+                </div>
+                {isOpen && (<div className="absolute inset-0 bg-neutral-950 z-50 flex flex-col animate-fade-in"><div className="flex justify-between items-center p-3 border-b border-white/10 bg-neutral-900"><span className="text-xs font-bold text-white uppercase tracking-widest">Pick Agent</span><button onClick={(e) => { e.stopPropagation(); setActiveDropdown(null); }} className="text-neutral-500 hover:text-red-500 text-lg leading-none">×</button></div><div className="flex-1 overflow-y-auto p-2 grid grid-cols-2 gap-1 custom-scrollbar">{AGENT_NAMES.map(agent => (<button key={agent} onClick={(e) => { e.stopPropagation(); const a = [...newComp.agents]; a[index] = agent; setNewComp({ ...newComp, agents: a }); setActiveDropdown(null); }} className={`text-[10px] font-bold uppercase py-2 rounded border border-transparent hover:border-red-900 transition-all ${newComp.agents[index] === agent ? 'bg-red-700 text-white' : 'text-neutral-400 hover:text-white hover:bg-neutral-800'}`}>{agent}</button>))}</div></div>)}
+                <div className="h-16 relative bg-black/80 backdrop-blur flex items-center justify-center z-20 border-t border-white/5"><select value={newComp.players[index]} onChange={e => { const p = [...newComp.players]; p[index] = e.target.value; setNewComp({ ...newComp, players: p }); }} className="appearance-none bg-transparent text-center text-xs font-bold text-neutral-500 uppercase outline-none cursor-pointer w-full h-full hover:text-white transition-all tracking-wider" style={{ textAlignLast: 'center' }}><option value="" className="bg-neutral-900">Assign Player</option>{members.map(m => <option key={m} value={m} className="bg-neutral-900">{m}</option>)}</select><div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-neutral-700 text-[10px]">▼</div></div>
+            </div>
+        );
+    };
+
+    return (
+        <div className="flex flex-col h-full space-y-8">
+            <div className="flex flex-col md:flex-row justify-between items-end md:items-center gap-4 border-b border-white/10 pb-6"><h3 className="text-4xl font-black text-white italic tracking-tighter flex items-center gap-3"><span className="text-red-600 text-5xl">/</span> TACTICAL COMPS</h3></div>
+            <div className="flex flex-wrap gap-2">{MAPS.map(m => (<button key={m} onClick={() => setSelectedMap(m)} className={`px-6 py-2 rounded-full text-xs font-bold uppercase tracking-widest transition-all transform ${selectedMap === m ? 'bg-red-700 text-white shadow-[0_0_15px_rgba(220,38,38,0.6)] scale-105 border border-red-500' : 'bg-black border border-neutral-800 text-neutral-500 hover:bg-neutral-900 hover:text-white hover:border-white/20'}`}>{m}</button>))}</div>
+            <div className="bg-neutral-900/50 p-8 rounded-[2rem] border border-white/5 relative overflow-hidden shadow-2xl">
+                <div className="absolute top-0 right-0 w-64 h-64 bg-red-600/5 rounded-full blur-[80px] pointer-events-none"></div>
+                <div className="flex justify-between items-center mb-8 relative z-10"><div className="flex items-center gap-3"><span className="flex h-3 w-3 relative"><span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-500 opacity-75"></span><span className="relative inline-flex rounded-full h-3 w-3 bg-red-600"></span></span><h4 className="text-sm font-bold text-neutral-300 uppercase tracking-widest">Design {selectedMap} Strategy</h4></div><ButtonPrimary onClick={saveComp} className="text-xs py-2">Save Loadout</ButtonPrimary></div>
+                <div className="grid grid-cols-2 md:grid-cols-5 gap-4" onClick={() => setActiveDropdown(null)}>{Array.from({ length: 5 }).map((_, i) => (<div key={i} onClick={e => e.stopPropagation()}><AgentCard index={i} /></div>))}</div>
+            </div>
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">{currentMapComps.map(comp => (<div key={comp.id} className="bg-neutral-900/80 rounded-2xl border border-white/5 overflow-hidden relative group hover:border-red-600/40 transition-all shadow-lg"><div className="bg-black/50 px-5 py-3 flex justify-between items-center border-b border-neutral-800 group-hover:bg-red-900/10 transition-colors"><div className="flex items-center gap-2"><div className="w-1.5 h-1.5 bg-red-600 rounded-full"></div><div className="text-[10px] font-mono text-neutral-400 uppercase tracking-widest">ID: {comp.id.substring(0, 6)}</div></div><button onClick={() => deleteComp(comp.id)} className="text-neutral-600 hover:text-white font-bold text-[10px] bg-neutral-800 hover:bg-red-600 px-2 py-1 rounded transition-all">DELETE</button></div><div className="p-5 grid grid-cols-5 gap-2 divide-x divide-neutral-800/50">{comp.agents.map((agent, i) => (<div key={i} className="text-center flex flex-col justify-center items-center gap-1"><div className="text-xs sm:text-sm font-black text-white uppercase tracking-tight drop-shadow-sm">{agent}</div><div className="text-[9px] text-neutral-500 font-mono uppercase tracking-widest truncate w-full">{comp.players[i] || '-'}</div></div>))}</div></div>))}</div>
+        </div>
+    );
+}
+
 function StratBook() {
     const [selectedMap, setSelectedMap] = useState(MAPS[0]);
     const canvasRef = useRef(null);
@@ -181,10 +269,10 @@ function StratBook() {
     const { mapImages, agentImages } = useValorantData();
     const [color, setColor] = useState('#ef4444');
 
-    // ValoPlant Features: Icons & Links
-    const [mapIcons, setMapIcons] = useState([]); // { id, type, name, x, y }
-    const [dragItem, setDragItem] = useState(null); // Item being dragged from sidebar
-    const [movingIcon, setMovingIcon] = useState(null); // Icon being moved on map
+    // ValoPlant Features
+    const [mapIcons, setMapIcons] = useState([]);
+    const [dragItem, setDragItem] = useState(null);
+    const [movingIcon, setMovingIcon] = useState(null);
 
     const [links, setLinks] = useState([]);
     const [savedStrats, setSavedStrats] = useState([]);
@@ -193,20 +281,15 @@ function StratBook() {
 
     useEffect(() => {
         const qLinks = query(collection(db, 'strat_links'), where("map", "==", selectedMap));
-        const unsubLinks = onSnapshot(qLinks, (snap) => {
-            const l = []; snap.forEach(doc => l.push({ id: doc.id, ...doc.data() })); setLinks(l);
-        });
+        const unsubLinks = onSnapshot(qLinks, (snap) => { const l = []; snap.forEach(doc => l.push({ id: doc.id, ...doc.data() })); setLinks(l); });
         const qStrats = query(collection(db, 'strats'), where("map", "==", selectedMap));
-        const unsubStrats = onSnapshot(qStrats, (snap) => {
-            const s = []; snap.forEach(doc => s.push({ id: doc.id, ...doc.data() }));
-            s.sort((a, b) => new Date(b.date) - new Date(a.date));
-            setSavedStrats(s);
-        });
+        const unsubStrats = onSnapshot(qStrats, (snap) => { const s = []; snap.forEach(doc => s.push({ id: doc.id, ...doc.data() })); s.sort((a, b) => new Date(b.date) - new Date(a.date)); setSavedStrats(s); });
         return () => { unsubLinks(); unsubStrats(); };
     }, [selectedMap]);
 
-    // --- CANVAS DRAWING ---
+    // Canvas Logic
     const getPos = (e) => {
+        if (!canvasRef.current) return { x: 0, y: 0 };
         const rect = canvasRef.current.getBoundingClientRect();
         const clientX = e.nativeEvent ? e.nativeEvent.clientX : e.touches[0].clientX;
         const clientY = e.nativeEvent ? e.nativeEvent.clientY : e.touches[0].clientY;
@@ -214,7 +297,7 @@ function StratBook() {
     };
 
     const startDraw = (e) => {
-        if (movingIcon) return; // Don't draw if moving an icon
+        if (movingIcon !== null) return;
         const ctx = canvasRef.current.getContext('2d');
         const pos = getPos(e);
         ctx.beginPath(); ctx.moveTo(pos.x, pos.y); setIsDrawing(true);
@@ -232,22 +315,21 @@ function StratBook() {
     const clearCanvas = () => {
         const ctx = canvasRef.current.getContext('2d');
         ctx.clearRect(0, 0, canvasRef.current.width, canvasRef.current.height);
-        setMapIcons([]); // Clear icons too
+        setMapIcons([]);
     };
 
-    // --- DRAG & DROP ---
+    // Robust Drag & Drop
     const handleDrop = (e) => {
         e.preventDefault();
+        if (!containerRef.current) return;
         const rect = containerRef.current.getBoundingClientRect();
-        const x = ((e.clientX - rect.left) / rect.width) * 100; // Store as %
+        const x = ((e.clientX - rect.left) / rect.width) * 100;
         const y = ((e.clientY - rect.top) / rect.height) * 100;
 
         if (dragItem) {
-            // New Item from Sidebar
             setMapIcons([...mapIcons, { id: Date.now(), ...dragItem, x, y }]);
             setDragItem(null);
         } else if (movingIcon !== null) {
-            // Moving Existing Item
             const updated = [...mapIcons];
             updated[movingIcon] = { ...updated[movingIcon], x, y };
             setMapIcons(updated);
@@ -255,42 +337,30 @@ function StratBook() {
         }
     };
 
-    const removeIcon = (index) => {
-        const updated = [...mapIcons];
-        updated.splice(index, 1);
-        setMapIcons(updated);
-    };
-
-    // --- SAVING ---
     const saveStrat = async () => {
-        // Merge Icons onto Canvas for Snapshot
         const tempCanvas = document.createElement('canvas');
         tempCanvas.width = 1280; tempCanvas.height = 720;
         const ctx = tempCanvas.getContext('2d');
 
-        // 1. Draw Background Map (if exists)
         if (mapImages[selectedMap]) {
             const img = new Image();
             img.src = mapImages[selectedMap];
             img.crossOrigin = "anonymous";
-            await new Promise(r => { img.onload = r; img.onerror = r; }); // Wait for load
+            await new Promise((resolve) => { img.onload = resolve; img.onerror = resolve; img.src = mapImages[selectedMap]; });
             ctx.drawImage(img, 0, 0, 1280, 720);
         }
 
-        // 2. Draw Drawings
         ctx.drawImage(canvasRef.current, 0, 0);
 
-        // 3. Draw Icons
         for (const icon of mapIcons) {
-            const img = new Image();
-            if (icon.type === 'agent') img.src = agentImages[icon.name];
-            // For generic util, we draw shapes
-            await new Promise(r => { img.onload = r; img.onerror = r; });
-
             const px = (icon.x / 100) * 1280;
             const py = (icon.y / 100) * 720;
 
-            if (icon.type === 'agent') {
+            if (icon.type === 'agent' && agentImages[icon.name]) {
+                const img = new Image();
+                img.crossOrigin = "anonymous";
+                img.src = agentImages[icon.name];
+                await new Promise(r => { img.onload = r; img.onerror = r; });
                 ctx.drawImage(img, px - 25, py - 25, 50, 50);
             } else {
                 ctx.fillStyle = icon.color;
@@ -312,99 +382,38 @@ function StratBook() {
     return (
         <div className="h-full flex flex-col gap-6">
             <div className="flex gap-4 h-[75vh]">
-                {/* --- SIDEBAR: ASSETS --- */}
+                {/* SIDEBAR */}
                 <Card className="w-24 flex flex-col gap-4 overflow-y-auto custom-scrollbar !p-3">
                     <div className="text-[10px] font-bold text-neutral-500 text-center uppercase">Util</div>
                     {UTILITY_TYPES.map(u => (
-                        <div
-                            key={u.id} draggable
-                            onDragStart={() => setDragItem({ type: 'util', ...u })}
-                            className="w-10 h-10 rounded-full mx-auto cursor-grab active:cursor-grabbing border-2 border-white/20 hover:scale-110 transition-transform shadow-lg"
-                            style={{ backgroundColor: u.color }}
-                            title={u.label}
-                        ></div>
+                        <div key={u.id} draggable onDragStart={() => setDragItem({ type: 'util', ...u })} className="w-10 h-10 rounded-full mx-auto cursor-grab active:cursor-grabbing border-2 border-white/20 hover:scale-110 transition-transform shadow-lg" style={{ backgroundColor: u.color }} title={u.label}></div>
                     ))}
                     <div className="text-[10px] font-bold text-neutral-500 text-center uppercase mt-4">Agents</div>
                     {AGENT_NAMES.map(a => (
-                        <img
-                            key={a} src={agentImages[a]} alt={a} draggable
-                            onDragStart={() => setDragItem({ type: 'agent', name: a })}
-                            className="w-12 h-12 rounded-full mx-auto border border-neutral-700 bg-neutral-900 p-1 cursor-grab active:cursor-grabbing hover:border-red-500 transition-colors"
-                        />
+                        <img key={a} src={agentImages[a]} alt={a} draggable onDragStart={() => setDragItem({ type: 'agent', name: a })} className="w-12 h-12 rounded-full mx-auto border border-neutral-700 bg-neutral-900 p-1 cursor-grab active:cursor-grabbing hover:border-red-500 transition-colors" />
                     ))}
                 </Card>
 
-                {/* --- MAIN BOARD --- */}
+                {/* MAIN BOARD */}
                 <Card className="flex-1 flex flex-col relative">
                     <div className="flex justify-between items-center mb-4">
                         <h3 className="text-2xl font-black text-white">STRATBOOK {viewingStrat && <span className="text-red-500 text-sm ml-2">(VIEWING)</span>}</h3>
-                        <div className="flex gap-2">
-                            {!viewingStrat ? (
-                                <>
-                                    <button onClick={() => setColor('#ef4444')} className="w-6 h-6 rounded-full bg-red-500 border border-white"></button>
-                                    <button onClick={() => setColor('#3b82f6')} className="w-6 h-6 rounded-full bg-blue-500 border border-white"></button>
-                                    <button onClick={() => setColor('#ffffff')} className="w-6 h-6 rounded-full bg-white border border-white"></button>
-                                    <ButtonSecondary onClick={clearCanvas} className="text-xs py-1 px-3">Clear</ButtonSecondary>
-                                    <ButtonPrimary onClick={saveStrat} className="text-xs py-1 px-3">Save</ButtonPrimary>
-                                </>
-                            ) : <ButtonSecondary onClick={() => setViewingStrat(null)} className="text-xs bg-red-900/50 border-red-500 text-white">Close</ButtonSecondary>}
-                        </div>
+                        <div className="flex gap-2">{!viewingStrat ? (<><button onClick={() => setColor('#ef4444')} className="w-6 h-6 rounded-full bg-red-500 border border-white"></button><button onClick={() => setColor('#3b82f6')} className="w-6 h-6 rounded-full bg-blue-500 border border-white"></button><button onClick={() => setColor('#ffffff')} className="w-6 h-6 rounded-full bg-white border border-white"></button><ButtonSecondary onClick={clearCanvas} className="text-xs py-1 px-3">Clear</ButtonSecondary><ButtonPrimary onClick={saveStrat} className="text-xs py-1 px-3">Save</ButtonPrimary></>) : <ButtonSecondary onClick={() => setViewingStrat(null)} className="text-xs bg-red-900/50 border-red-500 text-white">Close</ButtonSecondary>}</div>
                     </div>
                     <div className="flex overflow-x-auto gap-2 pb-4 mb-2">{MAPS.map(m => <button key={m} onClick={() => { setSelectedMap(m); clearCanvas(); setViewingStrat(null); }} className={`px-3 py-1 rounded-full text-xs font-bold ${selectedMap === m ? 'bg-red-600 text-white' : 'bg-black text-neutral-500'}`}>{m}</button>)}</div>
-
-                    <div
-                        ref={containerRef}
-                        className="relative flex-1 bg-neutral-900 rounded-2xl overflow-hidden border border-neutral-800"
-                        onDragOver={e => e.preventDefault()}
-                        onDrop={handleDrop}
-                    >
-                        {/* 1. Map Background */}
+                    <div ref={containerRef} className="relative flex-1 bg-neutral-900 rounded-2xl overflow-hidden border border-neutral-800" onDragOver={e => e.preventDefault()} onDrop={handleDrop}>
                         {mapImages[selectedMap] && <img src={mapImages[selectedMap]} alt="Map" className="absolute inset-0 w-full h-full object-contain opacity-90 pointer-events-none" />}
-
-                        {/* 2. Icons Layer (Draggable) */}
                         {!viewingStrat && mapIcons.map((icon, i) => (
-                            <div
-                                key={icon.id}
-                                className="absolute cursor-move hover:scale-110 transition-transform z-20"
-                                style={{ left: `${icon.x}%`, top: `${icon.y}%`, transform: 'translate(-50%, -50%)' }}
-                                draggable
-                                onDragStart={(e) => { e.stopPropagation(); setMovingIcon(i); }}
-                                onDoubleClick={(e) => { e.stopPropagation(); removeIcon(i); }}
-                            >
-                                {icon.type === 'agent' ? (
-                                    <img src={agentImages[icon.name]} alt={icon.name} className="w-10 h-10 rounded-full border-2 border-white shadow-md pointer-events-none" />
-                                ) : (
-                                    <div className="w-6 h-6 rounded-full shadow-md border border-white" style={{ backgroundColor: icon.color }}></div>
-                                )}
+                            <div key={icon.id} className="absolute cursor-move hover:scale-110 transition-transform z-20" style={{ left: `${icon.x}%`, top: `${icon.y}%`, transform: 'translate(-50%, -50%)' }} draggable onDragStart={(e) => { e.stopPropagation(); setMovingIcon(i); }} onDoubleClick={(e) => { e.stopPropagation(); const u = [...mapIcons]; u.splice(i, 1); setMapIcons(u); }}>
+                                {icon.type === 'agent' ? <img src={agentImages[icon.name]} alt={icon.name} className="w-10 h-10 rounded-full border-2 border-white shadow-md pointer-events-none" /> : <div className="w-6 h-6 rounded-full shadow-md border border-white" style={{ backgroundColor: icon.color }}></div>}
                             </div>
                         ))}
-
-                        {/* 3. Canvas Layer (Drawing) */}
-                        <canvas
-                            ref={canvasRef} width={1280} height={720}
-                            className={`absolute inset-0 w-full h-full z-10 touch-none ${viewingStrat ? 'hidden' : 'cursor-crosshair'}`}
-                            onMouseDown={startDraw} onMouseMove={draw} onMouseUp={stopDraw} onMouseLeave={stopDraw}
-                            onTouchStart={startDraw} onTouchMove={draw} onTouchEnd={stopDraw}
-                        />
-
-                        {/* 4. Viewing Overlay */}
+                        <canvas ref={canvasRef} width={1280} height={720} className={`absolute inset-0 w-full h-full z-10 touch-none ${viewingStrat ? 'hidden' : 'cursor-crosshair'}`} onMouseDown={startDraw} onMouseMove={draw} onMouseUp={stopDraw} onMouseLeave={stopDraw} onTouchStart={startDraw} onTouchMove={draw} onTouchEnd={stopDraw} />
                         {viewingStrat && <div className="absolute inset-0 z-30 bg-black/50 flex items-center justify-center"><img src={viewingStrat} alt="Saved Strat" className="max-w-full max-h-full rounded-xl border border-red-500 shadow-2xl" /></div>}
                     </div>
                 </Card>
             </div>
-
-            {/* Bottom: Links & Saved */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <Card>
-                    <h4 className="text-lg font-bold text-white mb-4">EXTERNAL LINKS</h4>
-                    <div className="flex gap-2 mb-4"><Input placeholder="Title" value={newLink.title} onChange={e => setNewLink({ ...newLink, title: e.target.value })} className="flex-1" /><Input placeholder="URL" value={newLink.url} onChange={e => setNewLink({ ...newLink, url: e.target.value })} className="flex-1" /><ButtonPrimary onClick={addLink} className="text-xs py-2">Add</ButtonPrimary></div>
-                    <div className="space-y-2 max-h-40 overflow-y-auto custom-scrollbar">{links.map(l => <div key={l.id} className="flex justify-between items-center bg-black/50 p-3 rounded-lg border border-neutral-800"><a href={l.url} target="_blank" rel="noreferrer" className="text-red-500 font-bold hover:underline text-sm">{l.title}</a><button onClick={() => deleteLink(l.id)} className="text-neutral-600 hover:text-red-500">×</button></div>)}</div>
-                </Card>
-                <Card>
-                    <h4 className="text-lg font-bold text-white mb-4">SAVED STRATS</h4>
-                    <div className="space-y-2 max-h-40 overflow-y-auto custom-scrollbar">{savedStrats.length === 0 && <p className="text-neutral-500 italic text-sm">No saved strats.</p>}{savedStrats.map((s, i) => <div key={s.id} onClick={() => setViewingStrat(s.image)} className="flex justify-between items-center bg-black/50 p-3 rounded-lg border border-neutral-800 hover:border-red-500 cursor-pointer group"><span className="text-xs text-white font-mono">Strat #{savedStrats.length - i} - {new Date(s.date).toLocaleDateString()}</span><button onClick={(e) => { e.stopPropagation(); deleteStrat(s.id) }} className="text-neutral-600 hover:text-red-500 font-bold">DEL</button></div>)}</div>
-                </Card>
-            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6"><Card><h4 className="text-lg font-bold text-white mb-4">EXTERNAL LINKS</h4><div className="flex gap-2 mb-4"><Input placeholder="Title" value={newLink.title} onChange={e => setNewLink({ ...newLink, title: e.target.value })} className="flex-1" /><Input placeholder="URL" value={newLink.url} onChange={e => setNewLink({ ...newLink, url: e.target.value })} className="flex-1" /><ButtonPrimary onClick={addLink} className="text-xs py-2">Add</ButtonPrimary></div><div className="space-y-2 max-h-40 overflow-y-auto custom-scrollbar">{links.map(l => <div key={l.id} className="flex justify-between items-center bg-black/50 p-3 rounded-lg border border-neutral-800"><a href={l.url} target="_blank" rel="noreferrer" className="text-red-500 font-bold hover:underline text-sm">{l.title}</a><button onClick={() => deleteLink(l.id)} className="text-neutral-600 hover:text-red-500">×</button></div>)}</div></Card><Card><h4 className="text-lg font-bold text-white mb-4">SAVED STRATS</h4><div className="space-y-2 max-h-40 overflow-y-auto custom-scrollbar">{savedStrats.length === 0 && <p className="text-neutral-500 italic text-sm">No saved strats.</p>}{savedStrats.map((s, i) => <div key={s.id} onClick={() => setViewingStrat(s.image)} className="flex justify-between items-center bg-black/50 p-3 rounded-lg border border-neutral-800 hover:border-red-500 cursor-pointer group"><span className="text-xs text-white font-mono">Strat #{savedStrats.length - i} - {new Date(s.date).toLocaleDateString()}</span><button onClick={(e) => { e.stopPropagation(); deleteStrat(s.id) }} className="text-neutral-600 hover:text-red-500 font-bold">DEL</button></div>)}</div></Card></div>
         </div>
     );
 }
@@ -431,7 +440,6 @@ function MatchHistory() {
     );
 }
 
-// ... (Other components remain identical to v4.2 but fully functional in v5.0 context)
 function AdminPanel() {
     const [applications, setApplications] = useState([]);
     useEffect(() => { const unsub = onSnapshot(collection(db, 'applications'), (snap) => { const apps = []; snap.forEach(doc => apps.push({ id: doc.id, ...doc.data() })); setApplications(apps); }); return () => unsub(); }, []);
@@ -507,7 +515,9 @@ function PartnerDirectory() {
     const [partners, setPartners] = useState([]); const [newPartner, setNewPartner] = useState({ name: '', contact: '', notes: '' });
     useEffect(() => { const unsub = onSnapshot(collection(db, 'partners'), (s) => { const p = []; s.forEach(d => p.push({ id: d.id, ...d.data() })); setPartners(p); }); return unsub; }, []);
     const add = async () => { await addDoc(collection(db, 'partners'), newPartner); setNewPartner({ name: '', contact: '', notes: '' }); };
-    return (<Card className="h-full"><h3 className="text-2xl font-black text-white mb-6">PARTNERS</h3><div className="mb-6 space-y-2"><Input placeholder="Team Name" value={newPartner.name} onChange={e => setNewPartner({ ...newPartner, name: e.target.value })} /><div className="flex gap-2"><Input placeholder="Contact" value={newPartner.contact} onChange={e => setNewPartner({ ...newPartner, contact: e.target.value })} /><Input placeholder="Notes" value={newPartner.notes} onChange={e => setNewPartner({ ...newPartner, notes: e.target.value })} /></div><ButtonPrimary onClick={add} className="w-full text-xs py-2">Add</ButtonPrimary></div><div className="space-y-2 h-96 overflow-y-auto custom-scrollbar">{partners.map(p => <div key={p.id} className="p-4 bg-black border border-neutral-800 rounded-xl flex justify-between"><div><div className="font-bold text-white">{p.name}</div><div className="text-xs text-red-500">{p.contact}</div></div><button onClick={() => deleteDoc(doc(db, 'partners', p.id))} className="text-neutral-600 hover:text-red-500">×</button></div>)}</div></Card>);
+    return (
+        <Card className="h-full"><h3 className="text-2xl font-black text-white mb-6">PARTNERS</h3><div className="mb-6 space-y-2"><Input placeholder="Team Name" value={newPartner.name} onChange={e => setNewPartner({ ...newPartner, name: e.target.value })} /><div className="flex gap-2"><Input placeholder="Contact" value={newPartner.contact} onChange={e => setNewPartner({ ...newPartner, contact: e.target.value })} /><Input placeholder="Notes" value={newPartner.notes} onChange={e => setNewPartner({ ...newPartner, notes: e.target.value })} /></div><ButtonPrimary onClick={add} className="w-full text-xs py-2">Add</ButtonPrimary></div><div className="space-y-2 h-96 overflow-y-auto custom-scrollbar">{partners.map(p => <div key={p.id} className="p-4 bg-black border border-neutral-800 rounded-xl flex justify-between"><div><div className="font-bold text-white">{p.name}</div><div className="text-xs text-red-500">{p.contact}</div></div><button onClick={() => deleteDoc(doc(db, 'partners', p.id))} className="text-neutral-600 hover:text-red-500">×</button></div>)}</div></Card>
+    );
 }
 
 function ScrimScheduler({ onSchedule, userTimezone }) {
@@ -559,13 +569,13 @@ export default function App() {
                     <div className="lg:col-span-4 space-y-8">
                         <CaptainsMessage />
                         <LeaveLogger members={dynamicMembers} />
-                        <Card className="border-red-900/20"><div className="absolute top-0 left-0 w-1 h-full bg-red-600/50"></div><h2 className="text-xl font-bold text-white mb-6 uppercase tracking-wide">Set Availability</h2><div className="space-y-4"><div><label className="text-[10px] font-black text-red-500 uppercase mb-1 block">Day</label><Select value={day} onChange={e => setDay(e.target.value)}>{DAYS.map(d => <option key={d} value={d}>{d}</option>)}</Select></div><div className="grid grid-cols-2 gap-3"><div><label className="text-[10px] font-black text-red-500 uppercase mb-1 block">Start</label><Input type="time" value={start} onChange={e => setStart(e.target.value)} className="[color-scheme:dark]" /></div><div><label className="text-[10px] font-black text-red-500 uppercase mb-1 block">End</label><Input type="time" value={end} onChange={e => setEnd(e.target.value)} className="[color-scheme:dark]" /></div></div><div><label className="text-[10px] font-black text-red-500 uppercase mb-1 block">Pref. Role</label><div className="flex gap-2 overflow-x-auto pb-2 scrollbar-hide">{ROLES.map(r => (<button key={r} onClick={() => setRole(r)} className={`px-3 py-2 rounded-lg text-xs font-bold border transition-all whitespace-nowrap flex items-center gap-2 ${role === r ? 'bg-red-600 text-white border-red-500' : 'bg-black border-neutral-800 text-neutral-500 hover:text-white'}`}>{RoleIcons[r]}{r}</button>))}</div></div><div className="pt-2 flex gap-2"><ButtonPrimary onClick={saveAvail} disabled={saveStatus !== 'idle'} className="flex-1">{saveStatus === 'idle' ? 'Save Slot' : 'Saved!'}</ButtonPrimary><ButtonSecondary onClick={() => openModal('Clear Day', `Clear all for ${day}?`, clearDay)}>Clear</ButtonSecondary></div></div></Card>
+                        <Card className="border-red-900/20"><div className="absolute top-0 left-0 w-1 h-full bg-red-600/50"></div><h2 className="text-xl font-bold text-white mb-6 uppercase tracking-wide">Set Availability</h2><div className="space-y-4"><div><label className="text-[10px] font-black text-red-500 uppercase mb-1 block">Day</label><Select value={day} onChange={e => setDay(e.target.value)}>{DAYS.map(d => <option key={d} value={d}>{d}</option>)}</Select></div><div className="grid grid-cols-2 gap-3"><div><label className="text-[10px] font-black text-red-500 uppercase mb-1 block">Start</label><Input type="time" value={start} onChange={e => setStart(e.target.value)} className="[color-scheme:dark]" /></div><div><label className="text-[10px] font-black text-red-500 uppercase mb-1 block">End</label><Input type="time" value={end} onChange={e => setEnd(e.target.value)} className="[color-scheme:dark]" /></div></div><div><label className="text-[10px] font-black text-red-500 uppercase mb-1 block">Pref. Role</label><div className="flex gap-2 overflow-x-auto pb-2 scrollbar-hide">{ROLES.map(r => (<button key={r} onClick={() => setRole(r)} className={`px-3 py-2 rounded-lg text-xs font-bold border transition-all whitespace-nowrap flex items-center gap-2 ${role === r ? 'bg-red-600 text-white border-red-500' : 'bg-black border-neutral-800 text-neutral-500 hover:text-white'}`}>{RoleIcons[r] || RoleIcons.Unknown}{r}</button>))}</div></div><div className="pt-2 flex gap-2"><ButtonPrimary onClick={saveAvail} disabled={saveStatus !== 'idle'} className="flex-1">{saveStatus === 'idle' ? 'Save Slot' : 'Saved!'}</ButtonPrimary><ButtonSecondary onClick={() => openModal('Clear Day', `Clear all for ${day}?`, clearDay)}>Clear</ButtonSecondary></div></div></Card>
                         <Card className="border-red-900/20"><div className="absolute top-0 left-0 w-1 h-full bg-red-600/50"></div><h2 className="text-xl font-bold text-white mb-6 uppercase tracking-wide">Event Operations</h2><ScrimScheduler onSchedule={schedEvent} userTimezone={userTimezone} /></Card>
                     </div>
                     <div className="lg:col-span-8 space-y-8">
                         <div className="grid grid-cols-1 xl:grid-cols-2 gap-8"><Card><h2 className="text-lg font-bold text-white mb-4 flex justify-between items-center uppercase tracking-wide"><span>Upcoming Events</span><span className="text-[10px] bg-red-900/30 text-red-400 border border-red-900/50 px-2 py-1 rounded font-bold">{events.length} ACTIVE</span></h2><div className="space-y-3 max-h-64 overflow-y-auto pr-2 scrollbar-thin scrollbar-thumb-neutral-700">{events.map(ev => (<div key={ev.id} className="p-3 bg-black/40 rounded-xl border border-neutral-800 flex justify-between items-center group hover:border-red-900/50 transition-colors"><div><div className="font-bold text-white text-sm group-hover:text-red-400 transition-colors">{ev.type} <span className="text-neutral-500">vs</span> {ev.opponent || 'TBD'}</div><div className="text-xs text-neutral-400 mt-1">{ev.date} @ <span className="text-white font-mono">{ev.time}</span></div></div><button onClick={() => openModal('Delete Event', 'Remove?', () => deleteDoc(doc(db, 'events', ev.id)))} className="text-neutral-600 hover:text-red-500">×</button></div>))}</div></Card><Card><h2 className="text-lg font-bold text-white mb-4 uppercase tracking-wide">Availability Heatmap</h2><AvailabilityHeatmap availabilities={availabilities} members={dynamicMembers} /></Card></div>
                         <PerformanceWidget events={events} />
-                        <Card><h2 className="text-xl font-bold text-white mb-6 uppercase tracking-wide">Detailed Timeline <span className="text-neutral-500 text-sm normal-case">({userTimezone})</span></h2><div className="overflow-x-auto scrollbar-thin scrollbar-thumb-neutral-700"><table className="w-full text-left border-collapse min-w-[600px]"><thead><tr className="border-b border-neutral-800"><th className="p-3 text-xs font-bold text-neutral-500 uppercase tracking-wider w-32">Team Member</th>{SHORT_DAYS.map(day => (<th key={day} className="p-3 text-xs font-bold text-red-600 uppercase tracking-wider text-center border-l border-neutral-800">{day}</th>))}</tr></thead><tbody className="divide-y divide-neutral-800/50">{dynamicMembers.map(member => (<tr key={member} className="hover:bg-neutral-800/30 transition-colors group"><td className="p-4 font-bold text-white text-sm flex items-center gap-2"><div className="w-2 h-2 rounded-full bg-red-500 shadow-red-500/50 shadow-sm"></div>{member}</td>{DAYS.map((day) => { const slots = (displayAvail[member] || []).filter(s => s.day === day); return (<td key={day} className="p-2 align-middle border-l border-neutral-800/50"><div className="flex flex-col gap-1 items-center justify-center">{slots.length > 0 ? slots.map((s, i) => (<div key={i} className="bg-gradient-to-br from-red-600 to-red-700 text-white text-[10px] font-bold px-2 py-1 rounded w-full text-center shadow-md whitespace-nowrap flex items-center justify-center gap-1">{s.start}-{s.end}{RoleIcons[s.role]}</div>)) : <div className="h-1 w-4 bg-neutral-800 rounded-full"></div>}</div></td>); })}</tr>))}</tbody></table></div></Card>
+                        <Card><h2 className="text-xl font-bold text-white mb-6 uppercase tracking-wide">Detailed Timeline <span className="text-neutral-500 text-sm normal-case">({userTimezone})</span></h2><div className="overflow-x-auto scrollbar-thin scrollbar-thumb-neutral-700"><table className="w-full text-left border-collapse min-w-[600px]"><thead><tr className="border-b border-neutral-800"><th className="p-3 text-xs font-bold text-neutral-500 uppercase tracking-wider w-32">Team Member</th>{SHORT_DAYS.map(day => (<th key={day} className="p-3 text-xs font-bold text-red-600 uppercase tracking-wider text-center border-l border-neutral-800">{day}</th>))}</tr></thead><tbody className="divide-y divide-neutral-800/50">{dynamicMembers.map(member => (<tr key={member} className="hover:bg-neutral-800/30 transition-colors group"><td className="p-4 font-bold text-white text-sm flex items-center gap-2"><div className="w-2 h-2 rounded-full bg-red-500 shadow-red-500/50 shadow-sm"></div>{member}</td>{DAYS.map((day) => { const slots = (displayAvail[member] || []).filter(s => s.day === day); return (<td key={day} className="p-2 align-middle border-l border-neutral-800/50"><div className="flex flex-col gap-1 items-center justify-center">{slots.length > 0 ? slots.map((s, i) => (<div key={i} className="bg-gradient-to-br from-red-600 to-red-700 text-white text-[10px] font-bold px-2 py-1 rounded w-full text-center shadow-md whitespace-nowrap flex items-center justify-center gap-1">{s.start}-{s.end}{RoleIcons[s.role] || RoleIcons.Unknown}</div>)) : <div className="h-1 w-4 bg-neutral-800 rounded-full"></div>}</div></td>); })}</tr>))}</tbody></table></div></Card>
                     </div>
                 </div>}
                 {activeTab === 'comps' && <div className="animate-fade-in-up h-full"><TeamComps members={dynamicMembers} /></div>}
