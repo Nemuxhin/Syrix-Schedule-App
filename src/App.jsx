@@ -296,6 +296,7 @@ function TeamComps({ members }) {
     );
 }
 
+// --- UPDATED STRATBOOK (Square Ratio - No Deformation) ---
 function StratBook() {
     const [selectedMap, setSelectedMap] = useState(MAPS[0]);
     const canvasRef = useRef(null);
@@ -358,6 +359,7 @@ function StratBook() {
         e.preventDefault();
         if (!containerRef.current) return;
         const rect = containerRef.current.getBoundingClientRect();
+        // FIX: Coordinate math relies on the container being the same shape as the map
         const x = ((e.clientX - rect.left) / rect.width) * 100;
         const y = ((e.clientY - rect.top) / rect.height) * 100;
 
@@ -372,9 +374,12 @@ function StratBook() {
         }
     };
 
+    // --- EXPORT LOGIC (SQUARE) ---
     const saveStrat = async () => {
         const tempCanvas = document.createElement('canvas');
-        tempCanvas.width = 1280; tempCanvas.height = 720;
+        // FIX: Changed resolution to 1024x1024 (Square) to match map shape
+        tempCanvas.width = 1024;
+        tempCanvas.height = 1024;
         const ctx = tempCanvas.getContext('2d');
 
         // 1. Draw Map
@@ -383,7 +388,8 @@ function StratBook() {
             img.src = mapImages[selectedMap];
             img.crossOrigin = "anonymous";
             await new Promise((resolve) => { img.onload = resolve; img.onerror = resolve; img.src = mapImages[selectedMap]; });
-            ctx.drawImage(img, 0, 0, 1280, 720);
+            // Draw square
+            ctx.drawImage(img, 0, 0, 1024, 1024);
         }
 
         // 2. Draw Drawings
@@ -391,8 +397,8 @@ function StratBook() {
 
         // 3. Draw Icons (With Circular Clipping for Agents)
         for (const icon of mapIcons) {
-            const px = (icon.x / 100) * 1280;
-            const py = (icon.y / 100) * 720;
+            const px = (icon.x / 100) * 1024;
+            const py = (icon.y / 100) * 1024;
 
             if (icon.type === 'agent' && agentImages[icon.name]) {
                 const img = new Image();
@@ -454,7 +460,6 @@ function StratBook() {
 
     return (
         <div className="h-full flex flex-col gap-6">
-            {/* FIX: Height set to 75vh to prevent overflowing on laptops */}
             <div className="flex gap-4 h-[75vh]">
                 {/* SIDEBAR */}
                 <Card className="w-24 flex flex-col gap-4 overflow-y-auto custom-scrollbar !p-3">
@@ -481,7 +486,6 @@ function StratBook() {
                 </Card>
 
                 {/* MAIN BOARD */}
-                {/* FIX: Removed padding !p-2 to maximize map size */}
                 <Card className="flex-1 flex flex-col relative items-center justify-center bg-black/80 !p-2">
                     <div className="w-full flex justify-between items-center mb-2 px-4 pt-2">
                         <h3 className="text-2xl font-black text-white">STRATBOOK {viewingStrat && <span className="text-red-500 text-sm ml-2">(VIEWING)</span>}</h3>
@@ -489,10 +493,10 @@ function StratBook() {
                     </div>
                     <div className="w-full flex overflow-x-auto gap-2 pb-4 mb-2 px-4 custom-scrollbar">{MAPS.map(m => <button key={m} onClick={() => { setSelectedMap(m); clearCanvas(); setViewingStrat(null); }} className={`px-3 py-1 rounded-full text-xs font-bold ${selectedMap === m ? 'bg-red-600 text-white' : 'bg-black text-neutral-500'}`}>{m}</button>)}</div>
 
-                    {/* FIX: 'aspect-video' forces 16:9 ratio. 'object-fill' forces map to fill that ratio. */}
-                    <div ref={containerRef} className="relative w-full aspect-video bg-neutral-900 rounded-xl overflow-hidden border border-neutral-800 shadow-2xl" onDragOver={e => e.preventDefault()} onDrop={handleDrop}>
-                        {/* FIX: object-fill ensures 100% of the map is visible inside the 16:9 box, preventing cropping. */}
-                        {mapImages[selectedMap] && <img src={mapImages[selectedMap]} alt="Map" className="absolute inset-0 w-full h-full object-fill opacity-90 pointer-events-none" />}
+                    {/* FIX: 'aspect-square' forces 1:1 ratio matching Valorant maps. 'h-full' keeps it within view. */}
+                    <div ref={containerRef} className="relative h-full aspect-square bg-neutral-900 rounded-xl overflow-hidden border border-neutral-800 shadow-2xl mx-auto" onDragOver={e => e.preventDefault()} onDrop={handleDrop}>
+                        {/* FIX: object-cover on a square container means 100% visibility, no stretch. */}
+                        {mapImages[selectedMap] && <img src={mapImages[selectedMap]} alt="Map" className="absolute inset-0 w-full h-full object-cover pointer-events-none" />}
                         {!viewingStrat && mapIcons.map((icon, i) => (
                             <div key={icon.id} className="absolute cursor-move hover:scale-110 transition-transform z-20" style={{ left: `${icon.x}%`, top: `${icon.y}%`, transform: 'translate(-50%, -50%)' }} draggable onDragStart={(e) => { e.stopPropagation(); setMovingIcon(i); }} onDragEnd={() => setMovingIcon(null)} onDoubleClick={(e) => { e.stopPropagation(); const u = [...mapIcons]; u.splice(i, 1); setMapIcons(u); }}>
                                 {icon.type === 'agent' ?
@@ -507,10 +511,11 @@ function StratBook() {
                                 }
                             </div>
                         ))}
+                        {/* FIX: Canvas resolution matches square aspect ratio */}
                         <canvas
                             ref={canvasRef}
-                            width={1280}
-                            height={720}
+                            width={1024}
+                            height={1024}
                             className={`absolute inset-0 w-full h-full z-10 touch-none ${viewingStrat ? 'hidden' : 'cursor-crosshair'}`}
                             onMouseDown={startDraw}
                             onMouseMove={draw}
@@ -528,7 +533,6 @@ function StratBook() {
         </div>
     );
 }
-
 function MatchHistory() {
     const [matches, setMatches] = useState([]); const [isAdding, setIsAdding] = useState(false); const [expandedId, setExpandedId] = useState(null); const [editingId, setEditingId] = useState(null); const [editForm, setEditForm] = useState({}); const [newMatch, setNewMatch] = useState({ opponent: '', date: '', myScore: '', enemyScore: '', atkScore: '', defScore: '', map: MAPS[0], vod: '' });
     useEffect(() => { const unsub = onSnapshot(collection(db, 'events'), (snap) => { const evs = []; snap.forEach(doc => evs.push({ id: doc.id, ...doc.data() })); setMatches(evs.filter(e => e.result).sort((a, b) => new Date(b.date) - new Date(a.date))); }); return () => unsub(); }, []);
