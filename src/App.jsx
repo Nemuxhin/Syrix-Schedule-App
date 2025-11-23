@@ -1,14 +1,13 @@
 ﻿/*
-Syrix Team Availability - v7.4 (TIMELINE TEXT ROLES)
-- UI: "Detailed Timeline" now displays role abbreviations (DUEL, FLX) instead of icons.
-- UI: "Set Availability" uses matching text abbreviations.
-- CONFIG: Admin UIDs preserved.
-- CORE: All previous fixes included.
+Syrix Team Availability - v8.0 (PLAYBOOK ADDED)
+- FEATURE: Added "Playbook" tab for text-based protocols (Attack/Defense per map).
+- CORE: Retained all previous features (Square Stratbook, Toasts, Admin UIDs).
+- UI: Fully integrated into the Red/Black Glassmorphism theme.
 */
 
 import React, { useState, useEffect, useMemo, useRef, createContext, useContext } from 'react';
 import { initializeApp } from 'firebase/app';
-import { getFirestore, collection, onSnapshot, doc, setDoc, deleteDoc, addDoc, updateDoc, query, where } from 'firebase/firestore';
+import { getFirestore, collection, onSnapshot, doc, setDoc, deleteDoc, addDoc, updateDoc, query, where, getDoc } from 'firebase/firestore';
 import { getAuth, onAuthStateChanged, signInWithPopup, signOut, OAuthProvider } from 'firebase/auth';
 
 // --- Firebase Configuration ---
@@ -289,6 +288,78 @@ function NextMatchCountdown({ events }) {
         <div className="bg-gradient-to-r from-black via-neutral-950 to-black p-6 rounded-3xl border border-red-900/40 shadow-2xl shadow-red-900/20 mb-8 flex flex-col md:flex-row justify-between items-center gap-6 relative overflow-hidden group">
             <div className="z-10 text-center md:text-left"><div className="text-xs text-red-500 font-black uppercase tracking-[0.2em] mb-2">Next Match vs {nextEvent.opponent}</div><div className="text-3xl md:text-4xl font-black text-white italic tracking-tighter">{nextEvent.date} @ {nextEvent.time}</div><div className="text-neutral-500 text-sm font-mono mt-1 uppercase tracking-widest">Type: {nextEvent.type}</div></div>
             <div className="z-10"><div className="text-5xl md:text-7xl font-black text-transparent bg-clip-text bg-gradient-to-b from-white to-neutral-500 font-mono tracking-tighter tabular-nums drop-shadow-sm">{timeLeft}</div></div>
+        </div>
+    );
+}
+
+// --- NEW: Playbook Component ---
+function Playbook() {
+    const [selectedMap, setSelectedMap] = useState(MAPS[0]);
+    const [side, setSide] = useState('Attack');
+    const [content, setContent] = useState("");
+    const [loading, setLoading] = useState(false);
+    const addToast = useToast();
+
+    useEffect(() => {
+        const fetchNotes = async () => {
+            setLoading(true);
+            const docRef = doc(db, 'playbooks', `${selectedMap}_${side}`);
+            const snap = await getDoc(docRef);
+            if (snap.exists()) {
+                setContent(snap.data().text);
+            } else {
+                setContent("");
+            }
+            setLoading(false);
+        };
+        fetchNotes();
+    }, [selectedMap, side]);
+
+    const handleSave = async () => {
+        try {
+            await setDoc(doc(db, 'playbooks', `${selectedMap}_${side}`), {
+                text: content,
+                updatedAt: new Date().toISOString()
+            });
+            addToast(`${selectedMap} ${side} Protocols Saved!`);
+        } catch (e) {
+            addToast("Error saving protocols", "error");
+        }
+    };
+
+    return (
+        <div className="h-full flex flex-col gap-6">
+            <div className="flex justify-between items-center">
+                <h3 className="text-3xl font-black text-white italic tracking-tighter">
+                    <span className="text-red-600">/</span> PROTOCOLS
+                </h3>
+                <div className="flex bg-black border border-neutral-800 rounded-lg p-1">
+                    <button onClick={() => setSide('Attack')} className={`px-4 py-1 rounded text-xs font-bold uppercase transition-all ${side === 'Attack' ? 'bg-red-600 text-white shadow-lg' : 'text-neutral-500 hover:text-white'}`}>Attack</button>
+                    <button onClick={() => setSide('Defense')} className={`px-4 py-1 rounded text-xs font-bold uppercase transition-all ${side === 'Defense' ? 'bg-blue-600 text-white shadow-lg' : 'text-neutral-500 hover:text-white'}`}>Defense</button>
+                </div>
+            </div>
+
+            <div className="flex gap-2 overflow-x-auto pb-2 custom-scrollbar">
+                {MAPS.map(m => (
+                    <button key={m} onClick={() => setSelectedMap(m)} className={`px-4 py-2 rounded-full text-xs font-bold uppercase tracking-widest transition-all whitespace-nowrap ${selectedMap === m ? 'bg-white text-black' : 'bg-black border border-neutral-800 text-neutral-500 hover:text-white'}`}>
+                        {m}
+                    </button>
+                ))}
+            </div>
+
+            <div className="flex-1 bg-neutral-900/80 border border-white/10 rounded-3xl p-1 relative overflow-hidden shadow-2xl flex flex-col">
+                <div className={`absolute top-0 left-0 w-full h-1 z-10 ${side === 'Attack' ? 'bg-red-600' : 'bg-blue-600'}`}></div>
+                {loading && <div className="absolute inset-0 bg-black/50 z-20 flex items-center justify-center text-xs font-bold text-white animate-pulse">LOADING PROTOCOLS...</div>}
+                <textarea
+                    value={content}
+                    onChange={(e) => setContent(e.target.value)}
+                    className="flex-1 w-full h-full bg-transparent p-6 text-sm md:text-base text-neutral-300 font-mono focus:outline-none resize-none custom-scrollbar placeholder-neutral-700"
+                    placeholder={`Write your ${selectedMap} ${side} protocols here...\n\nExamples:\n- Default setup: Omen smokes tree, Sova darts main.\n- Anti-Eco: Play retake A, hold passive angles.\n- Ult Economy: If we have KJ ult, rush B.`}
+                />
+                <div className="p-4 border-t border-white/5 bg-black/40 flex justify-end">
+                    <ButtonPrimary onClick={handleSave} className="text-xs py-2 px-6">Save {side} Notes</ButtonPrimary>
+                </div>
+            </div>
         </div>
     );
 }
@@ -713,7 +784,7 @@ function SyrixDashboard() {
             <GlobalStyles />
             <BackgroundFlare />
             <header className="flex-none flex justify-between items-center px-8 py-4 border-b border-white/10 bg-black/40 backdrop-blur-md z-40">
-                <div><h1 className="text-3xl font-black tracking-tighter text-white drop-shadow-lg">SYRIX <span className="text-red-600">HUB</span></h1><div className="flex gap-6 mt-2 overflow-x-auto pb-2 scrollbar-hide"><NavBtn id="dashboard" label="Dashboard" /><NavBtn id="comps" label="Comps" /><NavBtn id="matches" label="Matches" /><NavBtn id="strats" label="Stratbook" /><NavBtn id="roster" label="Roster" /><NavBtn id="partners" label="Partners" /><NavBtn id="mapveto" label="Map Veto" />{ADMIN_UIDS.includes(currentUser.uid) && <NavBtn id="admin" label="Admin" />}</div></div>
+                <div><h1 className="text-3xl font-black tracking-tighter text-white drop-shadow-lg">SYRIX <span className="text-red-600">HUB</span></h1><div className="flex gap-6 mt-2 overflow-x-auto pb-2 scrollbar-hide"><NavBtn id="dashboard" label="Dashboard" /><NavBtn id="playbook" label="Playbook" /><NavBtn id="comps" label="Comps" /><NavBtn id="matches" label="Matches" /><NavBtn id="strats" label="Stratbook" /><NavBtn id="roster" label="Roster" /><NavBtn id="partners" label="Partners" /><NavBtn id="mapveto" label="Map Veto" />{ADMIN_UIDS.includes(currentUser.uid) && <NavBtn id="admin" label="Admin" />}</div></div>
                 <div className="flex items-center gap-4"><div className="text-right"><div className="text-sm font-bold text-white">{currentUser.displayName}</div><button onClick={handleSignOut} className="text-[10px] text-red-500 font-bold uppercase">Log Out</button></div><select value={userTimezone} onChange={e => { setUserTimezone(e.target.value); localStorage.setItem('timezone', e.target.value) }} className="bg-black/50 border border-neutral-800 text-xs rounded p-2 text-neutral-400 backdrop-blur-sm">{timezones.map(t => <option key={t} value={t}>{t}</option>)}</select></div>
             </header>
             <main className="flex-1 overflow-y-auto p-6 scrollbar-thin scrollbar-thumb-red-900/50 scrollbar-track-black/20 relative z-10"><div className="max-w-[1920px] mx-auto">
@@ -730,6 +801,7 @@ function SyrixDashboard() {
                         <Card><h2 className="text-xl font-bold text-white mb-6 uppercase tracking-wide">Detailed Timeline <span className="text-neutral-500 text-sm normal-case">({userTimezone})</span></h2><div className="overflow-x-auto scrollbar-thin scrollbar-thumb-neutral-700"><table className="w-full text-left border-collapse min-w-[600px]"><thead><tr className="border-b border-neutral-800"><th className="p-3 text-xs font-bold text-neutral-500 uppercase tracking-wider w-32">Team Member</th>{SHORT_DAYS.map(day => (<th key={day} className="p-3 text-xs font-bold text-red-600 uppercase tracking-wider text-center border-l border-neutral-800">{day}</th>))}</tr></thead><tbody className="divide-y divide-neutral-800/50">{dynamicMembers.map(member => (<tr key={member} className="hover:bg-neutral-800/30 transition-colors group"><td className="p-4 font-bold text-white text-sm flex items-center gap-2"><div className="w-2 h-2 rounded-full bg-red-500 shadow-red-500/50 shadow-sm"></div>{member}</td>{DAYS.map((day) => { const slots = (displayAvail[member] || []).filter(s => s.day === day); return (<td key={day} className="p-2 align-middle border-l border-neutral-800/50"><div className="flex flex-col gap-1 items-center justify-center">{slots.length > 0 ? slots.map((s, i) => (<div key={i} className="bg-gradient-to-br from-red-600 to-red-700 text-white text-[10px] font-bold px-2 py-1 rounded w-full text-center shadow-md whitespace-nowrap flex items-center justify-center gap-1">{s.start}-{s.end}<span className="opacity-75 ml-1 text-[9px] border border-white/20 px-1 rounded bg-black/20">{ROLE_ABBREVIATIONS[s.role] || s.role}</span></div>)) : <div className="h-1 w-4 bg-neutral-800 rounded-full"></div>}</div></td>); })}</tr>))}</tbody></table></div></Card>
                     </div>
                 </div>}
+                {activeTab === 'playbook' && <div className="animate-fade-in h-[80vh]"><Playbook /></div>}
                 {activeTab === 'comps' && <div className="animate-fade-in h-full"><TeamComps members={dynamicMembers} /></div>}
                 {activeTab === 'matches' && <div className="animate-fade-in"><MatchHistory /></div>}
                 {activeTab === 'strats' && <div className="animate-fade-in h-[85vh]"><StratBook /></div>}
