@@ -1,8 +1,8 @@
 ﻿/*
-Syrix Team Availability - v7.1 (UID SECURITY FIX)
-- SECURITY: Replaced Name-based Admin checks with robust UID checks.
-- CONFIG: Added Nemuxhin's UID: "M9FzRywhRIdUveh5JKUfQgJtlIB3"
-- UI: Retained all Premium features (Toasts, Square Stratbook, 60FPS).
+Syrix Team Availability - v7.3 (TEXT ROLES UPDATE)
+- UI: "Pref. Role" buttons now use abbreviations (DUEL, FLX) instead of icons.
+- CONFIG: Admin UIDs preserved (Nemuxhin + Tawz).
+- CORE: All previous fixes (Square Stratbook, Toasts, Map Fill) included.
 */
 
 import React, { useState, useEffect, useMemo, useRef, createContext, useContext } from 'react';
@@ -28,9 +28,9 @@ const auth = getAuth(app);
 const discordWebhookUrl = "https://discord.com/api/webhooks/1427426922228351042/lqw36ZxOPEnC3qK45b3vnqZvbkaYhzIxqb-uS1tex6CGOvmLYs19OwKZvslOVABdpHnD";
 
 // --- SECURITY CONFIGURATION ---
-// Replaced Name List with UID List for perfect security
 const ADMIN_UIDS = [
-    "M9FzRywhRIdUveh5JKUfQgJtlIB3" // Nemuxhin
+    "M9FzRywhRIdUveh5JKUfQgJtlIB3", // Nemuxhin
+    "SiPLxB20VzVGBZL3rTM42FsgEy52"  // Tawz
 ];
 
 const DAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
@@ -45,6 +45,15 @@ const AGENT_NAMES = [
     "Sova", "Fade", "Skye", "Breach", "KAY/O", "Gekko",
     "Killjoy", "Cypher", "Sage", "Chamber", "Deadlock", "Veto"
 ];
+
+// --- NEW: Role Abbreviations ---
+const ROLE_ABBREVIATIONS = {
+    Flex: "FLX",
+    Duelist: "DUEL",
+    Initiator: "INIT",
+    Controller: "CTRL",
+    Sentinel: "SENT"
+};
 
 // --- TOAST CONTEXT SYSTEM ---
 const ToastContext = createContext();
@@ -660,14 +669,17 @@ function LoginScreen({ signIn }) {
 
 // --- MAIN DASHBOARD LOGIC ---
 function SyrixDashboard() {
-    const [currentUser, setCurrentUser] = useState(null); const [activeTab, setActiveTab] = useState('dashboard'); const [availabilities, setAvailabilities] = useState({}); const [events, setEvents] = useState([]); const [day, setDay] = useState(DAYS[0]); const [start, setStart] = useState('12:00'); const [end, setEnd] = useState('23:30'); const [role, setRole] = useState('Flex'); const [saveStatus, setSaveStatus] = useState('idle'); const [userTimezone, setUserTimezone] = useState(localStorage.getItem('timezone') || Intl.DateTimeFormat().resolvedOptions().timeZone); const [authLoading, setAuthLoading] = useState(true); const [isModalOpen, setIsModalOpen] = useState(false); const [modalContent, setModalContent] = useState({ title: '', children: null }); const [isMember, setIsMember] = useState(false);
+    const [currentUser, setCurrentUser] = useState(null); const [activeTab, setActiveTab] = useState(() => localStorage.getItem('syrix_active_tab') || 'dashboard'); const [availabilities, setAvailabilities] = useState({}); const [events, setEvents] = useState([]); const [day, setDay] = useState(DAYS[0]); const [start, setStart] = useState('12:00'); const [end, setEnd] = useState('23:30'); const [role, setRole] = useState('Flex'); const [saveStatus, setSaveStatus] = useState('idle'); const [userTimezone, setUserTimezone] = useState(localStorage.getItem('timezone') || Intl.DateTimeFormat().resolvedOptions().timeZone); const [authLoading, setAuthLoading] = useState(true); const [isModalOpen, setIsModalOpen] = useState(false); const [modalContent, setModalContent] = useState({ title: '', children: null }); const [isMember, setIsMember] = useState(false);
     const addToast = useToast();
 
+    useEffect(() => { localStorage.setItem('syrix_active_tab', activeTab); }, [activeTab]);
     useEffect(() => { return onAuthStateChanged(auth, user => { setCurrentUser(user); setAuthLoading(false); }); }, []);
     const signIn = async () => { try { await signInWithPopup(auth, new OAuthProvider('oidc.discord')); } catch (e) { console.error(e); } };
     const handleSignOut = async () => await signOut(auth);
+
     useEffect(() => { if (!currentUser) return; const unsub1 = onSnapshot(doc(db, 'roster', currentUser.displayName), (s) => setIsMember((s.exists() && s.data().role) || ADMIN_UIDS.includes(currentUser.uid))); const unsub2 = onSnapshot(collection(db, 'availabilities'), (s) => { const d = {}; s.forEach(doc => d[doc.id] = doc.data().slots || []); setAvailabilities(d); }); const unsub3 = onSnapshot(collection(db, 'events'), (s) => { const e = []; s.forEach(d => e.push({ id: d.id, ...d.data() })); setEvents(e.sort((a, b) => new Date(a.date + 'T' + a.time) - new Date(b.date + 'T' + b.time))); }); return () => { unsub1(); unsub2(); unsub3(); }; }, [currentUser]);
     useEffect(() => { document.documentElement.classList.add('dark'); }, []);
+
     const dynamicMembers = useMemo(() => [...new Set(Object.keys(availabilities))].sort(), [availabilities]);
     const displayAvail = useMemo(() => { const c = {}; for (const m in availabilities) { c[m] = []; availabilities[m].forEach(s => { const ls = convertFromGMT(s.day, s.start, userTimezone); const le = convertFromGMT(s.day, s.end, userTimezone); if (ls.day === le.day) { if (timeToMinutes(ls.time) < timeToMinutes(le.time)) c[m].push({ day: ls.day, start: ls.time, end: le.time, role: s.role }); } else { c[m].push({ day: ls.day, start: ls.time, end: '24:00', role: s.role }); if (timeToMinutes(le.time) > 0) c[m].push({ day: le.day, start: '00:00', end: le.time, role: s.role }); } }); } return c; }, [availabilities, userTimezone]);
     const openModal = (t, c, f) => { setModalContent({ title: t, children: c, onConfirm: f }); setIsModalOpen(true); };
@@ -684,7 +696,12 @@ function SyrixDashboard() {
     const schedEvent = async (d) => { await addDoc(collection(db, 'events'), d); try { await fetch(discordWebhookUrl, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ embeds: [{ title: `New Event: ${d.type}`, description: `vs ${d.opponent} on ${d.date} @ ${d.time}` }] }) }); } catch (e) { } addToast('Event Scheduled'); };
     const deleteEvent = async (id) => { await deleteDoc(doc(db, 'events', id)); setIsModalOpen(false); addToast('Event Deleted'); };
 
-    if (authLoading) return <div className="fixed inset-0 bg-black flex items-center justify-center text-red-600 font-black text-2xl animate-pulse">LOADING SYRIX...</div>;
+    if (authLoading) return (
+        <div className="fixed inset-0 bg-black flex flex-col p-6 gap-6 animate-pulse overflow-hidden">
+            <div className="h-16 bg-neutral-900/50 w-full rounded-xl border border-white/5 flex items-center px-8 justify-between"><div className="h-8 w-48 bg-neutral-800 rounded-lg"></div><div className="h-8 w-32 bg-neutral-800 rounded-lg"></div></div>
+            <div className="flex-1 grid grid-cols-12 gap-8"><div className="col-span-4 space-y-6"><div className="h-40 bg-neutral-900/50 rounded-3xl border border-white/5"></div><div className="h-64 bg-neutral-900/50 rounded-3xl border border-white/5"></div></div><div className="col-span-8 space-y-6"><div className="grid grid-cols-2 gap-6"><div className="h-32 bg-neutral-900/50 rounded-3xl border border-white/5"></div><div className="h-32 bg-neutral-900/50 rounded-3xl border border-white/5"></div></div><div className="h-96 bg-neutral-900/50 rounded-3xl border border-white/5"></div></div></div>
+        </div>
+    );
     if (!currentUser) return <LoginScreen signIn={signIn} />;
     if (!isMember) return <div className="fixed inset-0 bg-black p-8 overflow-y-auto"><GlobalStyles /><BackgroundFlare /><div className="relative z-10"><ApplicationForm currentUser={currentUser} /></div></div>;
 
@@ -703,7 +720,7 @@ function SyrixDashboard() {
                     <div className="lg:col-span-4 space-y-8">
                         <CaptainsMessage />
                         <LeaveLogger members={dynamicMembers} />
-                        <Card className="border-red-900/20"><div className="absolute top-0 left-0 w-1 h-full bg-red-600/50"></div><h2 className="text-xl font-bold text-white mb-6 uppercase tracking-wide">Set Availability</h2><div className="space-y-4"><div><label className="text-[10px] font-black text-red-500 uppercase mb-1 block">Day</label><Select value={day} onChange={e => setDay(e.target.value)}>{DAYS.map(d => <option key={d} value={d}>{d}</option>)}</Select></div><div className="grid grid-cols-2 gap-3"><div><label className="text-[10px] font-black text-red-500 uppercase mb-1 block">Start</label><Input type="time" value={start} onChange={e => setStart(e.target.value)} className="[color-scheme:dark]" /></div><div><label className="text-[10px] font-black text-red-500 uppercase mb-1 block">End</label><Input type="time" value={end} onChange={e => setEnd(e.target.value)} className="[color-scheme:dark]" /></div></div><div><label className="text-[10px] font-black text-red-500 uppercase mb-1 block">Pref. Role</label><div className="flex gap-2 overflow-x-auto pb-2 scrollbar-hide">{ROLES.map(r => (<button key={r} onClick={() => setRole(r)} className={`px-3 py-2 rounded-lg text-xs font-bold border transition-all whitespace-nowrap flex items-center gap-2 ${role === r ? 'bg-red-600 text-white border-red-500' : 'bg-black/50 border-neutral-800 text-neutral-500 hover:text-white'}`}>{RoleIcons[r] || RoleIcons.Unknown}{r}</button>))}</div></div><div className="pt-2 flex gap-2"><ButtonPrimary onClick={saveAvail} disabled={saveStatus !== 'idle'} className="flex-1">{saveStatus === 'idle' ? 'Save Slot' : 'Saved!'}</ButtonPrimary><ButtonSecondary onClick={() => openModal('Clear Day', `Clear all for ${day}?`, clearDay)}>Clear</ButtonSecondary></div></div></Card>
+                        <Card className="border-red-900/20"><div className="absolute top-0 left-0 w-1 h-full bg-red-600/50"></div><h2 className="text-xl font-bold text-white mb-6 uppercase tracking-wide">Set Availability</h2><div className="space-y-4"><div><label className="text-[10px] font-black text-red-500 uppercase mb-1 block">Day</label><Select value={day} onChange={e => setDay(e.target.value)}>{DAYS.map(d => <option key={d} value={d}>{d}</option>)}</Select></div><div className="grid grid-cols-2 gap-3"><div><label className="text-[10px] font-black text-red-500 uppercase mb-1 block">Start</label><Input type="time" value={start} onChange={e => setStart(e.target.value)} className="[color-scheme:dark]" /></div><div><label className="text-[10px] font-black text-red-500 uppercase mb-1 block">End</label><Input type="time" value={end} onChange={e => setEnd(e.target.value)} className="[color-scheme:dark]" /></div></div><div><label className="text-[10px] font-black text-red-500 uppercase mb-1 block">Pref. Role</label><div className="flex gap-2 overflow-x-auto pb-2 scrollbar-hide">{ROLES.map(r => (<button key={r} onClick={() => setRole(r)} className={`px-3 py-2 rounded-lg text-xs font-black border transition-all whitespace-nowrap flex items-center justify-center ${role === r ? 'bg-red-600 text-white border-red-500' : 'bg-black/50 border-neutral-800 text-neutral-500 hover:text-white'}`}>{ROLE_ABBREVIATIONS[r] || r}</button>))}</div></div><div className="pt-2 flex gap-2"><ButtonPrimary onClick={saveAvail} disabled={saveStatus !== 'idle'} className="flex-1">{saveStatus === 'idle' ? 'Save Slot' : 'Saved!'}</ButtonPrimary><ButtonSecondary onClick={() => openModal('Clear Day', `Clear all for ${day}?`, clearDay)}>Clear</ButtonSecondary></div></div></Card>
                         <Card className="border-red-900/20"><div className="absolute top-0 left-0 w-1 h-full bg-red-600/50"></div><h2 className="text-xl font-bold text-white mb-6 uppercase tracking-wide">Event Operations</h2><ScrimScheduler onSchedule={schedEvent} userTimezone={userTimezone} /></Card>
                     </div>
                     <div className="lg:col-span-8 space-y-8">
