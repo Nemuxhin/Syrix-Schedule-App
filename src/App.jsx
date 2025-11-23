@@ -1,8 +1,8 @@
 ﻿/*
-Syrix Team Availability - v7.0 (PREMIUM UX EDITION)
-- FEATURE: "Toast" Notification System (Replaces native alerts).
-- FEATURE: Performance Trend Graph (Visualizes Match History).
-- RETAINED: Square StratBook (v6.3 fix) & High Performance CSS.
+Syrix Team Availability - v7.1 (UID SECURITY FIX)
+- SECURITY: Replaced Name-based Admin checks with robust UID checks.
+- CONFIG: Added Nemuxhin's UID: "M9FzRywhRIdUveh5JKUfQgJtlIB3"
+- UI: Retained all Premium features (Toasts, Square Stratbook, 60FPS).
 */
 
 import React, { useState, useEffect, useMemo, useRef, createContext, useContext } from 'react';
@@ -27,7 +27,11 @@ const auth = getAuth(app);
 
 const discordWebhookUrl = "https://discord.com/api/webhooks/1427426922228351042/lqw36ZxOPEnC3qK45b3vnqZvbkaYhzIxqb-uS1tex6CGOvmLYs19OwKZvslOVABdpHnD";
 
-const ADMINS = ["Nemuxhin", "Tawz", "tawz", "nemuxhin"];
+// --- SECURITY CONFIGURATION ---
+// Replaced Name List with UID List for perfect security
+const ADMIN_UIDS = [
+    "M9FzRywhRIdUveh5JKUfQgJtlIB3" // Nemuxhin
+];
 
 const DAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
 const SHORT_DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
@@ -251,7 +255,7 @@ function LeaveLogger({ members }) {
         <Card className="border-red-900/20">
             <h3 className="text-lg font-black text-white mb-4 border-b border-red-900/30 pb-2 uppercase tracking-widest flex items-center gap-2"><span className="text-xl">🏖️</span> Absence Log</h3>
             <div className="space-y-3 mb-4"><div className="grid grid-cols-2 gap-2"><Input type="date" value={newLeave.start} onChange={e => setNewLeave({ ...newLeave, start: e.target.value })} className="[color-scheme:dark]" /><Input type="date" value={newLeave.end} onChange={e => setNewLeave({ ...newLeave, end: e.target.value })} className="[color-scheme:dark]" /></div><Input type="text" placeholder="Reason" value={newLeave.reason} onChange={e => setNewLeave({ ...newLeave, reason: e.target.value })} /><ButtonSecondary onClick={addLeave} className="w-full text-xs py-3">Log Absence</ButtonSecondary></div>
-            <div className="space-y-2 max-h-40 overflow-y-auto pr-2 custom-scrollbar">{leaves.length === 0 && <p className="text-neutral-600 italic text-xs text-center py-2">No upcoming absences.</p>}{leaves.map(l => (<div key={l.id} className="p-3 bg-black/50 border border-neutral-800 rounded-lg flex justify-between items-center text-xs hover:border-red-900/50 transition-colors group"><div><span className="font-bold text-red-500 mr-2">{l.user}</span><span className="text-neutral-400">{l.start} - {l.end}</span><div className="text-neutral-500 italic mt-0.5">{l.reason}</div></div>{(l.user === currentUser?.displayName || ADMINS.includes(currentUser?.displayName)) && (<button onClick={() => deleteLeave(l.id)} className="text-neutral-600 hover:text-red-500 font-bold px-2 opacity-0 group-hover:opacity-100 transition-opacity">✕</button>)}</div>))}</div>
+            <div className="space-y-2 max-h-40 overflow-y-auto pr-2 custom-scrollbar">{leaves.length === 0 && <p className="text-neutral-600 italic text-xs text-center py-2">No upcoming absences.</p>}{leaves.map(l => (<div key={l.id} className="p-3 bg-black/50 border border-neutral-800 rounded-lg flex justify-between items-center text-xs hover:border-red-900/50 transition-colors group"><div><span className="font-bold text-red-500 mr-2">{l.user}</span><span className="text-neutral-400">{l.start} - {l.end}</span><div className="text-neutral-500 italic mt-0.5">{l.reason}</div></div>{(l.user === currentUser?.displayName || ADMIN_UIDS.includes(currentUser?.uid)) && (<button onClick={() => deleteLeave(l.id)} className="text-neutral-600 hover:text-red-500 font-bold px-2 opacity-0 group-hover:opacity-100 transition-opacity">✕</button>)}</div>))}</div>
         </Card>
     );
 }
@@ -662,7 +666,7 @@ function SyrixDashboard() {
     useEffect(() => { return onAuthStateChanged(auth, user => { setCurrentUser(user); setAuthLoading(false); }); }, []);
     const signIn = async () => { try { await signInWithPopup(auth, new OAuthProvider('oidc.discord')); } catch (e) { console.error(e); } };
     const handleSignOut = async () => await signOut(auth);
-    useEffect(() => { if (!currentUser) return; const unsub1 = onSnapshot(doc(db, 'roster', currentUser.displayName), (s) => setIsMember((s.exists() && s.data().role) || ADMINS.includes(currentUser.displayName))); const unsub2 = onSnapshot(collection(db, 'availabilities'), (s) => { const d = {}; s.forEach(doc => d[doc.id] = doc.data().slots || []); setAvailabilities(d); }); const unsub3 = onSnapshot(collection(db, 'events'), (s) => { const e = []; s.forEach(d => e.push({ id: d.id, ...d.data() })); setEvents(e.sort((a, b) => new Date(a.date + 'T' + a.time) - new Date(b.date + 'T' + b.time))); }); return () => { unsub1(); unsub2(); unsub3(); }; }, [currentUser]);
+    useEffect(() => { if (!currentUser) return; const unsub1 = onSnapshot(doc(db, 'roster', currentUser.displayName), (s) => setIsMember((s.exists() && s.data().role) || ADMIN_UIDS.includes(currentUser.uid))); const unsub2 = onSnapshot(collection(db, 'availabilities'), (s) => { const d = {}; s.forEach(doc => d[doc.id] = doc.data().slots || []); setAvailabilities(d); }); const unsub3 = onSnapshot(collection(db, 'events'), (s) => { const e = []; s.forEach(d => e.push({ id: d.id, ...d.data() })); setEvents(e.sort((a, b) => new Date(a.date + 'T' + a.time) - new Date(b.date + 'T' + b.time))); }); return () => { unsub1(); unsub2(); unsub3(); }; }, [currentUser]);
     useEffect(() => { document.documentElement.classList.add('dark'); }, []);
     const dynamicMembers = useMemo(() => [...new Set(Object.keys(availabilities))].sort(), [availabilities]);
     const displayAvail = useMemo(() => { const c = {}; for (const m in availabilities) { c[m] = []; availabilities[m].forEach(s => { const ls = convertFromGMT(s.day, s.start, userTimezone); const le = convertFromGMT(s.day, s.end, userTimezone); if (ls.day === le.day) { if (timeToMinutes(ls.time) < timeToMinutes(le.time)) c[m].push({ day: ls.day, start: ls.time, end: le.time, role: s.role }); } else { c[m].push({ day: ls.day, start: ls.time, end: '24:00', role: s.role }); if (timeToMinutes(le.time) > 0) c[m].push({ day: le.day, start: '00:00', end: le.time, role: s.role }); } }); } return c; }, [availabilities, userTimezone]);
@@ -691,7 +695,7 @@ function SyrixDashboard() {
             <GlobalStyles />
             <BackgroundFlare />
             <header className="flex-none flex justify-between items-center px-8 py-4 border-b border-white/10 bg-black/40 backdrop-blur-md z-40">
-                <div><h1 className="text-3xl font-black tracking-tighter text-white drop-shadow-lg">SYRIX <span className="text-red-600">HUB</span></h1><div className="flex gap-6 mt-2 overflow-x-auto pb-2 scrollbar-hide"><NavBtn id="dashboard" label="Dashboard" /><NavBtn id="comps" label="Comps" /><NavBtn id="matches" label="Matches" /><NavBtn id="strats" label="Stratbook" /><NavBtn id="roster" label="Roster" /><NavBtn id="partners" label="Partners" /><NavBtn id="mapveto" label="Map Veto" />{ADMINS.includes(currentUser.displayName) && <NavBtn id="admin" label="Admin" />}</div></div>
+                <div><h1 className="text-3xl font-black tracking-tighter text-white drop-shadow-lg">SYRIX <span className="text-red-600">HUB</span></h1><div className="flex gap-6 mt-2 overflow-x-auto pb-2 scrollbar-hide"><NavBtn id="dashboard" label="Dashboard" /><NavBtn id="comps" label="Comps" /><NavBtn id="matches" label="Matches" /><NavBtn id="strats" label="Stratbook" /><NavBtn id="roster" label="Roster" /><NavBtn id="partners" label="Partners" /><NavBtn id="mapveto" label="Map Veto" />{ADMIN_UIDS.includes(currentUser.uid) && <NavBtn id="admin" label="Admin" />}</div></div>
                 <div className="flex items-center gap-4"><div className="text-right"><div className="text-sm font-bold text-white">{currentUser.displayName}</div><button onClick={handleSignOut} className="text-[10px] text-red-500 font-bold uppercase">Log Out</button></div><select value={userTimezone} onChange={e => { setUserTimezone(e.target.value); localStorage.setItem('timezone', e.target.value) }} className="bg-black/50 border border-neutral-800 text-xs rounded p-2 text-neutral-400 backdrop-blur-sm">{timezones.map(t => <option key={t} value={t}>{t}</option>)}</select></div>
             </header>
             <main className="flex-1 overflow-y-auto p-6 scrollbar-thin scrollbar-thumb-red-900/50 scrollbar-track-black/20 relative z-10"><div className="max-w-[1920px] mx-auto">
