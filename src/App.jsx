@@ -1,8 +1,9 @@
 ﻿/*
-Syrix Team Availability - v8.0 (PLAYBOOK ADDED)
-- FEATURE: Added "Playbook" tab for text-based protocols (Attack/Defense per map).
-- CORE: Retained all previous features (Square Stratbook, Toasts, Admin UIDs).
-- UI: Fully integrated into the Red/Black Glassmorphism theme.
+Syrix Team Availability - v9.0 (FINAL POLISHED UI)
+- FIX: Login Screen is now perfectly centered on all devices.
+- STYLE: Standardized typography (Headers are consistent).
+- STYLE: Centered Playbook map selectors.
+- STYLE: Refined padding and margins for a "breathable" premium layout.
 */
 
 import React, { useState, useEffect, useMemo, useRef, createContext, useContext } from 'react';
@@ -46,14 +47,7 @@ const AGENT_NAMES = [
     "Killjoy", "Cypher", "Sage", "Chamber", "Deadlock", "Veto"
 ];
 
-// --- Role Abbreviations ---
-const ROLE_ABBREVIATIONS = {
-    Flex: "FLX",
-    Duelist: "DUEL",
-    Initiator: "INIT",
-    Controller: "CTRL",
-    Sentinel: "SENT"
-};
+const ROLE_ABBREVIATIONS = { Flex: "FLX", Duelist: "DUEL", Initiator: "INIT", Controller: "CTRL", Sentinel: "SENT" };
 
 // --- TOAST CONTEXT SYSTEM ---
 const ToastContext = createContext();
@@ -140,22 +134,24 @@ const convertToGMT = (day, time) => {
 const GlobalStyles = () => (
     <style>{`
         .glass-panel {
-            background: rgba(15, 15, 15, 0.9);
-            backdrop-filter: blur(10px);
-            -webkit-backdrop-filter: blur(10px);
-            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
+            background: rgba(15, 15, 15, 0.85);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
             border: 1px solid rgba(255,255,255,0.08);
         }
         .card-shine:hover {
-            border-color: rgba(220, 38, 38, 0.4);
-            background: rgba(20, 20, 20, 0.98);
+            border-color: rgba(220, 38, 38, 0.3);
+            background: rgba(20, 20, 20, 0.95);
+            box-shadow: 0 8px 32px rgba(220, 38, 38, 0.1);
         }
         @keyframes slideIn { from { transform: translateX(100%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
         .animate-slide-in { animation: slideIn 0.3s cubic-bezier(0.2, 0.8, 0.2, 1); }
         @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
         .animate-fade-in { animation: fadeIn 0.4s ease-out forwards; }
+        
         .custom-scrollbar::-webkit-scrollbar { width: 6px; height: 6px; }
-        .custom-scrollbar::-webkit-scrollbar-track { background: rgba(0,0,0,0.3); border-radius: 3px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: rgba(0,0,0,0.2); border-radius: 3px; }
         .custom-scrollbar::-webkit-scrollbar-thumb { background: #333; border-radius: 3px; }
         .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #ef4444; }
     `}</style>
@@ -174,7 +170,7 @@ const BackgroundFlare = () => (
 
 // --- SHARED UI COMPONENTS ---
 const Card = ({ children, className = "" }) => (
-    <div className={`glass-panel rounded-2xl p-6 relative overflow-hidden group card-shine transition-colors duration-200 ${className}`}>
+    <div className={`glass-panel rounded-3xl p-6 relative overflow-hidden group card-shine transition-all duration-300 ${className}`}>
         {children}
     </div>
 );
@@ -292,7 +288,6 @@ function NextMatchCountdown({ events }) {
     );
 }
 
-// --- NEW: Playbook Component ---
 function Playbook() {
     const [selectedMap, setSelectedMap] = useState(MAPS[0]);
     const [side, setSide] = useState('Attack');
@@ -303,14 +298,19 @@ function Playbook() {
     useEffect(() => {
         const fetchNotes = async () => {
             setLoading(true);
-            const docRef = doc(db, 'playbooks', `${selectedMap}_${side}`);
-            const snap = await getDoc(docRef);
-            if (snap.exists()) {
-                setContent(snap.data().text);
-            } else {
-                setContent("");
+            try {
+                const docRef = doc(db, 'playbooks', `${selectedMap}_${side}`);
+                const snap = await getDoc(docRef);
+                if (snap.exists()) {
+                    setContent(snap.data().text);
+                } else {
+                    setContent("");
+                }
+            } catch (error) {
+                console.error("Playbook Error:", error);
+            } finally {
+                setLoading(false);
             }
-            setLoading(false);
         };
         fetchNotes();
     }, [selectedMap, side]);
@@ -329,22 +329,24 @@ function Playbook() {
 
     return (
         <div className="h-full flex flex-col gap-6">
-            <div className="flex justify-between items-center">
+            <div className="flex flex-col md:flex-row justify-between items-center gap-4">
                 <h3 className="text-3xl font-black text-white italic tracking-tighter">
                     <span className="text-red-600">/</span> PROTOCOLS
                 </h3>
-                <div className="flex bg-black border border-neutral-800 rounded-lg p-1">
-                    <button onClick={() => setSide('Attack')} className={`px-4 py-1 rounded text-xs font-bold uppercase transition-all ${side === 'Attack' ? 'bg-red-600 text-white shadow-lg' : 'text-neutral-500 hover:text-white'}`}>Attack</button>
-                    <button onClick={() => setSide('Defense')} className={`px-4 py-1 rounded text-xs font-bold uppercase transition-all ${side === 'Defense' ? 'bg-blue-600 text-white shadow-lg' : 'text-neutral-500 hover:text-white'}`}>Defense</button>
+                <div className="flex bg-black border border-neutral-800 rounded-xl p-1">
+                    <button onClick={() => setSide('Attack')} className={`px-6 py-2 rounded-lg text-xs font-black uppercase transition-all ${side === 'Attack' ? 'bg-red-600 text-white shadow-lg' : 'text-neutral-500 hover:text-white'}`}>Attack</button>
+                    <button onClick={() => setSide('Defense')} className={`px-6 py-2 rounded-lg text-xs font-black uppercase transition-all ${side === 'Defense' ? 'bg-blue-600 text-white shadow-lg' : 'text-neutral-500 hover:text-white'}`}>Defense</button>
                 </div>
             </div>
 
-            <div className="flex gap-2 overflow-x-auto pb-2 custom-scrollbar">
-                {MAPS.map(m => (
-                    <button key={m} onClick={() => setSelectedMap(m)} className={`px-4 py-2 rounded-full text-xs font-bold uppercase tracking-widest transition-all whitespace-nowrap ${selectedMap === m ? 'bg-white text-black' : 'bg-black border border-neutral-800 text-neutral-500 hover:text-white'}`}>
-                        {m}
-                    </button>
-                ))}
+            <div className="flex justify-center w-full">
+                <div className="flex gap-2 overflow-x-auto pb-4 custom-scrollbar max-w-full">
+                    {MAPS.map(m => (
+                        <button key={m} onClick={() => setSelectedMap(m)} className={`px-6 py-2 rounded-full text-xs font-black uppercase tracking-widest transition-all whitespace-nowrap border ${selectedMap === m ? 'bg-white text-black border-white shadow-[0_0_15px_rgba(255,255,255,0.3)]' : 'bg-black border-neutral-800 text-neutral-500 hover:text-white hover:border-neutral-600'}`}>
+                            {m}
+                        </button>
+                    ))}
+                </div>
             </div>
 
             <div className="flex-1 bg-neutral-900/80 border border-white/10 rounded-3xl p-1 relative overflow-hidden shadow-2xl flex flex-col">
@@ -353,11 +355,11 @@ function Playbook() {
                 <textarea
                     value={content}
                     onChange={(e) => setContent(e.target.value)}
-                    className="flex-1 w-full h-full bg-transparent p-6 text-sm md:text-base text-neutral-300 font-mono focus:outline-none resize-none custom-scrollbar placeholder-neutral-700"
+                    className="flex-1 w-full h-full bg-transparent p-8 text-sm md:text-base text-neutral-300 font-mono focus:outline-none resize-none custom-scrollbar placeholder-neutral-700 leading-relaxed"
                     placeholder={`Write your ${selectedMap} ${side} protocols here...\n\nExamples:\n- Default setup: Omen smokes tree, Sova darts main.\n- Anti-Eco: Play retake A, hold passive angles.\n- Ult Economy: If we have KJ ult, rush B.`}
                 />
-                <div className="p-4 border-t border-white/5 bg-black/40 flex justify-end">
-                    <ButtonPrimary onClick={handleSave} className="text-xs py-2 px-6">Save {side} Notes</ButtonPrimary>
+                <div className="p-4 border-t border-white/5 bg-black/40 flex justify-end backdrop-blur-sm">
+                    <ButtonPrimary onClick={handleSave} className="text-xs py-3 px-8">Save {side} Notes</ButtonPrimary>
                 </div>
             </div>
         </div>
@@ -736,7 +738,19 @@ function AvailabilityHeatmap({ availabilities, members }) {
 }
 
 function LoginScreen({ signIn }) {
-    return (<div className="fixed inset-0 bg-black flex items-center justify-center p-4 relative overflow-hidden"><BackgroundFlare /><div className="relative z-10 text-center p-12 rounded-[3rem] border border-white/10 bg-neutral-900/80 backdrop-blur-xl shadow-2xl shadow-red-900/40"><h1 className="text-7xl font-black text-white tracking-tighter drop-shadow-[0_0_30px_rgba(255,255,255,0.5)]">SYRIX</h1><div className="h-1.5 w-32 bg-red-600 mx-auto rounded-full shadow-[0_0_15px_rgba(220,38,38,1)] my-4"></div><button onClick={signIn} className="w-full bg-[#5865F2] hover:bg-[#4752C4] text-white py-4 rounded-2xl font-bold shadow-lg transition-transform hover:scale-105">LOGIN WITH DISCORD</button></div></div>);
+    return (
+        <div className="fixed inset-0 bg-black w-full h-full flex flex-col items-center justify-center relative overflow-hidden">
+            <BackgroundFlare />
+            <div className="relative z-10 bg-neutral-900/80 backdrop-blur-xl border border-white/10 p-12 rounded-[3rem] shadow-2xl shadow-red-900/40 flex flex-col items-center text-center max-w-md w-full mx-4">
+                <h1 className="text-7xl font-black text-white tracking-tighter drop-shadow-[0_0_30px_rgba(255,255,255,0.5)]">SYRIX</h1>
+                <div className="h-1.5 w-32 bg-red-600 rounded-full shadow-[0_0_15px_rgba(220,38,38,1)] my-6"></div>
+                <button onClick={signIn} className="w-full bg-[#5865F2] hover:bg-[#4752C4] text-white py-4 rounded-2xl font-bold shadow-lg transition-transform hover:scale-105 flex items-center justify-center gap-3 text-lg uppercase tracking-wider">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><path d="M20.317 4.37a19.791 19.791 0 0 0-4.885-1.515.074.074 0 0 0-.079.037c-.21.375-.444.864-.608 1.25a18.27 18.27 0 0 0-5.487 0 12.64 12.64 0 0 0-.617-1.25.077.077 0 0 0-.079-.037A19.736 19.736 0 0 0 3.677 4.37a.07.07 0 0 0-.032.027C.533 9.046-.32 13.58.099 18.057a.082.082 0 0 0 .031.057 19.9 19.9 0 0 0 5.993 3.03.078.078 0 0 0 .084-.028 14.09 14.09 0 0 0 1.226-1.994.076.076 0 0 0-.041-.106 13.107 13.107 0 0 1-1.872-.892.077.077 0 0 1-.008-.128 10.2 10.2 0 0 0 .372-.292.074.074 0 0 1 .077-.01c3.928 1.793 8.18 1.793 12.062 0a.074.074 0 0 1 .078.01c.12.098.246.198.373.292a.077.077 0 0 1-.006.127 12.299 12.299 0 0 1-1.873.892.077.077 0 0 0-.041.107c.36.698.772 1.362 1.225 1.993a.076.076 0 0 0 .084.028 19.839 19.839 0 0 0 6.002-3.03.077.077 0 0 0 .032-.054c.5-5.177-.838-9.674-3.549-13.66a.061.061 0 0 0-.031-.03zM8.02 15.33c-1.183 0-2.157-1.085-2.157-2.419 0-1.333.956-2.419 2.157-2.419 1.21 0 2.176 1.096 2.157 2.42 0 1.333-.956 2.418-2.157 2.418zm7.975 0c-1.183 0-2.157-1.085-2.157-2.419 0-1.333.955-2.419 2.157-2.419 1.21 0 2.176 1.096 2.157 2.42 0 1.333-.946 2.418-2.157 2.418z" /></svg>
+                    Login with Discord
+                </button>
+            </div>
+        </div>
+    );
 }
 
 // --- MAIN DASHBOARD LOGIC ---
