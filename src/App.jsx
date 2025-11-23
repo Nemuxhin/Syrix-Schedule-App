@@ -1,8 +1,8 @@
 ﻿/*
-Syrix Team Availability - v6.0 (PREMIUM UI OVERHAUL)
-- THEME: "Onyx & Crimson" - Deep blacks, glowing reds, animated gradients.
-- UI: Added "Grid" textures, cinematic lighting, and smooth hover physics.
-- LOGIC: All v5.1 features (Drag/Drop Stratbook, Analytics) preserved.
+Syrix Team Availability - v6.1 (CRASH FIX)
+- FIXED: Removed Next.js specific <style jsx> tags that were breaking the render.
+- FIXED: Converted animations to standard React CSS injection.
+- VISUALS: All "Onyx & Crimson" premium themes preserved.
 */
 
 import React, { useState, useEffect, useMemo, useRef } from 'react';
@@ -98,16 +98,13 @@ const convertToGMT = (day, time) => {
 
 // --- PREMIUM UI COMPONENTS ---
 
-// 1. The Glass Card
 const Card = ({ children, className = "" }) => (
     <div className={`bg-neutral-900/60 backdrop-blur-xl border border-white/5 shadow-2xl rounded-[1.5rem] p-6 relative overflow-hidden group transition-all duration-300 hover:border-white/10 hover:shadow-red-900/10 ${className}`}>
-        {/* Inner Glow on Hover */}
         <div className="absolute inset-0 bg-gradient-to-br from-red-600/0 via-transparent to-red-600/0 group-hover:from-red-600/5 group-hover:to-blue-600/5 transition-all duration-500 pointer-events-none"></div>
         {children}
     </div>
 );
 
-// 2. The Cyberpunk Input
 const Input = (props) => (
     <div className="relative group">
         <input {...props} className={`w-full bg-black/50 border border-neutral-800 rounded-xl p-3 text-white text-sm outline-none focus:border-red-500 focus:ring-1 focus:ring-red-500/50 transition-all placeholder-neutral-600 backdrop-blur-sm ${props.className}`} />
@@ -115,7 +112,6 @@ const Input = (props) => (
     </div>
 );
 
-// 3. The Select Menu
 const Select = (props) => (
     <div className="relative">
         <select {...props} className={`w-full bg-black/50 border border-neutral-800 rounded-xl p-3 text-white text-sm outline-none focus:border-red-500 focus:ring-1 focus:ring-red-500/50 transition-all appearance-none cursor-pointer backdrop-blur-sm ${props.className}`}>
@@ -125,16 +121,13 @@ const Select = (props) => (
     </div>
 );
 
-// 4. The "Nuclear" Primary Button
 const ButtonPrimary = ({ children, onClick, disabled, className = "" }) => (
     <button onClick={onClick} disabled={disabled} className={`relative overflow-hidden bg-gradient-to-r from-red-700 via-red-600 to-red-800 text-white font-black uppercase tracking-[0.15em] py-3 px-6 rounded-xl shadow-[0_0_15px_rgba(220,38,38,0.4)] hover:shadow-[0_0_25px_rgba(220,38,38,0.7)] transition-all transform hover:-translate-y-0.5 active:translate-y-0 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed disabled:shadow-none group ${className}`}>
         <span className="relative z-10 flex items-center justify-center gap-2">{children}</span>
-        {/* Shine Effect */}
         <div className="absolute top-0 -inset-full h-full w-1/2 z-5 block transform -skew-x-12 bg-gradient-to-r from-transparent to-white opacity-20 group-hover:animate-shine" />
     </button>
 );
 
-// 5. The Stealth Secondary Button
 const ButtonSecondary = ({ children, onClick, className = "" }) => (
     <button onClick={onClick} className={`bg-black/40 hover:bg-neutral-800 border border-neutral-800 hover:border-red-500/50 text-neutral-400 hover:text-white font-bold uppercase tracking-wider py-2 px-4 rounded-xl transition-all backdrop-blur-sm ${className}`}>
         {children}
@@ -168,12 +161,8 @@ const useValorantData = () => {
 };
 
 // --- ANIMATED STAMPS ---
-const VictoryStamp = () => (
-    <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-50 border-8 border-green-500 text-green-500 font-black text-6xl md:text-8xl p-6 uppercase tracking-tighter -rotate-12 opacity-0 animate-stamp-in pointer-events-none mix-blend-screen shadow-[0_0_50px_rgba(34,197,94,0.5)] backdrop-blur-sm">VICTORY</div>
-);
-const DefeatStamp = () => (
-    <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-50 border-8 border-red-600 text-red-600 font-black text-6xl md:text-8xl p-6 uppercase tracking-tighter rotate-12 opacity-0 animate-stamp-in pointer-events-none mix-blend-screen shadow-[0_0_50px_rgba(220,38,38,0.5)] backdrop-blur-sm">DEFEAT</div>
-);
+const VictoryStamp = () => <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-50 border-8 border-green-500 text-green-500 font-black text-6xl md:text-8xl p-6 uppercase tracking-tighter -rotate-12 opacity-0 animate-stamp-in pointer-events-none mix-blend-screen shadow-[0_0_50px_rgba(34,197,94,0.5)] backdrop-blur-sm">VICTORY</div>;
+const DefeatStamp = () => <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-50 border-8 border-red-600 text-red-600 font-black text-6xl md:text-8xl p-6 uppercase tracking-tighter rotate-12 opacity-0 animate-stamp-in pointer-events-none mix-blend-screen shadow-[0_0_50px_rgba(220,38,38,0.5)] backdrop-blur-sm">DEFEAT</div>;
 
 // --- COMPONENTS ---
 
@@ -789,7 +778,7 @@ export default function App() {
             <Modal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} onConfirm={modalContent.onConfirm} title={modalContent.title}>{modalContent.children}</Modal>
 
             {/* GLOBAL ANIMATION STYLES */}
-            <style jsx global>{`
+            <style>{`
                 @keyframes pulse-slow { 0%, 100% { opacity: 0.3; transform: scale(1); } 50% { opacity: 0.5; transform: scale(1.1); } }
                 .animate-pulse-slow { animation: pulse-slow 8s infinite ease-in-out; }
                 @keyframes stamp-in { 0% { transform: translate(-50%, -50%) scale(3) rotate(0deg); opacity: 0; } 100% { transform: translate(-50%, -50%) scale(1) rotate(-12deg); opacity: 1; } }
