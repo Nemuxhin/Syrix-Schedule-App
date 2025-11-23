@@ -1,9 +1,9 @@
 ﻿/*
-Syrix Team Availability - v5.1 (STABILIZED & ROBUST)
-- FIX: Added safety checks for Canvas/Container refs to prevent crashes.
-- FIX: Role Icons now handle custom roles gracefully.
-- FIX: Image export now handles missing assets without freezing.
-- THEME: Red & Black Glassmorphism maintained.
+Syrix Team Availability - v5.2 (PREMIUM FLARE EDITION)
+- UI: Added "Breathing" Red Aurora Background.
+- UI: Added Perspective Grid overlay.
+- UI: Added Noise texture for premium feel.
+- UI: Cards now have a "Shine" effect on hover.
 */
 
 import React, { useState, useEffect, useMemo, useRef } from 'react';
@@ -97,27 +97,82 @@ const convertToGMT = (day, time) => {
     return { day: jsDays[d.getUTCDay()], time: `${String(d.getUTCHours()).padStart(2, '0')}:${String(d.getUTCMinutes()).padStart(2, '0')}` };
 };
 
-// --- SHARED UI COMPONENTS ---
+// --- STYLE INJECTION (Animations) ---
+const GlobalStyles = () => (
+    <style>{`
+        @keyframes blob {
+            0% { transform: translate(0px, 0px) scale(1); }
+            33% { transform: translate(30px, -50px) scale(1.1); }
+            66% { transform: translate(-20px, 20px) scale(0.9); }
+            100% { transform: translate(0px, 0px) scale(1); }
+        }
+        .animate-blob { animation: blob 10s infinite; }
+        .animation-delay-2000 { animation-delay: 2s; }
+        .animation-delay-4000 { animation-delay: 4s; }
+        .glass-panel {
+            background: linear-gradient(145deg, rgba(20, 20, 20, 0.7) 0%, rgba(10, 10, 10, 0.9) 100%);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            box-shadow: 0 4px 30px rgba(0, 0, 0, 0.1);
+        }
+        .card-shine:hover::after {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: -100%;
+            width: 50%;
+            height: 100%;
+            background: linear-gradient(to right, transparent, rgba(255,255,255,0.05), transparent);
+            transform: skewX(-25deg);
+            animation: shine 0.75s;
+        }
+        @keyframes shine {
+            100% { left: 125%; }
+        }
+    `}</style>
+);
+
+// --- PREMIUM BACKGROUND COMPONENT ---
+const BackgroundFlare = () => (
+    <div className="fixed inset-0 w-full h-full z-0 pointer-events-none overflow-hidden bg-black">
+        {/* Subtle Grid Overlay */}
+        <div className="absolute inset-0 bg-[linear-gradient(to_right,#262626_1px,transparent_1px),linear-gradient(to_bottom,#262626_1px,transparent_1px)] bg-[size:4rem_4rem] [mask-image:radial-gradient(ellipse_60%_50%_at_50%_0%,#000_70%,transparent_100%)] opacity-20"></div>
+
+        {/* Moving Blobs / Aurora */}
+        <div className="absolute top-0 left-1/4 w-96 h-96 bg-red-900/30 rounded-full blur-[128px] animate-blob mix-blend-screen"></div>
+        <div className="absolute top-0 right-1/4 w-96 h-96 bg-red-800/20 rounded-full blur-[128px] animate-blob animation-delay-2000 mix-blend-screen"></div>
+        <div className="absolute -bottom-32 left-1/3 w-96 h-96 bg-red-950/40 rounded-full blur-[128px] animate-blob animation-delay-4000 mix-blend-screen"></div>
+
+        {/* Noise Texture */}
+        <div className="absolute inset-0 opacity-[0.04] bg-[url('https://grainy-gradients.vercel.app/noise.svg')]"></div>
+
+        {/* Vignette */}
+        <div className="absolute inset-0 bg-[radial-gradient(transparent_0%,#000_100%)]"></div>
+    </div>
+);
+
+// --- SHARED UI COMPONENTS (Refined) ---
 const Card = ({ children, className = "" }) => (
-    <div className={`bg-neutral-900/80 backdrop-blur-md border border-white/10 shadow-2xl rounded-3xl p-6 relative overflow-hidden ${className}`}>
+    <div className={`glass-panel border border-white/5 shadow-2xl rounded-3xl p-6 relative overflow-hidden group card-shine transition-all duration-300 hover:border-white/10 hover:shadow-red-900/10 ${className}`}>
         {children}
     </div>
 );
+
 const Input = (props) => (
-    <input {...props} className={`w-full bg-black border border-neutral-800 rounded-xl p-3 text-white text-sm outline-none focus:border-red-600 focus:ring-1 focus:ring-red-600 transition-all placeholder-neutral-600 ${props.className}`} />
+    <input {...props} className={`w-full bg-black/50 border border-neutral-800 rounded-xl p-3 text-white text-sm outline-none focus:border-red-600 focus:ring-1 focus:ring-red-600 transition-all placeholder-neutral-600 shadow-inner ${props.className}`} />
 );
 const Select = (props) => (
-    <select {...props} className={`w-full bg-black border border-neutral-800 rounded-xl p-3 text-white text-sm outline-none focus:border-red-600 focus:ring-1 focus:ring-red-600 transition-all ${props.className}`}>
+    <select {...props} className={`w-full bg-black/50 border border-neutral-800 rounded-xl p-3 text-white text-sm outline-none focus:border-red-600 focus:ring-1 focus:ring-red-600 transition-all shadow-inner ${props.className}`}>
         {props.children}
     </select>
 );
 const ButtonPrimary = ({ children, onClick, disabled, className = "" }) => (
-    <button onClick={onClick} disabled={disabled} className={`bg-gradient-to-r from-red-800 to-red-600 hover:from-red-700 hover:to-red-500 text-white font-black uppercase tracking-widest py-3 px-6 rounded-xl shadow-lg shadow-red-900/20 transition-all transform active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed ${className}`}>
+    <button onClick={onClick} disabled={disabled} className={`bg-gradient-to-br from-red-800 to-red-600 hover:from-red-700 hover:to-red-500 text-white font-black uppercase tracking-widest py-3 px-6 rounded-xl shadow-lg shadow-red-900/20 transition-all transform active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed relative overflow-hidden ${className}`}>
         {children}
     </button>
 );
 const ButtonSecondary = ({ children, onClick, className = "" }) => (
-    <button onClick={onClick} className={`bg-black hover:bg-neutral-900 border border-neutral-800 hover:border-red-900/50 text-neutral-400 hover:text-white font-bold uppercase tracking-wider py-2 px-4 rounded-xl transition-all ${className}`}>
+    <button onClick={onClick} className={`bg-black/40 backdrop-blur hover:bg-neutral-900 border border-neutral-800 hover:border-red-900/50 text-neutral-400 hover:text-white font-bold uppercase tracking-wider py-2 px-4 rounded-xl transition-all ${className}`}>
         {children}
     </button>
 );
@@ -149,8 +204,8 @@ const useValorantData = () => {
 };
 
 // --- ANIMATED STAMPS ---
-const VictoryStamp = () => <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-50 border-8 border-green-500 text-green-500 font-black text-5xl md:text-7xl p-4 uppercase tracking-tighter -rotate-12 opacity-0 animate-stamp-in pointer-events-none mix-blend-screen">VICTORY</div>;
-const DefeatStamp = () => <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-50 border-8 border-red-600 text-red-600 font-black text-5xl md:text-7xl p-4 uppercase tracking-tighter rotate-12 opacity-0 animate-stamp-in pointer-events-none mix-blend-screen">DEFEAT</div>;
+const VictoryStamp = () => <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-50 border-8 border-green-500 text-green-500 font-black text-5xl md:text-7xl p-4 uppercase tracking-tighter -rotate-12 opacity-0 animate-stamp-in pointer-events-none mix-blend-screen shadow-[0_0_50px_rgba(34,197,94,0.5)]">VICTORY</div>;
+const DefeatStamp = () => <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-50 border-8 border-red-600 text-red-600 font-black text-5xl md:text-7xl p-4 uppercase tracking-tighter rotate-12 opacity-0 animate-stamp-in pointer-events-none mix-blend-screen shadow-[0_0_50px_rgba(220,38,38,0.5)]">DEFEAT</div>;
 
 // --- COMPONENTS ---
 
@@ -188,7 +243,7 @@ function LeaveLogger({ members }) {
         <Card className="border-red-900/20">
             <h3 className="text-lg font-black text-white mb-4 border-b border-red-900/30 pb-2 uppercase tracking-widest flex items-center gap-2"><span className="text-xl">🏖️</span> Absence Log</h3>
             <div className="space-y-3 mb-4"><div className="grid grid-cols-2 gap-2"><Input type="date" value={newLeave.start} onChange={e => setNewLeave({ ...newLeave, start: e.target.value })} className="[color-scheme:dark]" /><Input type="date" value={newLeave.end} onChange={e => setNewLeave({ ...newLeave, end: e.target.value })} className="[color-scheme:dark]" /></div><Input type="text" placeholder="Reason" value={newLeave.reason} onChange={e => setNewLeave({ ...newLeave, reason: e.target.value })} /><ButtonSecondary onClick={addLeave} className="w-full text-xs py-3">Log Absence</ButtonSecondary></div>
-            <div className="space-y-2 max-h-40 overflow-y-auto pr-2 custom-scrollbar">{leaves.length === 0 && <p className="text-neutral-600 italic text-xs text-center py-2">No upcoming absences.</p>}{leaves.map(l => (<div key={l.id} className="p-3 bg-black border border-neutral-800 rounded-lg flex justify-between items-center text-xs hover:border-red-900/50 transition-colors group"><div><span className="font-bold text-red-500 mr-2">{l.user}</span><span className="text-neutral-400">{l.start} - {l.end}</span><div className="text-neutral-500 italic mt-0.5">{l.reason}</div></div>{(l.user === currentUser?.displayName || ADMINS.includes(currentUser?.displayName)) && (<button onClick={() => deleteLeave(l.id)} className="text-neutral-600 hover:text-red-500 font-bold px-2 opacity-0 group-hover:opacity-100 transition-opacity">✕</button>)}</div>))}</div>
+            <div className="space-y-2 max-h-40 overflow-y-auto pr-2 custom-scrollbar">{leaves.length === 0 && <p className="text-neutral-600 italic text-xs text-center py-2">No upcoming absences.</p>}{leaves.map(l => (<div key={l.id} className="p-3 bg-black/50 border border-neutral-800 rounded-lg flex justify-between items-center text-xs hover:border-red-900/50 transition-colors group"><div><span className="font-bold text-red-500 mr-2">{l.user}</span><span className="text-neutral-400">{l.start} - {l.end}</span><div className="text-neutral-500 italic mt-0.5">{l.reason}</div></div>{(l.user === currentUser?.displayName || ADMINS.includes(currentUser?.displayName)) && (<button onClick={() => deleteLeave(l.id)} className="text-neutral-600 hover:text-red-500 font-bold px-2 opacity-0 group-hover:opacity-100 transition-opacity">✕</button>)}</div>))}</div>
         </Card>
     );
 }
@@ -529,11 +584,11 @@ function ScrimScheduler({ onSchedule, userTimezone }) {
 function AvailabilityHeatmap({ availabilities, members }) {
     const bucketSize = 60; const numBuckets = (24 * 60) / bucketSize;
     const data = useMemo(() => { const d = {}; for (const day of DAYS) { const b = new Array(numBuckets).fill(0); members.forEach(m => { (availabilities[m] || []).filter(s => s.day === day).forEach(s => { const start = Math.floor(timeToMinutes(s.start) / bucketSize); const end = Math.ceil(timeToMinutes(s.end) / bucketSize); for (let i = start; i < end && i < numBuckets; i++) b[i]++; }); }); d[day] = b; } return d; }, [availabilities, members]);
-    return (<div className="overflow-x-auto rounded-xl border border-neutral-800 bg-black shadow-inner"><div className="min-w-[600px]"><div className="flex border-b border-neutral-800"><div className="w-24 bg-black sticky left-0 p-2 text-xs font-bold text-red-500 border-r border-neutral-800">DAY</div>{Array.from({ length: 24 }).map((_, i) => <div key={i} className="flex-1 text-[10px] text-center text-neutral-500 py-1 border-l border-neutral-800">{i}</div>)}</div>{DAYS.map(day => <div key={day} className="flex border-b border-neutral-800/50"><div className="w-24 bg-black sticky left-0 p-2 text-xs font-bold text-neutral-400 border-r border-neutral-800">{day.substring(0, 3).toUpperCase()}</div>{data[day]?.map((c, i) => <div key={i} className="flex-1 h-8 border-l border-neutral-800/30 relative group bg-red-600" style={{ opacity: c > 0 ? (c / members.length) * 0.9 + 0.1 : 0 }}>{c > 0 && <span className="absolute inset-0 flex items-center justify-center text-[10px] font-bold text-white opacity-0 group-hover:opacity-100">{c}</span>}</div>)}</div>)}</div></div>);
+    return (<div className="overflow-x-auto rounded-xl border border-neutral-800 bg-black/50 shadow-inner"><div className="min-w-[600px]"><div className="flex border-b border-neutral-800"><div className="w-24 bg-black/50 sticky left-0 p-2 text-xs font-bold text-red-500 border-r border-neutral-800">DAY</div>{Array.from({ length: 24 }).map((_, i) => <div key={i} className="flex-1 text-[10px] text-center text-neutral-500 py-1 border-l border-neutral-800">{i}</div>)}</div>{DAYS.map(day => <div key={day} className="flex border-b border-neutral-800/50"><div className="w-24 bg-black/50 sticky left-0 p-2 text-xs font-bold text-neutral-400 border-r border-neutral-800">{day.substring(0, 3).toUpperCase()}</div>{data[day]?.map((c, i) => <div key={i} className="flex-1 h-8 border-l border-neutral-800/30 relative group bg-red-600" style={{ opacity: c > 0 ? (c / members.length) * 0.9 + 0.1 : 0 }}>{c > 0 && <span className="absolute inset-0 flex items-center justify-center text-[10px] font-bold text-white opacity-0 group-hover:opacity-100">{c}</span>}</div>)}</div>)}</div></div>);
 }
 
 function LoginScreen({ signIn }) {
-    return (<div className="fixed inset-0 bg-black flex items-center justify-center p-4 bg-[radial-gradient(ellipse_at_center,_var(--tw-gradient-stops))] from-red-900/20 via-black to-black"><div className="text-center p-12 rounded-[3rem] border border-white/10 bg-neutral-900/80 backdrop-blur-xl shadow-2xl shadow-red-900/40"><h1 className="text-7xl font-black text-white tracking-tighter drop-shadow-[0_0_30px_rgba(255,255,255,0.5)]">SYRIX</h1><div className="h-1.5 w-32 bg-red-600 mx-auto rounded-full shadow-[0_0_15px_rgba(220,38,38,1)] my-4"></div><button onClick={signIn} className="w-full bg-[#5865F2] hover:bg-[#4752C4] text-white py-4 rounded-2xl font-bold shadow-lg transition-transform hover:scale-105">LOGIN WITH DISCORD</button></div></div>);
+    return (<div className="fixed inset-0 bg-black flex items-center justify-center p-4 relative overflow-hidden"><BackgroundFlare /><div className="relative z-10 text-center p-12 rounded-[3rem] border border-white/10 bg-neutral-900/80 backdrop-blur-xl shadow-2xl shadow-red-900/40"><h1 className="text-7xl font-black text-white tracking-tighter drop-shadow-[0_0_30px_rgba(255,255,255,0.5)]">SYRIX</h1><div className="h-1.5 w-32 bg-red-600 mx-auto rounded-full shadow-[0_0_15px_rgba(220,38,38,1)] my-4"></div><button onClick={signIn} className="w-full bg-[#5865F2] hover:bg-[#4752C4] text-white py-4 rounded-2xl font-bold shadow-lg transition-transform hover:scale-105">LOGIN WITH DISCORD</button></div></div>);
 }
 
 // --- MAIN APP ---
@@ -554,22 +609,26 @@ export default function App() {
 
     if (authLoading) return <div className="fixed inset-0 bg-black flex items-center justify-center text-red-600 font-black text-2xl animate-pulse">LOADING SYRIX...</div>;
     if (!currentUser) return <LoginScreen signIn={signIn} />;
-    if (!isMember) return <div className="fixed inset-0 bg-black p-8 overflow-y-auto"><ApplicationForm currentUser={currentUser} /></div>;
+    if (!isMember) return <div className="fixed inset-0 bg-black p-8 overflow-y-auto"><GlobalStyles /><BackgroundFlare /><div className="relative z-10"><ApplicationForm currentUser={currentUser} /></div></div>;
 
     const NavBtn = ({ id, label }) => <button onClick={() => setActiveTab(id)} className={`text-xs font-bold uppercase tracking-widest pb-1 border-b-2 transition-all ${activeTab === id ? 'text-red-600 border-red-600 shadow-[0_10px_20px_-5px_rgba(220,38,38,0.5)]' : 'text-neutral-500 border-transparent hover:text-neutral-300'}`}>{label}</button>;
 
     return (
-        <div className="fixed inset-0 h-full w-full bg-black text-neutral-200 font-sans selection:bg-red-500/30 flex flex-col overflow-hidden bg-[radial-gradient(ellipse_at_top_left,_var(--tw-gradient-stops))] from-red-900/10 via-black to-black">
-            <header className="flex-none flex justify-between items-center px-8 py-4 border-b border-white/10 bg-black/80 backdrop-blur-md z-40">
-                <div><h1 className="text-3xl font-black tracking-tighter text-white">SYRIX <span className="text-red-600">HUB</span></h1><div className="flex gap-6 mt-2 overflow-x-auto pb-2 scrollbar-hide"><NavBtn id="dashboard" label="Dashboard" /><NavBtn id="comps" label="Comps" /><NavBtn id="matches" label="Matches" /><NavBtn id="strats" label="Stratbook" /><NavBtn id="roster" label="Roster" /><NavBtn id="partners" label="Partners" /><NavBtn id="mapveto" label="Map Veto" />{ADMINS.includes(currentUser.displayName) && <NavBtn id="admin" label="Admin" />}</div></div>
-                <div className="flex items-center gap-4"><div className="text-right"><div className="text-sm font-bold text-white">{currentUser.displayName}</div><button onClick={handleSignOut} className="text-[10px] text-red-500 font-bold uppercase">Log Out</button></div><select value={userTimezone} onChange={e => { setUserTimezone(e.target.value); localStorage.setItem('timezone', e.target.value) }} className="bg-black border border-neutral-800 text-xs rounded p-2 text-neutral-400">{timezones.map(t => <option key={t} value={t}>{t}</option>)}</select></div>
+        <div className="fixed inset-0 h-full w-full text-neutral-200 font-sans selection:bg-red-500/30 flex flex-col overflow-hidden">
+            <GlobalStyles />
+            <BackgroundFlare />
+
+            <header className="flex-none flex justify-between items-center px-8 py-4 border-b border-white/10 bg-black/40 backdrop-blur-md z-40">
+                <div><h1 className="text-3xl font-black tracking-tighter text-white drop-shadow-lg">SYRIX <span className="text-red-600">HUB</span></h1><div className="flex gap-6 mt-2 overflow-x-auto pb-2 scrollbar-hide"><NavBtn id="dashboard" label="Dashboard" /><NavBtn id="comps" label="Comps" /><NavBtn id="matches" label="Matches" /><NavBtn id="strats" label="Stratbook" /><NavBtn id="roster" label="Roster" /><NavBtn id="partners" label="Partners" /><NavBtn id="mapveto" label="Map Veto" />{ADMINS.includes(currentUser.displayName) && <NavBtn id="admin" label="Admin" />}</div></div>
+                <div className="flex items-center gap-4"><div className="text-right"><div className="text-sm font-bold text-white">{currentUser.displayName}</div><button onClick={handleSignOut} className="text-[10px] text-red-500 font-bold uppercase">Log Out</button></div><select value={userTimezone} onChange={e => { setUserTimezone(e.target.value); localStorage.setItem('timezone', e.target.value) }} className="bg-black/50 border border-neutral-800 text-xs rounded p-2 text-neutral-400 backdrop-blur-sm">{timezones.map(t => <option key={t} value={t}>{t}</option>)}</select></div>
             </header>
-            <main className="flex-1 overflow-y-auto p-6 scrollbar-thin scrollbar-thumb-red-900 scrollbar-track-black"><div className="max-w-[1920px] mx-auto">
+
+            <main className="flex-1 overflow-y-auto p-6 scrollbar-thin scrollbar-thumb-red-900/50 scrollbar-track-black/20 relative z-10"><div className="max-w-[1920px] mx-auto">
                 {activeTab === 'dashboard' && <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 animate-fade-in-up">
                     <div className="lg:col-span-4 space-y-8">
                         <CaptainsMessage />
                         <LeaveLogger members={dynamicMembers} />
-                        <Card className="border-red-900/20"><div className="absolute top-0 left-0 w-1 h-full bg-red-600/50"></div><h2 className="text-xl font-bold text-white mb-6 uppercase tracking-wide">Set Availability</h2><div className="space-y-4"><div><label className="text-[10px] font-black text-red-500 uppercase mb-1 block">Day</label><Select value={day} onChange={e => setDay(e.target.value)}>{DAYS.map(d => <option key={d} value={d}>{d}</option>)}</Select></div><div className="grid grid-cols-2 gap-3"><div><label className="text-[10px] font-black text-red-500 uppercase mb-1 block">Start</label><Input type="time" value={start} onChange={e => setStart(e.target.value)} className="[color-scheme:dark]" /></div><div><label className="text-[10px] font-black text-red-500 uppercase mb-1 block">End</label><Input type="time" value={end} onChange={e => setEnd(e.target.value)} className="[color-scheme:dark]" /></div></div><div><label className="text-[10px] font-black text-red-500 uppercase mb-1 block">Pref. Role</label><div className="flex gap-2 overflow-x-auto pb-2 scrollbar-hide">{ROLES.map(r => (<button key={r} onClick={() => setRole(r)} className={`px-3 py-2 rounded-lg text-xs font-bold border transition-all whitespace-nowrap flex items-center gap-2 ${role === r ? 'bg-red-600 text-white border-red-500' : 'bg-black border-neutral-800 text-neutral-500 hover:text-white'}`}>{RoleIcons[r] || RoleIcons.Unknown}{r}</button>))}</div></div><div className="pt-2 flex gap-2"><ButtonPrimary onClick={saveAvail} disabled={saveStatus !== 'idle'} className="flex-1">{saveStatus === 'idle' ? 'Save Slot' : 'Saved!'}</ButtonPrimary><ButtonSecondary onClick={() => openModal('Clear Day', `Clear all for ${day}?`, clearDay)}>Clear</ButtonSecondary></div></div></Card>
+                        <Card className="border-red-900/20"><div className="absolute top-0 left-0 w-1 h-full bg-red-600/50"></div><h2 className="text-xl font-bold text-white mb-6 uppercase tracking-wide">Set Availability</h2><div className="space-y-4"><div><label className="text-[10px] font-black text-red-500 uppercase mb-1 block">Day</label><Select value={day} onChange={e => setDay(e.target.value)}>{DAYS.map(d => <option key={d} value={d}>{d}</option>)}</Select></div><div className="grid grid-cols-2 gap-3"><div><label className="text-[10px] font-black text-red-500 uppercase mb-1 block">Start</label><Input type="time" value={start} onChange={e => setStart(e.target.value)} className="[color-scheme:dark]" /></div><div><label className="text-[10px] font-black text-red-500 uppercase mb-1 block">End</label><Input type="time" value={end} onChange={e => setEnd(e.target.value)} className="[color-scheme:dark]" /></div></div><div><label className="text-[10px] font-black text-red-500 uppercase mb-1 block">Pref. Role</label><div className="flex gap-2 overflow-x-auto pb-2 scrollbar-hide">{ROLES.map(r => (<button key={r} onClick={() => setRole(r)} className={`px-3 py-2 rounded-lg text-xs font-bold border transition-all whitespace-nowrap flex items-center gap-2 ${role === r ? 'bg-red-600 text-white border-red-500' : 'bg-black/50 border-neutral-800 text-neutral-500 hover:text-white'}`}>{RoleIcons[r] || RoleIcons.Unknown}{r}</button>))}</div></div><div className="pt-2 flex gap-2"><ButtonPrimary onClick={saveAvail} disabled={saveStatus !== 'idle'} className="flex-1">{saveStatus === 'idle' ? 'Save Slot' : 'Saved!'}</ButtonPrimary><ButtonSecondary onClick={() => openModal('Clear Day', `Clear all for ${day}?`, clearDay)}>Clear</ButtonSecondary></div></div></Card>
                         <Card className="border-red-900/20"><div className="absolute top-0 left-0 w-1 h-full bg-red-600/50"></div><h2 className="text-xl font-bold text-white mb-6 uppercase tracking-wide">Event Operations</h2><ScrimScheduler onSchedule={schedEvent} userTimezone={userTimezone} /></Card>
                     </div>
                     <div className="lg:col-span-8 space-y-8">
