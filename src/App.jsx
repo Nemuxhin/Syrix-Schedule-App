@@ -374,7 +374,6 @@ function StratBook() {
         }
     };
 
-    // --- UPDATED EXPORT LOGIC FOR CIRCULAR AGENTS ---
     const saveStrat = async () => {
         const tempCanvas = document.createElement('canvas');
         tempCanvas.width = 1280; tempCanvas.height = 720;
@@ -457,7 +456,8 @@ function StratBook() {
 
     return (
         <div className="h-full flex flex-col gap-6">
-            <div className="flex gap-4 h-[75vh]">
+            {/* CHANGED: Increased height from 75vh to 85vh */}
+            <div className="flex gap-4 h-[85vh]">
                 {/* SIDEBAR */}
                 <Card className="w-24 flex flex-col gap-4 overflow-y-auto custom-scrollbar !p-3">
                     <div className="text-[10px] font-bold text-neutral-500 text-center uppercase">Util</div>
@@ -483,13 +483,16 @@ function StratBook() {
                 </Card>
 
                 {/* MAIN BOARD */}
-                <Card className="flex-1 flex flex-col relative">
-                    <div className="flex justify-between items-center mb-4">
+                <Card className="flex-1 flex flex-col relative items-center justify-center bg-black/80">
+                    <div className="w-full flex justify-between items-center mb-4">
                         <h3 className="text-2xl font-black text-white">STRATBOOK {viewingStrat && <span className="text-red-500 text-sm ml-2">(VIEWING)</span>}</h3>
                         <div className="flex gap-2">{!viewingStrat ? (<><button onClick={() => setColor('#ef4444')} className="w-6 h-6 rounded-full bg-red-500 border border-white"></button><button onClick={() => setColor('#3b82f6')} className="w-6 h-6 rounded-full bg-blue-500 border border-white"></button><button onClick={() => setColor('#ffffff')} className="w-6 h-6 rounded-full bg-white border border-white"></button><ButtonSecondary onClick={clearCanvas} className="text-xs py-1 px-3">Clear</ButtonSecondary><ButtonPrimary onClick={saveStrat} className="text-xs py-1 px-3">Save</ButtonPrimary></>) : <ButtonSecondary onClick={() => setViewingStrat(null)} className="text-xs bg-red-900/50 border-red-500 text-white">Close</ButtonSecondary>}</div>
                     </div>
-                    <div className="flex overflow-x-auto gap-2 pb-4 mb-2 custom-scrollbar">{MAPS.map(m => <button key={m} onClick={() => { setSelectedMap(m); clearCanvas(); setViewingStrat(null); }} className={`px-3 py-1 rounded-full text-xs font-bold ${selectedMap === m ? 'bg-red-600 text-white' : 'bg-black text-neutral-500'}`}>{m}</button>)}</div>
-                    <div ref={containerRef} className="relative flex-1 bg-neutral-900 rounded-2xl overflow-hidden border border-neutral-800" onDragOver={e => e.preventDefault()} onDrop={handleDrop}>
+                    <div className="w-full flex overflow-x-auto gap-2 pb-4 mb-2 custom-scrollbar">{MAPS.map(m => <button key={m} onClick={() => { setSelectedMap(m); clearCanvas(); setViewingStrat(null); }} className={`px-3 py-1 rounded-full text-xs font-bold ${selectedMap === m ? 'bg-red-600 text-white' : 'bg-black text-neutral-500'}`}>{m}</button>)}</div>
+
+                    {/* CHANGED: Added 'aspect-video' to lock aspect ratio and prevent stretching */}
+                    {/* CHANGED: Removed 'absolute inset-0' from canvas to respect aspect ratio container */}
+                    <div ref={containerRef} className="relative w-full aspect-video bg-neutral-900 rounded-2xl overflow-hidden border border-neutral-800 shadow-2xl" onDragOver={e => e.preventDefault()} onDrop={handleDrop}>
                         {mapImages[selectedMap] && <img src={mapImages[selectedMap]} alt="Map" className="absolute inset-0 w-full h-full object-contain opacity-90 pointer-events-none" />}
                         {!viewingStrat && mapIcons.map((icon, i) => (
                             <div key={icon.id} className="absolute cursor-move hover:scale-110 transition-transform z-20" style={{ left: `${icon.x}%`, top: `${icon.y}%`, transform: 'translate(-50%, -50%)' }} draggable onDragStart={(e) => { e.stopPropagation(); setMovingIcon(i); }} onDragEnd={() => setMovingIcon(null)} onDoubleClick={(e) => { e.stopPropagation(); const u = [...mapIcons]; u.splice(i, 1); setMapIcons(u); }}>
@@ -514,12 +517,12 @@ function StratBook() {
                             onMouseMove={draw}
                             onMouseUp={stopDraw}
                             onMouseLeave={stopDraw}
-                            // Mobile Support
                             onTouchStart={(e) => { const touch = e.touches[0]; const mouseEvent = new MouseEvent("mousedown", { clientX: touch.clientX, clientY: touch.clientY }); startDraw(mouseEvent); }}
                             onTouchMove={(e) => { const touch = e.touches[0]; const mouseEvent = new MouseEvent("mousemove", { clientX: touch.clientX, clientY: touch.clientY }); draw(mouseEvent); }}
                             onTouchEnd={stopDraw}
                         />
-                        {viewingStrat && <div className="absolute inset-0 z-30 bg-black/50 flex items-center justify-center"><img src={viewingStrat} alt="Saved Strat" className="max-w-full max-h-full rounded-xl border border-red-500 shadow-2xl" /></div>}
+                        {/* CHANGED: Viewing image uses object-contain to prevent squashing */}
+                        {viewingStrat && <div className="absolute inset-0 z-30 bg-black flex items-center justify-center"><img src={viewingStrat} alt="Saved Strat" className="w-full h-full object-contain" /></div>}
                     </div>
                 </Card>
             </div>
@@ -527,7 +530,6 @@ function StratBook() {
         </div>
     );
 }
-
 function MatchHistory() {
     const [matches, setMatches] = useState([]); const [isAdding, setIsAdding] = useState(false); const [expandedId, setExpandedId] = useState(null); const [editingId, setEditingId] = useState(null); const [editForm, setEditForm] = useState({}); const [newMatch, setNewMatch] = useState({ opponent: '', date: '', myScore: '', enemyScore: '', atkScore: '', defScore: '', map: MAPS[0], vod: '' });
     useEffect(() => { const unsub = onSnapshot(collection(db, 'events'), (snap) => { const evs = []; snap.forEach(doc => evs.push({ id: doc.id, ...doc.data() })); setMatches(evs.filter(e => e.result).sort((a, b) => new Date(b.date) - new Date(a.date))); }); return () => unsub(); }, []);
