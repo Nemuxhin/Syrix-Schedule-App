@@ -411,34 +411,35 @@ function TeamComps({ members }) {
     );
 }
 
+// --- STRATBOOK COMPONENT (ValoPlant Style) ---
 function StratBook() {
     const [selectedMap, setSelectedMap] = useState(MAPS[0]);
+    const [selectedAgentForUtil, setSelectedAgentForUtil] = useState(AGENT_NAMES[0]);
+
+    // Canvas State
     const canvasRef = useRef(null);
     const containerRef = useRef(null);
     const [isDrawing, setIsDrawing] = useState(false);
-    const { mapImages, agentImages } = useValorantData();
+    const { mapImages, agentData } = useValorantData();
     const [color, setColor] = useState('#ef4444');
     const addToast = useToast();
 
-    // ValoPlant Features
+    // Interactive State
     const [mapIcons, setMapIcons] = useState([]);
     const [dragItem, setDragItem] = useState(null);
-    const [movingIcon, setMovingIcon] = useState(null);
+    const [movingIconIndex, setMovingIconIndex] = useState(null);
+    const [selectedIconId, setSelectedIconId] = useState(null); // For rotation/resize controls
 
-    const [links, setLinks] = useState([]);
     const [savedStrats, setSavedStrats] = useState([]);
     const [viewingStrat, setViewingStrat] = useState(null);
-    const [newLink, setNewLink] = useState({ title: '', url: '' });
 
     useEffect(() => {
-        const qLinks = query(collection(db, 'strat_links'), where("map", "==", selectedMap));
-        const unsubLinks = onSnapshot(qLinks, (snap) => { const l = []; snap.forEach(doc => l.push({ id: doc.id, ...doc.data() })); setLinks(l); });
         const qStrats = query(collection(db, 'strats'), where("map", "==", selectedMap));
         const unsubStrats = onSnapshot(qStrats, (snap) => { const s = []; snap.forEach(doc => s.push({ id: doc.id, ...doc.data() })); s.sort((a, b) => new Date(b.date) - new Date(a.date)); setSavedStrats(s); });
-        return () => { unsubLinks(); unsubStrats(); };
+        return () => unsubStrats();
     }, [selectedMap]);
 
-    // Canvas Logic
+    // Canvas Helpers
     const getPos = (e) => {
         if (!canvasRef.current) return { x: 0, y: 0 };
         const rect = canvasRef.current.getBoundingClientRect();
@@ -448,7 +449,7 @@ function StratBook() {
     };
 
     const startDraw = (e) => {
-        if (movingIcon !== null) return;
+        if (movingIconIndex !== null || selectedIconId !== null) return; // Don't draw if moving/selecting
         const ctx = canvasRef.current.getContext('2d');
         const pos = getPos(e);
         ctx.beginPath(); ctx.moveTo(pos.x, pos.y); setIsDrawing(true);
@@ -467,9 +468,11 @@ function StratBook() {
         const ctx = canvasRef.current.getContext('2d');
         ctx.clearRect(0, 0, canvasRef.current.width, canvasRef.current.height);
         setMapIcons([]);
-        addToast('Canvas Cleared', 'success');
+        setSelectedIconId(null);
+        addToast('Canvas Cleared');
     };
 
+    // Drag & Drop Logic
     const handleDrop = (e) => {
         e.preventDefault();
         if (!containerRef.current) return;
@@ -478,14 +481,31 @@ function StratBook() {
         const y = ((e.clientY - rect.top) / rect.height) * 100;
 
         if (dragItem) {
-            setMapIcons([...mapIcons, { id: Date.now(), ...dragItem, x, y }]);
+            setMapIcons([...mapIcons, {
+                id: Date.now(),
+                ...dragItem,
+                x, y,
+                rotation: 0,
+                scale: 1.0
+            }]);
             setDragItem(null);
-        } else if (movingIcon !== null) {
+        } else if (movingIconIndex !== null) {
             const updated = [...mapIcons];
-            updated[movingIcon] = { ...updated[movingIcon], x, y };
+            updated[movingIconIndex] = { ...updated[movingIconIndex], x, y };
             setMapIcons(updated);
-            setMovingIcon(null);
+            setMovingIconIndex(null);
         }
+    };
+
+    // Icon Modification
+    const updateSelectedIcon = (prop, value) => {
+        if (selectedIconId === null) return;
+        setMapIcons(prev => prev.map(icon => icon.id === selectedIconId ? { ...icon, [prop]: value } : icon));
+    };
+
+    const deleteSelectedIcon = () => {
+        setMapIcons(prev => prev.filter(icon => icon.id !== selectedIconId));
+        setSelectedIconId(null);
     };
 
     const saveStrat = async () => {
@@ -493,90 +513,154 @@ function StratBook() {
         tempCanvas.width = 1024; tempCanvas.height = 1024;
         const ctx = tempCanvas.getContext('2d');
 
+        // 1. Map
         if (mapImages[selectedMap]) {
             const img = new Image();
             img.src = mapImages[selectedMap];
             img.crossOrigin = "anonymous";
-            await new Promise((resolve) => { img.onload = resolve; img.onerror = resolve; img.src = mapImages[selectedMap]; });
+            await new Promise((r) => { img.onload = r; img.onerror = r; });
             ctx.drawImage(img, 0, 0, 1024, 1024);
         }
 
+        // 2. Drawings
         ctx.drawImage(canvasRef.current, 0, 0);
 
+        // 3. Icons (With Rotation/Scale)
         for (const icon of mapIcons) {
             const px = (icon.x / 100) * 1024;
             const py = (icon.y / 100) * 1024;
 
-            if (icon.type === 'agent' && agentImages[icon.name]) {
-                const img = new Image();
-                img.crossOrigin = "anonymous";
-                img.src = agentImages[icon.name];
+            ctx.save();
+            ctx.translate(px, py);
+            ctx.rotate((icon.rotation || 0) * Math.PI / 180);
+            const scale = icon.scale || 1;
+            ctx.scale(scale, scale);
+
+            if (icon.type === 'agent' && agentData[icon.name]?.icon) {
+                const img = new Image(); img.crossOrigin = "anonymous"; img.src = agentData[icon.name].icon;
                 await new Promise(r => { img.onload = r; img.onerror = r; });
-                ctx.save();
-                ctx.beginPath(); ctx.arc(px, py, 25, 0, Math.PI * 2); ctx.closePath(); ctx.clip();
-                ctx.drawImage(img, px - 25, py - 25, 50, 50);
-                ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 2; ctx.stroke(); ctx.restore();
-            } else {
-                ctx.beginPath();
-                if (icon.shape === 'ring') {
-                    ctx.arc(px, py, 20, 0, Math.PI * 2); ctx.fillStyle = icon.color; ctx.fill(); ctx.lineWidth = 3; ctx.strokeStyle = icon.border; ctx.stroke();
-                } else if (icon.shape === 'star') {
-                    ctx.fillStyle = icon.color; ctx.moveTo(px, py - 15); ctx.lineTo(px + 15, py); ctx.lineTo(px, py + 15); ctx.lineTo(px - 15, py); ctx.fill();
-                } else if (icon.shape === 'triangle') {
-                    ctx.fillStyle = icon.color; ctx.moveTo(px, py - 15); ctx.lineTo(px + 15, py + 15); ctx.lineTo(px - 15, py + 15); ctx.fill();
-                } else {
-                    ctx.fillStyle = icon.color; ctx.arc(px, py, 15, 0, Math.PI * 2); ctx.fill();
-                }
+                ctx.beginPath(); ctx.arc(0, 0, 25, 0, Math.PI * 2); ctx.clip();
+                ctx.drawImage(img, -25, -25, 50, 50);
+                ctx.strokeStyle = '#fff'; ctx.lineWidth = 2; ctx.stroke();
+            } else if (icon.type === 'ability') {
+                const img = new Image(); img.crossOrigin = "anonymous"; img.src = icon.icon;
+                await new Promise(r => { img.onload = r; img.onerror = r; });
+                ctx.drawImage(img, -20, -20, 40, 40);
+            } else if (icon.type === 'site_label') {
+                ctx.font = "bold 60px Arial"; ctx.fillStyle = "rgba(255, 255, 255, 0.8)"; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+                ctx.fillText(icon.label, 0, 0);
             }
+            ctx.restore();
         }
 
         const dataUrl = tempCanvas.toDataURL();
         await addDoc(collection(db, 'strats'), { map: selectedMap, image: dataUrl, date: new Date().toISOString() });
-        addToast('Strategy Saved Successfully!');
+        addToast('Strat Saved!');
     };
 
-    const addLink = async () => { if (!newLink.title || !newLink.url) return; await addDoc(collection(db, 'strat_links'), { ...newLink, map: selectedMap }); setNewLink({ title: '', url: '' }); addToast('Link Added'); };
-    const deleteLink = async (id) => { await deleteDoc(doc(db, 'strat_links', id)); addToast('Link Removed'); };
-    const deleteStrat = async (id) => { if (viewingStrat) setViewingStrat(null); await deleteDoc(doc(db, 'strats', id)); addToast('Strategy Deleted'); };
+    const deleteStrat = async (id) => {
+        if (viewingStrat) setViewingStrat(null);
+        await deleteDoc(doc(db, 'strats', id));
+        addToast('Strategy Deleted');
+    };
 
     return (
         <div className="h-full flex flex-col gap-6">
             <div className="flex gap-4 h-[75vh]">
-                <Card className="w-24 flex flex-col gap-4 overflow-y-auto custom-scrollbar !p-3">
-                    <div className="text-[10px] font-bold text-neutral-500 text-center uppercase">Util</div>
-                    {UTILITY_TYPES.map(u => (
-                        <div key={u.id} draggable onDragStart={() => setDragItem({ type: 'util', ...u })} onDragEnd={() => setDragItem(null)} className={`w-10 h-10 mx-auto cursor-grab active:cursor-grabbing hover:scale-110 transition-transform shadow-lg flex items-center justify-center`} title={u.label}>
-                            {u.shape === 'ring' && <div className="w-full h-full rounded-full border-4" style={{ backgroundColor: u.color, borderColor: u.border }}></div>}
-                            {u.shape === 'star' && <div className="w-0 h-0 border-l-[10px] border-l-transparent border-r-[10px] border-r-transparent border-b-[20px]" style={{ borderBottomColor: u.color }}></div>}
-                            {u.shape === 'triangle' && <div className="w-0 h-0 border-l-[10px] border-l-transparent border-r-[10px] border-r-transparent border-b-[20px]" style={{ borderBottomColor: u.color }}></div>}
+                {/* --- ENHANCED SIDEBAR --- */}
+                <Card className="w-64 flex flex-col gap-4 overflow-hidden !p-0">
+                    <div className="bg-neutral-900 p-4 border-b border-white/10">
+                        <h4 className="text-xs font-black text-red-500 uppercase tracking-widest mb-2">1. Map Markers</h4>
+                        <div className="flex gap-2 justify-center">
+                            {['A', 'B', 'C', 'Spawn'].map(l => (
+                                <div key={l} draggable onDragStart={() => setDragItem({ type: 'site_label', label: l })} className="w-8 h-8 bg-white/10 rounded flex items-center justify-center text-xs font-bold cursor-grab hover:bg-white/20 border border-white/20">{l[0]}</div>
+                            ))}
                         </div>
-                    ))}
-                    <div className="text-[10px] font-bold text-neutral-500 text-center uppercase mt-4">Agents</div>
-                    {AGENT_NAMES.map(a => (<img key={a} src={agentImages[a]} alt={a} draggable onDragStart={() => setDragItem({ type: 'agent', name: a })} onDragEnd={() => setDragItem(null)} className="w-10 h-10 rounded-full mx-auto border-2 border-neutral-800 bg-black p-0.5 cursor-grab active:cursor-grabbing hover:border-red-500 transition-colors object-cover" />))}
+                    </div>
+
+                    <div className="flex-1 overflow-y-auto custom-scrollbar p-4 space-y-6">
+                        <div>
+                            <h4 className="text-xs font-black text-red-500 uppercase tracking-widest mb-2">2. Select Agent</h4>
+                            <Select value={selectedAgentForUtil} onChange={e => setSelectedAgentForUtil(e.target.value)}>
+                                {AGENT_NAMES.map(a => <option key={a} value={a}>{a}</option>)}
+                            </Select>
+
+                            <div className="mt-3 grid grid-cols-4 gap-2">
+                                {agentData[selectedAgentForUtil]?.abilities.map((ability, i) => (
+                                    <div key={i} draggable onDragStart={() => setDragItem({ type: 'ability', name: ability.name, icon: ability.icon })} className="aspect-square bg-black border border-neutral-800 rounded hover:border-red-500 cursor-grab flex items-center justify-center p-1 group">
+                                        <img src={ability.icon} alt={ability.name} className="w-full h-full object-contain opacity-70 group-hover:opacity-100 transition-opacity" />
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+
+                        <div>
+                            <h4 className="text-xs font-black text-red-500 uppercase tracking-widest mb-2">3. Draggable Agents</h4>
+                            <div className="grid grid-cols-4 gap-2">
+                                {AGENT_NAMES.map(a => (
+                                    <img key={a} src={agentData[a]?.icon} alt={a} draggable onDragStart={() => setDragItem({ type: 'agent', name: a })} className="w-8 h-8 rounded border border-neutral-700 bg-black cursor-grab hover:border-white" />
+                                ))}
+                            </div>
+                        </div>
+                    </div>
                 </Card>
+
+                {/* --- MAIN CANVAS AREA --- */}
                 <Card className="flex-1 flex flex-col relative items-center justify-center bg-black/80 !p-2">
                     <div className="w-full flex justify-between items-center mb-2 px-4 pt-2">
                         <h3 className="text-2xl font-black text-white">STRATBOOK {viewingStrat && <span className="text-red-500 text-sm ml-2">(VIEWING)</span>}</h3>
                         <div className="flex gap-2">{!viewingStrat ? (<><button onClick={() => setColor('#ef4444')} className="w-6 h-6 rounded-full bg-red-500 border border-white"></button><button onClick={() => setColor('#3b82f6')} className="w-6 h-6 rounded-full bg-blue-500 border border-white"></button><button onClick={() => setColor('#ffffff')} className="w-6 h-6 rounded-full bg-white border border-white"></button><ButtonSecondary onClick={clearCanvas} className="text-xs py-1 px-3">Clear</ButtonSecondary><ButtonPrimary onClick={saveStrat} className="text-xs py-1 px-3">Save</ButtonPrimary></>) : <ButtonSecondary onClick={() => setViewingStrat(null)} className="text-xs bg-red-900/50 border-red-500 text-white">Close</ButtonSecondary>}</div>
                     </div>
                     <div className="w-full flex overflow-x-auto gap-2 pb-4 mb-2 px-4 custom-scrollbar">{MAPS.map(m => <button key={m} onClick={() => { setSelectedMap(m); clearCanvas(); setViewingStrat(null); }} className={`px-3 py-1 rounded-full text-xs font-bold ${selectedMap === m ? 'bg-red-600 text-white' : 'bg-black text-neutral-500'}`}>{m}</button>)}</div>
-                    <div ref={containerRef} className="relative h-full aspect-square bg-neutral-900 rounded-xl overflow-hidden border border-neutral-800 shadow-2xl mx-auto" onDragOver={e => e.preventDefault()} onDrop={handleDrop}>
+
+                    <div ref={containerRef} className="relative h-full aspect-square bg-neutral-900 rounded-xl overflow-hidden border border-neutral-800 shadow-2xl mx-auto" onDragOver={e => e.preventDefault()} onDrop={handleDrop} onClick={() => setSelectedIconId(null)}>
                         {mapImages[selectedMap] && <img src={mapImages[selectedMap]} alt="Map" className="absolute inset-0 w-full h-full object-cover pointer-events-none" />}
+
                         {!viewingStrat && mapIcons.map((icon, i) => (
-                            <div key={icon.id} className="absolute cursor-move hover:scale-110 transition-transform z-20" style={{ left: `${icon.x}%`, top: `${icon.y}%`, transform: 'translate(-50%, -50%)' }} draggable onDragStart={(e) => { e.stopPropagation(); setMovingIcon(i); }} onDragEnd={() => setMovingIcon(null)} onDoubleClick={(e) => { e.stopPropagation(); const u = [...mapIcons]; u.splice(i, 1); setMapIcons(u); }}>
-                                {icon.type === 'agent' ? <img src={agentImages[icon.name]} alt={icon.name} className="w-10 h-10 rounded-full border-2 border-white shadow-md pointer-events-none bg-black" /> : (icon.shape === 'ring' ? <div className="w-12 h-12 rounded-full border-4 shadow-sm backdrop-blur-sm" style={{ backgroundColor: icon.color, borderColor: icon.border }}></div> : (icon.shape === 'triangle' ? <div className="w-0 h-0 border-l-[10px] border-l-transparent border-r-[10px] border-r-transparent border-b-[20px]" style={{ borderBottomColor: icon.border }}></div> : <div className="w-6 h-6 transform rotate-45" style={{ backgroundColor: icon.color }}></div>))}
+                            <div
+                                key={icon.id}
+                                className={`absolute cursor-grab active:cursor-grabbing group ${selectedIconId === icon.id ? 'z-50' : 'z-20'}`}
+                                style={{
+                                    left: `${icon.x}%`, top: `${icon.y}%`,
+                                    transform: `translate(-50%, -50%) rotate(${icon.rotation || 0}deg) scale(${icon.scale || 1})`,
+                                    transition: 'transform 0.1s'
+                                }}
+                                draggable
+                                onDragStart={(e) => { e.stopPropagation(); setMovingIconIndex(i); }}
+                                onClick={(e) => { e.stopPropagation(); setSelectedIconId(icon.id); }}
+                            >
+                                {icon.type === 'agent' ? <img src={agentData[icon.name]?.icon} alt={icon.name} className={`w-10 h-10 rounded-full border-2 shadow-md pointer-events-none bg-black ${selectedIconId === icon.id ? 'border-green-500' : 'border-white'}`} /> :
+                                    icon.type === 'ability' ? <img src={icon.icon} className={`w-8 h-8 drop-shadow-md ${selectedIconId === icon.id ? 'filter brightness-150' : ''}`} /> :
+                                        <div className="text-4xl font-black text-white drop-shadow-lg select-none">{icon.label}</div>}
                             </div>
                         ))}
-                        <canvas ref={canvasRef} width={1024} height={1024} className={`absolute inset-0 w-full h-full z-10 touch-none ${viewingStrat ? 'hidden' : 'cursor-crosshair'}`} onMouseDown={startDraw} onMouseMove={draw} onMouseUp={stopDraw} onMouseLeave={stopDraw} onTouchStart={(e) => { const touch = e.touches[0]; const mouseEvent = new MouseEvent("mousedown", { clientX: touch.clientX, clientY: touch.clientY }); startDraw(mouseEvent); }} onTouchMove={(e) => { const touch = e.touches[0]; const mouseEvent = new MouseEvent("mousemove", { clientX: touch.clientX, clientY: touch.clientY }); draw(mouseEvent); }} onTouchEnd={stopDraw} />
+
+                        <canvas ref={canvasRef} width={1024} height={1024} className={`absolute inset-0 w-full h-full z-10 touch-none ${viewingStrat ? 'hidden' : 'cursor-crosshair'}`} onMouseDown={startDraw} onMouseMove={draw} onMouseUp={stopDraw} onMouseLeave={stopDraw} />
                         {viewingStrat && <div className="absolute inset-0 z-30 bg-black flex items-center justify-center"><img src={viewingStrat} alt="Saved Strat" className="w-full h-full object-contain" /></div>}
+
+                        {/* --- CONTROL PANEL (Appears when icon selected) --- */}
+                        {selectedIconId && (
+                            <div className="absolute bottom-4 left-1/2 -translate-x-1/2 bg-neutral-900/90 backdrop-blur border border-white/20 p-3 rounded-xl flex gap-4 items-center z-50 shadow-2xl animate-slide-in" onClick={e => e.stopPropagation()}>
+                                <div className="flex flex-col gap-1">
+                                    <label className="text-[9px] font-bold text-neutral-400 uppercase">Rotate</label>
+                                    <input type="range" min="0" max="360" onChange={(e) => updateSelectedIcon('rotation', e.target.value)} className="w-24 accent-red-600" />
+                                </div>
+                                <div className="flex flex-col gap-1">
+                                    <label className="text-[9px] font-bold text-neutral-400 uppercase">Size</label>
+                                    <input type="range" min="0.5" max="3" step="0.1" onChange={(e) => updateSelectedIcon('scale', e.target.value)} className="w-24 accent-red-600" />
+                                </div>
+                                <button onClick={deleteSelectedIcon} className="bg-red-600 hover:bg-red-700 text-white p-2 rounded-lg text-xs font-bold">DELETE</button>
+                            </div>
+                        )}
                     </div>
                 </Card>
             </div>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6"><Card><h4 className="text-lg font-bold text-white mb-4">EXTERNAL LINKS</h4><div className="flex gap-2 mb-4"><Input placeholder="Title" value={newLink.title} onChange={e => setNewLink({ ...newLink, title: e.target.value })} className="flex-1" /><Input placeholder="URL" value={newLink.url} onChange={e => setNewLink({ ...newLink, url: e.target.value })} className="flex-1" /><ButtonPrimary onClick={addLink} className="text-xs py-2">Add</ButtonPrimary></div><div className="space-y-2 max-h-40 overflow-y-auto custom-scrollbar">{links.map(l => <div key={l.id} className="flex justify-between items-center bg-black/50 p-3 rounded-lg border border-neutral-800"><a href={l.url} target="_blank" rel="noreferrer" className="text-red-500 font-bold hover:underline text-sm">{l.title}</a><button onClick={() => deleteLink(l.id)} className="text-neutral-600 hover:text-red-500">×</button></div>)}</div></Card><Card><h4 className="text-lg font-bold text-white mb-4">SAVED STRATS</h4><div className="space-y-2 max-h-40 overflow-y-auto custom-scrollbar">{savedStrats.length === 0 && <p className="text-neutral-500 italic text-sm">No saved strats.</p>}{savedStrats.map((s, i) => <div key={s.id} onClick={() => setViewingStrat(s.image)} className="flex justify-between items-center bg-black/50 p-3 rounded-lg border border-neutral-800 hover:border-red-500 cursor-pointer group"><span className="text-xs text-white font-mono">Strat #{savedStrats.length - i} - {new Date(s.date).toLocaleDateString()}</span><button onClick={(e) => { e.stopPropagation(); deleteStrat(s.id) }} className="text-neutral-600 hover:text-red-500 font-bold">DEL</button></div>)}</div></Card></div>
+
+            {/* SAVED STRATS LIST */}
+            <div className="grid grid-cols-1 gap-6"><Card><h4 className="text-lg font-bold text-white mb-4">SAVED STRATS</h4><div className="grid grid-cols-2 md:grid-cols-4 gap-4 max-h-60 overflow-y-auto custom-scrollbar">{savedStrats.map((s, i) => <div key={s.id} onClick={() => setViewingStrat(s.image)} className="bg-black/50 p-2 rounded-lg border border-neutral-800 hover:border-red-500 cursor-pointer group relative aspect-square"><img src={s.image} className="w-full h-full object-cover rounded opacity-60 group-hover:opacity-100" /><div className="absolute bottom-0 left-0 w-full bg-black/80 p-1 text-[9px] text-center text-white truncate">{new Date(s.date).toLocaleDateString()}</div><button onClick={(e) => { e.stopPropagation(); deleteStrat(s.id) }} className="absolute top-1 right-1 text-red-500 bg-black rounded-full w-5 h-5 flex items-center justify-center font-bold text-xs opacity-0 group-hover:opacity-100">×</button></div>)}</div></Card></div>
         </div>
     );
 }
-
 function MatchHistory() {
     const [matches, setMatches] = useState([]); const [isAdding, setIsAdding] = useState(false); const [expandedId, setExpandedId] = useState(null); const [editingId, setEditingId] = useState(null); const [editForm, setEditForm] = useState({}); const [newMatch, setNewMatch] = useState({ opponent: '', date: '', myScore: '', enemyScore: '', atkScore: '', defScore: '', map: MAPS[0], vod: '' });
     const addToast = useToast();
