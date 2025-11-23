@@ -656,12 +656,8 @@ function LoginScreen({ signIn }) {
 
 // --- MAIN DASHBOARD LOGIC ---
 function SyrixDashboard() {
-    const [activeTab, setActiveTab] = useState(() => localStorage.getItem('syrix_active_tab') || 'dashboard');
-
-    // ADD THIS useEffect immediately after:
-    useEffect(() => {
-        localStorage.setItem('syrix_active_tab', activeTab);
-    }, [activeTab]);
+    const [currentUser, setCurrentUser] = useState(null); const [activeTab, setActiveTab] = useState('dashboard'); const [availabilities, setAvailabilities] = useState({}); const [events, setEvents] = useState([]); const [day, setDay] = useState(DAYS[0]); const [start, setStart] = useState('12:00'); const [end, setEnd] = useState('23:30'); const [role, setRole] = useState('Flex'); const [saveStatus, setSaveStatus] = useState('idle'); const [userTimezone, setUserTimezone] = useState(localStorage.getItem('timezone') || Intl.DateTimeFormat().resolvedOptions().timeZone); const [authLoading, setAuthLoading] = useState(true); const [isModalOpen, setIsModalOpen] = useState(false); const [modalContent, setModalContent] = useState({ title: '', children: null }); const [isMember, setIsMember] = useState(false);
+    const addToast = useToast();
 
     useEffect(() => { return onAuthStateChanged(auth, user => { setCurrentUser(user); setAuthLoading(false); }); }, []);
     const signIn = async () => { try { await signInWithPopup(auth, new OAuthProvider('oidc.discord')); } catch (e) { console.error(e); } };
