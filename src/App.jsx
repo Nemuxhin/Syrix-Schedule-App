@@ -1,9 +1,9 @@
 ﻿/*
-Syrix Team Availability - v5.4 (FINAL POLISHED)
-- PERFORMANCE: 60FPS Guaranteed (GPU Accelerated CSS).
-- STABILITY: Added drag-end cleanup for Stratbook.
-- UI: Unified scrollbars and spacing.
-- UI: Refined "Glass" contrast for better readability.
+Syrix Team Availability - v6.0 (VALOPLANT EDITION)
+- FEATURE: ValoPlant-style tactical icons (Hollow rings for smokes).
+- FEATURE: Agent icons are now circular headshots (displayIcon).
+- FEATURE: Canvas export now renders professional tactical circles.
+- PERFORMANCE: GPU-accelerated static background retained.
 */
 
 import React, { useState, useEffect, useMemo, useRef } from 'react';
@@ -43,11 +43,12 @@ const AGENT_NAMES = [
     "Killjoy", "Cypher", "Sage", "Chamber", "Deadlock", "Veto"
 ];
 
+// --- VALOPLANT STYLE UTILITIES ---
 const UTILITY_TYPES = [
-    { id: 'smoke', color: '#9ca3af', label: 'Smoke', shape: 'circle' },
-    { id: 'flash', color: '#facc15', label: 'Flash', shape: 'star' },
-    { id: 'molly', color: '#ef4444', label: 'Molly', shape: 'rect' },
-    { id: 'recon', color: '#3b82f6', label: 'Recon', shape: 'triangle' }
+    { id: 'smoke', color: 'rgba(209, 213, 219, 0.3)', border: '#d1d5db', label: 'Smoke', shape: 'ring' },
+    { id: 'molly', color: 'rgba(239, 68, 68, 0.3)', border: '#ef4444', label: 'Molly', shape: 'ring' },
+    { id: 'flash', color: '#facc15', border: '#facc15', label: 'Flash', shape: 'star' },
+    { id: 'recon', color: '#3b82f6', border: '#3b82f6', label: 'Recon', shape: 'triangle' }
 ];
 
 const timezones = ["UTC", "GMT", "Europe/London", "Europe/Paris", "Europe/Berlin", "America/New_York", "America/Chicago", "America/Denver", "America/Los_Angeles", "Asia/Tokyo", "Australia/Sydney"];
@@ -121,18 +122,13 @@ const GlobalStyles = () => (
     `}</style>
 );
 
-// --- OPTIMIZED BACKGROUND (Static, Low GPU Usage) ---
+// --- OPTIMIZED BACKGROUND (Static) ---
 const BackgroundFlare = () => (
     <div className="fixed inset-0 w-full h-full z-0 pointer-events-none bg-black">
-        {/* Static Radial Gradients - Zero lag */}
         <div className="absolute top-[-10%] left-[-10%] w-[50%] h-[50%] rounded-full bg-[radial-gradient(circle,rgba(127,29,29,0.25)_0%,rgba(0,0,0,0)_70%)]"></div>
         <div className="absolute bottom-[-10%] right-[-10%] w-[60%] h-[60%] rounded-full bg-[radial-gradient(circle,rgba(69,10,10,0.25)_0%,rgba(0,0,0,0)_70%)]"></div>
         <div className="absolute top-[20%] right-[20%] w-[40%] h-[40%] rounded-full bg-[radial-gradient(circle,rgba(185,28,28,0.15)_0%,rgba(0,0,0,0)_70%)]"></div>
-
-        {/* Grid Texture */}
         <div className="absolute inset-0 opacity-[0.07] bg-[linear-gradient(to_right,#555_1px,transparent_1px),linear-gradient(to_bottom,#555_1px,transparent_1px)] bg-[size:4rem_4rem]"></div>
-
-        {/* Vignette */}
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,transparent_10%,#000_100%)] opacity-80"></div>
     </div>
 );
@@ -174,7 +170,8 @@ const useValorantData = () => {
                 const agentRes = await fetch('https://valorant-api.com/v1/agents');
                 const agentData = await agentRes.json();
                 const aMap = {};
-                if (agentData.data) agentData.data.forEach(agent => { aMap[agent.displayName] = agent.fullPortrait || agent.displayIcon; });
+                // CHANGED: Fetch displayIcon (Square) instead of fullPortrait
+                if (agentData.data) agentData.data.forEach(agent => { aMap[agent.displayName] = agent.displayIcon; });
                 setAgentImages(aMap);
 
                 const mapRes = await fetch('https://valorant-api.com/v1/maps');
@@ -377,11 +374,13 @@ function StratBook() {
         }
     };
 
+    // --- UPDATED EXPORT LOGIC FOR CIRCULAR AGENTS ---
     const saveStrat = async () => {
         const tempCanvas = document.createElement('canvas');
         tempCanvas.width = 1280; tempCanvas.height = 720;
         const ctx = tempCanvas.getContext('2d');
 
+        // 1. Draw Map
         if (mapImages[selectedMap]) {
             const img = new Image();
             img.src = mapImages[selectedMap];
@@ -390,8 +389,10 @@ function StratBook() {
             ctx.drawImage(img, 0, 0, 1280, 720);
         }
 
+        // 2. Draw Drawings
         ctx.drawImage(canvasRef.current, 0, 0);
 
+        // 3. Draw Icons (With Circular Clipping for Agents)
         for (const icon of mapIcons) {
             const px = (icon.x / 100) * 1280;
             const py = (icon.y / 100) * 720;
@@ -401,12 +402,47 @@ function StratBook() {
                 img.crossOrigin = "anonymous";
                 img.src = agentImages[icon.name];
                 await new Promise(r => { img.onload = r; img.onerror = r; });
-                ctx.drawImage(img, px - 25, py - 25, 50, 50);
-            } else {
-                ctx.fillStyle = icon.color;
+
+                ctx.save();
                 ctx.beginPath();
-                ctx.arc(px, py, 15, 0, Math.PI * 2);
-                ctx.fill();
+                ctx.arc(px, py, 25, 0, Math.PI * 2);
+                ctx.closePath();
+                ctx.clip();
+                ctx.drawImage(img, px - 25, py - 25, 50, 50);
+
+                // Border for Agent
+                ctx.strokeStyle = '#ffffff';
+                ctx.lineWidth = 2;
+                ctx.stroke();
+                ctx.restore();
+            } else {
+                // Draw Utility shapes
+                ctx.beginPath();
+                if (icon.shape === 'ring') {
+                    ctx.arc(px, py, 20, 0, Math.PI * 2);
+                    ctx.fillStyle = icon.color;
+                    ctx.fill();
+                    ctx.lineWidth = 3;
+                    ctx.strokeStyle = icon.border;
+                    ctx.stroke();
+                } else if (icon.shape === 'star') {
+                    ctx.fillStyle = icon.color;
+                    ctx.moveTo(px, py - 15);
+                    ctx.lineTo(px + 15, py);
+                    ctx.lineTo(px, py + 15);
+                    ctx.lineTo(px - 15, py);
+                    ctx.fill();
+                } else if (icon.shape === 'triangle') {
+                    ctx.fillStyle = icon.color;
+                    ctx.moveTo(px, py - 15);
+                    ctx.lineTo(px + 15, py + 15);
+                    ctx.lineTo(px - 15, py + 15);
+                    ctx.fill();
+                } else {
+                    ctx.fillStyle = icon.color;
+                    ctx.arc(px, py, 15, 0, Math.PI * 2);
+                    ctx.fill();
+                }
             }
         }
 
@@ -426,11 +462,23 @@ function StratBook() {
                 <Card className="w-24 flex flex-col gap-4 overflow-y-auto custom-scrollbar !p-3">
                     <div className="text-[10px] font-bold text-neutral-500 text-center uppercase">Util</div>
                     {UTILITY_TYPES.map(u => (
-                        <div key={u.id} draggable onDragStart={() => setDragItem({ type: 'util', ...u })} onDragEnd={() => setDragItem(null)} className="w-10 h-10 rounded-full mx-auto cursor-grab active:cursor-grabbing border-2 border-white/20 hover:scale-110 transition-transform shadow-lg" style={{ backgroundColor: u.color }} title={u.label}></div>
+                        <div
+                            key={u.id}
+                            draggable
+                            onDragStart={() => setDragItem({ type: 'util', ...u })}
+                            onDragEnd={() => setDragItem(null)}
+                            className={`w-10 h-10 mx-auto cursor-grab active:cursor-grabbing hover:scale-110 transition-transform shadow-lg flex items-center justify-center`}
+                            title={u.label}
+                        >
+                            {/* Sidebar Visuals */}
+                            {u.shape === 'ring' && <div className="w-full h-full rounded-full border-4" style={{ backgroundColor: u.color, borderColor: u.border }}></div>}
+                            {u.shape === 'star' && <div className="w-0 h-0 border-l-[10px] border-l-transparent border-r-[10px] border-r-transparent border-b-[20px]" style={{ borderBottomColor: u.color }}></div>}
+                            {u.shape === 'triangle' && <div className="w-0 h-0 border-l-[10px] border-l-transparent border-r-[10px] border-r-transparent border-b-[20px]" style={{ borderBottomColor: u.color }}></div>}
+                        </div>
                     ))}
                     <div className="text-[10px] font-bold text-neutral-500 text-center uppercase mt-4">Agents</div>
                     {AGENT_NAMES.map(a => (
-                        <img key={a} src={agentImages[a]} alt={a} draggable onDragStart={() => setDragItem({ type: 'agent', name: a })} onDragEnd={() => setDragItem(null)} className="w-12 h-12 rounded-full mx-auto border border-neutral-700 bg-neutral-900 p-1 cursor-grab active:cursor-grabbing hover:border-red-500 transition-colors" />
+                        <img key={a} src={agentImages[a]} alt={a} draggable onDragStart={() => setDragItem({ type: 'agent', name: a })} onDragEnd={() => setDragItem(null)} className="w-10 h-10 rounded-full mx-auto border-2 border-neutral-800 bg-black p-0.5 cursor-grab active:cursor-grabbing hover:border-red-500 transition-colors object-cover" />
                     ))}
                 </Card>
 
@@ -445,10 +493,32 @@ function StratBook() {
                         {mapImages[selectedMap] && <img src={mapImages[selectedMap]} alt="Map" className="absolute inset-0 w-full h-full object-contain opacity-90 pointer-events-none" />}
                         {!viewingStrat && mapIcons.map((icon, i) => (
                             <div key={icon.id} className="absolute cursor-move hover:scale-110 transition-transform z-20" style={{ left: `${icon.x}%`, top: `${icon.y}%`, transform: 'translate(-50%, -50%)' }} draggable onDragStart={(e) => { e.stopPropagation(); setMovingIcon(i); }} onDragEnd={() => setMovingIcon(null)} onDoubleClick={(e) => { e.stopPropagation(); const u = [...mapIcons]; u.splice(i, 1); setMapIcons(u); }}>
-                                {icon.type === 'agent' ? <img src={agentImages[icon.name]} alt={icon.name} className="w-10 h-10 rounded-full border-2 border-white shadow-md pointer-events-none" /> : <div className="w-6 h-6 rounded-full shadow-md border border-white pointer-events-none" style={{ backgroundColor: icon.color }}></div>}
+                                {icon.type === 'agent' ?
+                                    <img src={agentImages[icon.name]} alt={icon.name} className="w-10 h-10 rounded-full border-2 border-white shadow-md pointer-events-none bg-black" /> :
+                                    (icon.shape === 'ring' ?
+                                        <div className="w-12 h-12 rounded-full border-4 shadow-sm backdrop-blur-sm" style={{ backgroundColor: icon.color, borderColor: icon.border }}></div> :
+                                        (icon.shape === 'triangle' ?
+                                            <div className="w-0 h-0 border-l-[10px] border-l-transparent border-r-[10px] border-r-transparent border-b-[20px]" style={{ borderBottomColor: icon.border }}></div> :
+                                            <div className="w-6 h-6 transform rotate-45" style={{ backgroundColor: icon.color }}></div>
+                                        )
+                                    )
+                                }
                             </div>
                         ))}
-                        <canvas ref={canvasRef} width={1280} height={720} className={`absolute inset-0 w-full h-full z-10 touch-none ${viewingStrat ? 'hidden' : 'cursor-crosshair'}`} onMouseDown={startDraw} onMouseMove={draw} onMouseUp={stopDraw} onMouseLeave={stopDraw} onTouchStart={startDraw} onTouchMove={draw} onTouchEnd={stopDraw} />
+                        <canvas
+                            ref={canvasRef}
+                            width={1280}
+                            height={720}
+                            className={`absolute inset-0 w-full h-full z-10 touch-none ${viewingStrat ? 'hidden' : 'cursor-crosshair'}`}
+                            onMouseDown={startDraw}
+                            onMouseMove={draw}
+                            onMouseUp={stopDraw}
+                            onMouseLeave={stopDraw}
+                            // Mobile Support
+                            onTouchStart={(e) => { const touch = e.touches[0]; const mouseEvent = new MouseEvent("mousedown", { clientX: touch.clientX, clientY: touch.clientY }); startDraw(mouseEvent); }}
+                            onTouchMove={(e) => { const touch = e.touches[0]; const mouseEvent = new MouseEvent("mousemove", { clientX: touch.clientX, clientY: touch.clientY }); draw(mouseEvent); }}
+                            onTouchEnd={stopDraw}
+                        />
                         {viewingStrat && <div className="absolute inset-0 z-30 bg-black/50 flex items-center justify-center"><img src={viewingStrat} alt="Saved Strat" className="max-w-full max-h-full rounded-xl border border-red-500 shadow-2xl" /></div>}
                     </div>
                 </Card>
