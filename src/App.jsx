@@ -1,9 +1,9 @@
 ﻿/*
-Syrix Team Availability - v5.2 (PREMIUM FLARE EDITION)
-- UI: Added "Breathing" Red Aurora Background.
-- UI: Added Perspective Grid overlay.
-- UI: Added Noise texture for premium feel.
-- UI: Cards now have a "Shine" effect on hover.
+Syrix Team Availability - v5.3 (PERFORMANCE OPTIMIZED)
+- FIX: Removed heavy DOM animations causing lag.
+- FIX: Replaced blur blobs with CSS Radial Gradients (GPU accelerated).
+- FIX: Optimized glassmorphism for smoother scrolling.
+- RETAINED: Premium Red/Black aesthetic.
 */
 
 import React, { useState, useEffect, useMemo, useRef } from 'react';
@@ -97,82 +97,70 @@ const convertToGMT = (day, time) => {
     return { day: jsDays[d.getUTCDay()], time: `${String(d.getUTCHours()).padStart(2, '0')}:${String(d.getUTCMinutes()).padStart(2, '0')}` };
 };
 
-// --- STYLE INJECTION (Animations) ---
+// --- OPTIMIZED STYLES ---
 const GlobalStyles = () => (
     <style>{`
-        @keyframes blob {
-            0% { transform: translate(0px, 0px) scale(1); }
-            33% { transform: translate(30px, -50px) scale(1.1); }
-            66% { transform: translate(-20px, 20px) scale(0.9); }
-            100% { transform: translate(0px, 0px) scale(1); }
-        }
-        .animate-blob { animation: blob 10s infinite; }
-        .animation-delay-2000 { animation-delay: 2s; }
-        .animation-delay-4000 { animation-delay: 4s; }
         .glass-panel {
-            background: linear-gradient(145deg, rgba(20, 20, 20, 0.7) 0%, rgba(10, 10, 10, 0.9) 100%);
-            backdrop-filter: blur(12px);
-            -webkit-backdrop-filter: blur(12px);
-            box-shadow: 0 4px 30px rgba(0, 0, 0, 0.1);
+            background: rgba(15, 15, 15, 0.85);
+            backdrop-filter: blur(8px);
+            -webkit-backdrop-filter: blur(8px);
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+            border: 1px solid rgba(255,255,255,0.08);
         }
-        .card-shine:hover::after {
-            content: '';
-            position: absolute;
-            top: 0;
-            left: -100%;
-            width: 50%;
-            height: 100%;
-            background: linear-gradient(to right, transparent, rgba(255,255,255,0.05), transparent);
-            transform: skewX(-25deg);
-            animation: shine 0.75s;
+        .card-shine:hover {
+            border-color: rgba(220, 38, 38, 0.4);
+            background: rgba(20, 20, 20, 0.95);
         }
-        @keyframes shine {
-            100% { left: 125%; }
-        }
+        /* Smooth fade in without heavy transforms */
+        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+        .animate-fade-in { animation: fadeIn 0.3s ease-out; }
+        
+        /* Custom Scrollbar */
+        .custom-scrollbar::-webkit-scrollbar { width: 6px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: #000; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: #333; border-radius: 3px; }
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #ef4444; }
     `}</style>
 );
 
-// --- PREMIUM BACKGROUND COMPONENT ---
+// --- OPTIMIZED BACKGROUND (Static, Low GPU Usage) ---
 const BackgroundFlare = () => (
-    <div className="fixed inset-0 w-full h-full z-0 pointer-events-none overflow-hidden bg-black">
-        {/* Subtle Grid Overlay */}
-        <div className="absolute inset-0 bg-[linear-gradient(to_right,#262626_1px,transparent_1px),linear-gradient(to_bottom,#262626_1px,transparent_1px)] bg-[size:4rem_4rem] [mask-image:radial-gradient(ellipse_60%_50%_at_50%_0%,#000_70%,transparent_100%)] opacity-20"></div>
+    <div className="fixed inset-0 w-full h-full z-0 pointer-events-none bg-black">
+        {/* Static Radial Gradients - Look like blobs but don't move */}
+        <div className="absolute top-[-10%] left-[-10%] w-[50%] h-[50%] rounded-full bg-[radial-gradient(circle,rgba(127,29,29,0.2)_0%,rgba(0,0,0,0)_70%)]"></div>
+        <div className="absolute bottom-[-10%] right-[-10%] w-[60%] h-[60%] rounded-full bg-[radial-gradient(circle,rgba(69,10,10,0.2)_0%,rgba(0,0,0,0)_70%)]"></div>
+        <div className="absolute top-[20%] right-[20%] w-[40%] h-[40%] rounded-full bg-[radial-gradient(circle,rgba(185,28,28,0.1)_0%,rgba(0,0,0,0)_70%)]"></div>
 
-        {/* Moving Blobs / Aurora */}
-        <div className="absolute top-0 left-1/4 w-96 h-96 bg-red-900/30 rounded-full blur-[128px] animate-blob mix-blend-screen"></div>
-        <div className="absolute top-0 right-1/4 w-96 h-96 bg-red-800/20 rounded-full blur-[128px] animate-blob animation-delay-2000 mix-blend-screen"></div>
-        <div className="absolute -bottom-32 left-1/3 w-96 h-96 bg-red-950/40 rounded-full blur-[128px] animate-blob animation-delay-4000 mix-blend-screen"></div>
-
-        {/* Noise Texture */}
-        <div className="absolute inset-0 opacity-[0.04] bg-[url('https://grainy-gradients.vercel.app/noise.svg')]"></div>
+        {/* Lightweight Grid Texture */}
+        <div className="absolute inset-0 opacity-10 bg-[linear-gradient(to_right,#333_1px,transparent_1px),linear-gradient(to_bottom,#333_1px,transparent_1px)] bg-[size:3rem_3rem]"></div>
 
         {/* Vignette */}
-        <div className="absolute inset-0 bg-[radial-gradient(transparent_0%,#000_100%)]"></div>
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,transparent_0%,#000_100%)] opacity-80"></div>
     </div>
 );
 
-// --- SHARED UI COMPONENTS (Refined) ---
+// --- SHARED UI COMPONENTS ---
 const Card = ({ children, className = "" }) => (
-    <div className={`glass-panel border border-white/5 shadow-2xl rounded-3xl p-6 relative overflow-hidden group card-shine transition-all duration-300 hover:border-white/10 hover:shadow-red-900/10 ${className}`}>
+    <div className={`glass-panel rounded-2xl p-6 relative overflow-hidden group card-shine transition-colors duration-200 ${className}`}>
         {children}
     </div>
 );
 
 const Input = (props) => (
-    <input {...props} className={`w-full bg-black/50 border border-neutral-800 rounded-xl p-3 text-white text-sm outline-none focus:border-red-600 focus:ring-1 focus:ring-red-600 transition-all placeholder-neutral-600 shadow-inner ${props.className}`} />
+    <input {...props} className={`w-full bg-black/40 border border-neutral-800 rounded-xl p-3 text-white text-sm outline-none focus:border-red-600 focus:ring-1 focus:ring-red-600 transition-all placeholder-neutral-600 shadow-inner ${props.className}`} />
 );
 const Select = (props) => (
-    <select {...props} className={`w-full bg-black/50 border border-neutral-800 rounded-xl p-3 text-white text-sm outline-none focus:border-red-600 focus:ring-1 focus:ring-red-600 transition-all shadow-inner ${props.className}`}>
+    <select {...props} className={`w-full bg-black/40 border border-neutral-800 rounded-xl p-3 text-white text-sm outline-none focus:border-red-600 focus:ring-1 focus:ring-red-600 transition-all shadow-inner ${props.className}`}>
         {props.children}
     </select>
 );
 const ButtonPrimary = ({ children, onClick, disabled, className = "" }) => (
-    <button onClick={onClick} disabled={disabled} className={`bg-gradient-to-br from-red-800 to-red-600 hover:from-red-700 hover:to-red-500 text-white font-black uppercase tracking-widest py-3 px-6 rounded-xl shadow-lg shadow-red-900/20 transition-all transform active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed relative overflow-hidden ${className}`}>
+    <button onClick={onClick} disabled={disabled} className={`bg-gradient-to-r from-red-800 to-red-600 hover:from-red-700 hover:to-red-500 text-white font-black uppercase tracking-widest py-3 px-6 rounded-xl shadow-lg shadow-red-900/20 transition-all transform active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed ${className}`}>
         {children}
     </button>
 );
 const ButtonSecondary = ({ children, onClick, className = "" }) => (
-    <button onClick={onClick} className={`bg-black/40 backdrop-blur hover:bg-neutral-900 border border-neutral-800 hover:border-red-900/50 text-neutral-400 hover:text-white font-bold uppercase tracking-wider py-2 px-4 rounded-xl transition-all ${className}`}>
+    <button onClick={onClick} className={`bg-black/40 hover:bg-neutral-900 border border-neutral-800 hover:border-red-900/50 text-neutral-400 hover:text-white font-bold uppercase tracking-wider py-2 px-4 rounded-xl transition-all ${className}`}>
         {children}
     </button>
 );
@@ -203,17 +191,17 @@ const useValorantData = () => {
     return { agentImages, mapImages };
 };
 
-// --- ANIMATED STAMPS ---
-const VictoryStamp = () => <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-50 border-8 border-green-500 text-green-500 font-black text-5xl md:text-7xl p-4 uppercase tracking-tighter -rotate-12 opacity-0 animate-stamp-in pointer-events-none mix-blend-screen shadow-[0_0_50px_rgba(34,197,94,0.5)]">VICTORY</div>;
-const DefeatStamp = () => <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-50 border-8 border-red-600 text-red-600 font-black text-5xl md:text-7xl p-4 uppercase tracking-tighter rotate-12 opacity-0 animate-stamp-in pointer-events-none mix-blend-screen shadow-[0_0_50px_rgba(220,38,38,0.5)]">DEFEAT</div>;
+// --- ANIMATED STAMPS (Simplified) ---
+const VictoryStamp = () => <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-50 border-8 border-green-500 text-green-500 font-black text-5xl md:text-7xl p-4 uppercase tracking-tighter -rotate-12 pointer-events-none mix-blend-screen shadow-[0_0_20px_rgba(34,197,94,0.5)] animate-fade-in">VICTORY</div>;
+const DefeatStamp = () => <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-50 border-8 border-red-600 text-red-600 font-black text-5xl md:text-7xl p-4 uppercase tracking-tighter rotate-12 pointer-events-none mix-blend-screen shadow-[0_0_20px_rgba(220,38,38,0.5)] animate-fade-in">DEFEAT</div>;
 
 // --- COMPONENTS ---
 
 function Modal({ isOpen, onClose, onConfirm, title, children }) {
     if (!isOpen) return null;
     return (
-        <div className="fixed inset-0 bg-black/95 z-[100] flex justify-center items-center backdrop-blur-xl p-4 overflow-y-auto">
-            <div className="bg-neutral-900 rounded-2xl shadow-2xl shadow-red-900/40 p-6 w-full max-w-md border border-red-900/60 animate-fade-in-up relative">
+        <div className="fixed inset-0 bg-black/95 z-[100] flex justify-center items-center backdrop-blur-sm p-4 overflow-y-auto">
+            <div className="bg-neutral-900 rounded-2xl shadow-2xl shadow-red-900/20 p-6 w-full max-w-md border border-red-900/40 animate-fade-in relative">
                 <h3 className="text-2xl font-black text-white mb-4 border-b pb-2 border-red-900/50 uppercase tracking-wider italic">{title}</h3>
                 <div className="text-neutral-300 mb-8">{children}</div>
                 <div className="flex justify-end gap-4">
@@ -265,7 +253,6 @@ function NextMatchCountdown({ events }) {
     if (!nextEvent) return null;
     return (
         <div className="bg-gradient-to-r from-black via-neutral-950 to-black p-6 rounded-3xl border border-red-900/40 shadow-2xl shadow-red-900/20 mb-8 flex flex-col md:flex-row justify-between items-center gap-6 relative overflow-hidden group">
-            <div className="absolute top-0 right-0 w-96 h-96 bg-red-600/10 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2 pointer-events-none animate-pulse"></div>
             <div className="z-10 text-center md:text-left"><div className="text-xs text-red-500 font-black uppercase tracking-[0.2em] mb-2">Next Match vs {nextEvent.opponent}</div><div className="text-3xl md:text-4xl font-black text-white italic tracking-tighter">{nextEvent.date} @ {nextEvent.time}</div><div className="text-neutral-500 text-sm font-mono mt-1 uppercase tracking-widest">Type: {nextEvent.type}</div></div>
             <div className="z-10"><div className="text-5xl md:text-7xl font-black text-transparent bg-clip-text bg-gradient-to-b from-white to-neutral-500 font-mono tracking-tighter tabular-nums drop-shadow-sm">{timeLeft}</div></div>
         </div>
@@ -290,11 +277,11 @@ function TeamComps({ members }) {
         const agentImage = agentImages[selectedAgent];
 
         return (
-            <div className="relative group h-64 bg-neutral-900/80 border border-white/10 rounded-2xl overflow-hidden transition-all hover:border-red-600 hover:shadow-[0_0_30px_rgba(220,38,38,0.3)] flex flex-col">
+            <div className="relative group h-64 bg-neutral-900/80 border border-white/10 rounded-2xl overflow-hidden transition-all hover:border-red-600 hover:shadow-[0_0_30px_rgba(220,38,38,0.2)] flex flex-col">
                 {selectedAgent && agentImage && (<div className="absolute inset-0 z-0"><img src={agentImage} alt={selectedAgent} className="w-full h-full object-cover opacity-40 group-hover:opacity-60 transition-opacity mix-blend-luminosity" style={{ objectPosition: 'center top' }} /><div className="absolute inset-0 bg-gradient-to-b from-transparent via-neutral-900/50 to-neutral-950"></div></div>)}
                 <div onClick={() => setActiveDropdown(isOpen ? null : index)} className="flex-1 relative flex flex-col justify-center items-center p-4 z-10 border-b border-white/5 cursor-pointer">
                     <label className="text-[10px] font-black text-red-500 uppercase tracking-[0.2em] mb-3 z-20 drop-shadow-md">Role {index + 1}</label>
-                    {selectedAgent ? (<div className="flex flex-col items-center animate-fade-in-up z-20"><div className="text-3xl sm:text-4xl font-black text-white uppercase tracking-tighter drop-shadow-[0_0_10px_rgba(0,0,0,0.8)]">{selectedAgent}</div><div className="mt-2 h-0.5 w-8 bg-red-600 rounded-full shadow-[0_0_8px_red]"></div></div>) : (<div className="flex flex-col items-center justify-center border-2 border-dashed border-neutral-700 rounded-xl p-4 w-full h-full hover:border-red-500/50 transition-all opacity-60 hover:opacity-100"><span className="text-2xl text-neutral-400 mb-1">+</span><span className="text-[10px] font-bold text-neutral-400 uppercase tracking-widest">Select Agent</span></div>)}
+                    {selectedAgent ? (<div className="flex flex-col items-center animate-fade-in z-20"><div className="text-3xl sm:text-4xl font-black text-white uppercase tracking-tighter drop-shadow-[0_0_10px_rgba(0,0,0,0.8)]">{selectedAgent}</div><div className="mt-2 h-0.5 w-8 bg-red-600 rounded-full shadow-[0_0_8px_red]"></div></div>) : (<div className="flex flex-col items-center justify-center border-2 border-dashed border-neutral-700 rounded-xl p-4 w-full h-full hover:border-red-500/50 transition-all opacity-60 hover:opacity-100"><span className="text-2xl text-neutral-400 mb-1">+</span><span className="text-[10px] font-bold text-neutral-400 uppercase tracking-widest">Select Agent</span></div>)}
                 </div>
                 {isOpen && (<div className="absolute inset-0 bg-neutral-950 z-50 flex flex-col animate-fade-in"><div className="flex justify-between items-center p-3 border-b border-white/10 bg-neutral-900"><span className="text-xs font-bold text-white uppercase tracking-widest">Pick Agent</span><button onClick={(e) => { e.stopPropagation(); setActiveDropdown(null); }} className="text-neutral-500 hover:text-red-500 text-lg leading-none">×</button></div><div className="flex-1 overflow-y-auto p-2 grid grid-cols-2 gap-1 custom-scrollbar">{AGENT_NAMES.map(agent => (<button key={agent} onClick={(e) => { e.stopPropagation(); const a = [...newComp.agents]; a[index] = agent; setNewComp({ ...newComp, agents: a }); setActiveDropdown(null); }} className={`text-[10px] font-bold uppercase py-2 rounded border border-transparent hover:border-red-900 transition-all ${newComp.agents[index] === agent ? 'bg-red-700 text-white' : 'text-neutral-400 hover:text-white hover:bg-neutral-800'}`}>{agent}</button>))}</div></div>)}
                 <div className="h-16 relative bg-black/80 backdrop-blur flex items-center justify-center z-20 border-t border-white/5"><select value={newComp.players[index]} onChange={e => { const p = [...newComp.players]; p[index] = e.target.value; setNewComp({ ...newComp, players: p }); }} className="appearance-none bg-transparent text-center text-xs font-bold text-neutral-500 uppercase outline-none cursor-pointer w-full h-full hover:text-white transition-all tracking-wider" style={{ textAlignLast: 'center' }}><option value="" className="bg-neutral-900">Assign Player</option>{members.map(m => <option key={m} value={m} className="bg-neutral-900">{m}</option>)}</select><div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-neutral-700 text-[10px]">▼</div></div>
@@ -507,7 +494,7 @@ function ProfileModal({ isOpen, onClose, currentUser }) {
     const [rank, setRank] = useState("Unranked"); const [agents, setAgents] = useState(""); const [status, setStatus] = useState("idle");
     const handleSave = async () => { setStatus("saving"); try { await setDoc(doc(db, 'roster', currentUser.displayName), { rank, agents }, { merge: true }); setStatus("success"); setTimeout(() => { setStatus("idle"); onClose(); }, 1000); } catch (e) { console.error(e); setStatus("idle"); } };
     if (!isOpen) return null;
-    return (<div className="fixed inset-0 bg-black/90 z-[100] flex justify-center items-center backdrop-blur-md p-4"><div className="bg-neutral-900 rounded-2xl shadow-2xl p-6 w-full max-w-md border border-white/10 animate-fade-in-up"><h3 className="text-2xl font-black text-white mb-6">Edit Profile</h3><div className="space-y-4"><div><label className="text-xs font-bold text-neutral-500 uppercase mb-1 block">Current Rank</label><Select value={rank} onChange={e => setRank(e.target.value)}>{RANKS.map(r => <option key={r} value={r}>{r}</option>)}</Select></div><div><label className="text-xs font-bold text-neutral-500 uppercase mb-1 block">Main Agents</label><Input type="text" value={agents} onChange={e => setAgents(e.target.value)} placeholder="Jett, Raze, Omen..." /></div></div><div className="mt-6 flex justify-end gap-3"><ButtonSecondary onClick={onClose}>Cancel</ButtonSecondary><ButtonPrimary onClick={handleSave}>{status === 'saving' ? 'Saving...' : 'Save Profile'}</ButtonPrimary></div></div></div>);
+    return (<div className="fixed inset-0 bg-black/90 z-[100] flex justify-center items-center backdrop-blur-md p-4"><div className="bg-neutral-900 rounded-2xl shadow-2xl p-6 w-full max-w-md border border-white/10 animate-fade-in"><h3 className="text-2xl font-black text-white mb-6">Edit Profile</h3><div className="space-y-4"><div><label className="text-xs font-bold text-neutral-500 uppercase mb-1 block">Current Rank</label><Select value={rank} onChange={e => setRank(e.target.value)}>{RANKS.map(r => <option key={r} value={r}>{r}</option>)}</Select></div><div><label className="text-xs font-bold text-neutral-500 uppercase mb-1 block">Main Agents</label><Input type="text" value={agents} onChange={e => setAgents(e.target.value)} placeholder="Jett, Raze, Omen..." /></div></div><div className="mt-6 flex justify-end gap-3"><ButtonSecondary onClick={onClose}>Cancel</ButtonSecondary><ButtonPrimary onClick={handleSave}>{status === 'saving' ? 'Saving...' : 'Save Profile'}</ButtonPrimary></div></div></div>);
 }
 
 function ApplicationForm({ currentUser }) {
@@ -624,7 +611,7 @@ export default function App() {
             </header>
 
             <main className="flex-1 overflow-y-auto p-6 scrollbar-thin scrollbar-thumb-red-900/50 scrollbar-track-black/20 relative z-10"><div className="max-w-[1920px] mx-auto">
-                {activeTab === 'dashboard' && <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 animate-fade-in-up">
+                {activeTab === 'dashboard' && <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 animate-fade-in">
                     <div className="lg:col-span-4 space-y-8">
                         <CaptainsMessage />
                         <LeaveLogger members={dynamicMembers} />
@@ -637,13 +624,13 @@ export default function App() {
                         <Card><h2 className="text-xl font-bold text-white mb-6 uppercase tracking-wide">Detailed Timeline <span className="text-neutral-500 text-sm normal-case">({userTimezone})</span></h2><div className="overflow-x-auto scrollbar-thin scrollbar-thumb-neutral-700"><table className="w-full text-left border-collapse min-w-[600px]"><thead><tr className="border-b border-neutral-800"><th className="p-3 text-xs font-bold text-neutral-500 uppercase tracking-wider w-32">Team Member</th>{SHORT_DAYS.map(day => (<th key={day} className="p-3 text-xs font-bold text-red-600 uppercase tracking-wider text-center border-l border-neutral-800">{day}</th>))}</tr></thead><tbody className="divide-y divide-neutral-800/50">{dynamicMembers.map(member => (<tr key={member} className="hover:bg-neutral-800/30 transition-colors group"><td className="p-4 font-bold text-white text-sm flex items-center gap-2"><div className="w-2 h-2 rounded-full bg-red-500 shadow-red-500/50 shadow-sm"></div>{member}</td>{DAYS.map((day) => { const slots = (displayAvail[member] || []).filter(s => s.day === day); return (<td key={day} className="p-2 align-middle border-l border-neutral-800/50"><div className="flex flex-col gap-1 items-center justify-center">{slots.length > 0 ? slots.map((s, i) => (<div key={i} className="bg-gradient-to-br from-red-600 to-red-700 text-white text-[10px] font-bold px-2 py-1 rounded w-full text-center shadow-md whitespace-nowrap flex items-center justify-center gap-1">{s.start}-{s.end}{RoleIcons[s.role] || RoleIcons.Unknown}</div>)) : <div className="h-1 w-4 bg-neutral-800 rounded-full"></div>}</div></td>); })}</tr>))}</tbody></table></div></Card>
                     </div>
                 </div>}
-                {activeTab === 'comps' && <div className="animate-fade-in-up h-full"><TeamComps members={dynamicMembers} /></div>}
-                {activeTab === 'matches' && <div className="animate-fade-in-up"><MatchHistory /></div>}
-                {activeTab === 'strats' && <div className="animate-fade-in-up h-[85vh]"><StratBook /></div>}
-                {activeTab === 'roster' && <div className="animate-fade-in-up h-full"><RosterManager members={dynamicMembers} /></div>}
-                {activeTab === 'partners' && <div className="animate-fade-in-up h-full"><PartnerDirectory /></div>}
-                {activeTab === 'admin' && <div className="animate-fade-in-up h-full"><AdminPanel /></div>}
-                {activeTab === 'mapveto' && <div className="animate-fade-in-up h-[80vh]"><MapVeto /></div>}
+                {activeTab === 'comps' && <div className="animate-fade-in h-full"><TeamComps members={dynamicMembers} /></div>}
+                {activeTab === 'matches' && <div className="animate-fade-in"><MatchHistory /></div>}
+                {activeTab === 'strats' && <div className="animate-fade-in h-[85vh]"><StratBook /></div>}
+                {activeTab === 'roster' && <div className="animate-fade-in h-full"><RosterManager members={dynamicMembers} /></div>}
+                {activeTab === 'partners' && <div className="animate-fade-in h-full"><PartnerDirectory /></div>}
+                {activeTab === 'admin' && <div className="animate-fade-in h-full"><AdminPanel /></div>}
+                {activeTab === 'mapveto' && <div className="animate-fade-in h-[80vh]"><MapVeto /></div>}
             </div></main>
             <Modal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} onConfirm={modalContent.onConfirm} title={modalContent.title}>{modalContent.children}</Modal>
         </div>
