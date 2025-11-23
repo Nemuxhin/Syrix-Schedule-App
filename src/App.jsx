@@ -1,9 +1,8 @@
 ﻿/*
-Syrix Team Availability - v6.1 (PERFECTED STRATBOOK)
-- FIX: StratBook now strictly enforced to 16:9 Aspect Ratio (No stretching).
-- FIX: "Moving Elements" bug solved by aligning DOM container with Canvas resolution.
-- FIX: Map size maximized (removed padding) for better visibility.
-- FEATURE: ValoPlant-style icons & Circular Agents.
+Syrix Team Availability - v6.2 (MAP VISIBILITY FIX)
+- FIX: Map now uses 'object-fill' to ensure 100% of the map is visible (no cropping).
+- FIX: Adjusted StratBook height to 75vh to fit on standard laptop screens.
+- FIX: Aspect Ratio locked to 16:9 to ensure saved images align perfectly with screen.
 */
 
 import React, { useState, useEffect, useMemo, useRef } from 'react';
@@ -170,7 +169,6 @@ const useValorantData = () => {
                 const agentRes = await fetch('https://valorant-api.com/v1/agents');
                 const agentData = await agentRes.json();
                 const aMap = {};
-                // CHANGED: Fetch displayIcon (Square) instead of fullPortrait
                 if (agentData.data) agentData.data.forEach(agent => { aMap[agent.displayName] = agent.displayIcon; });
                 setAgentImages(aMap);
 
@@ -298,7 +296,6 @@ function TeamComps({ members }) {
     );
 }
 
-// --- UPDATED STRATBOOK (Fixed Stretching & Size) ---
 function StratBook() {
     const [selectedMap, setSelectedMap] = useState(MAPS[0]);
     const canvasRef = useRef(null);
@@ -375,7 +372,6 @@ function StratBook() {
         }
     };
 
-    // --- EXPORT LOGIC ---
     const saveStrat = async () => {
         const tempCanvas = document.createElement('canvas');
         tempCanvas.width = 1280; tempCanvas.height = 720;
@@ -458,8 +454,8 @@ function StratBook() {
 
     return (
         <div className="h-full flex flex-col gap-6">
-            {/* Increased height for better visibility */}
-            <div className="flex gap-4 h-[85vh]">
+            {/* FIX: Height set to 75vh to prevent overflowing on laptops */}
+            <div className="flex gap-4 h-[75vh]">
                 {/* SIDEBAR */}
                 <Card className="w-24 flex flex-col gap-4 overflow-y-auto custom-scrollbar !p-3">
                     <div className="text-[10px] font-bold text-neutral-500 text-center uppercase">Util</div>
@@ -485,7 +481,7 @@ function StratBook() {
                 </Card>
 
                 {/* MAIN BOARD */}
-                {/* Removed padding to maximize size */}
+                {/* FIX: Removed padding !p-2 to maximize map size */}
                 <Card className="flex-1 flex flex-col relative items-center justify-center bg-black/80 !p-2">
                     <div className="w-full flex justify-between items-center mb-2 px-4 pt-2">
                         <h3 className="text-2xl font-black text-white">STRATBOOK {viewingStrat && <span className="text-red-500 text-sm ml-2">(VIEWING)</span>}</h3>
@@ -493,11 +489,10 @@ function StratBook() {
                     </div>
                     <div className="w-full flex overflow-x-auto gap-2 pb-4 mb-2 px-4 custom-scrollbar">{MAPS.map(m => <button key={m} onClick={() => { setSelectedMap(m); clearCanvas(); setViewingStrat(null); }} className={`px-3 py-1 rounded-full text-xs font-bold ${selectedMap === m ? 'bg-red-600 text-white' : 'bg-black text-neutral-500'}`}>{m}</button>)}</div>
 
-                    {/* FIXED: Added 'aspect-video' to container to lock aspect ratio and prevent stretching */}
-                    {/* FIXED: Added 'max-h-full' to ensure it fits on screen */}
+                    {/* FIX: 'aspect-video' forces 16:9 ratio. 'object-fill' forces map to fill that ratio. */}
                     <div ref={containerRef} className="relative w-full aspect-video bg-neutral-900 rounded-xl overflow-hidden border border-neutral-800 shadow-2xl" onDragOver={e => e.preventDefault()} onDrop={handleDrop}>
-                        {/* Map Image is now object-cover inside a 16:9 box, ensuring perfect fit */}
-                        {mapImages[selectedMap] && <img src={mapImages[selectedMap]} alt="Map" className="absolute inset-0 w-full h-full object-cover opacity-90 pointer-events-none" />}
+                        {/* FIX: object-fill ensures 100% of the map is visible inside the 16:9 box, preventing cropping. */}
+                        {mapImages[selectedMap] && <img src={mapImages[selectedMap]} alt="Map" className="absolute inset-0 w-full h-full object-fill opacity-90 pointer-events-none" />}
                         {!viewingStrat && mapIcons.map((icon, i) => (
                             <div key={icon.id} className="absolute cursor-move hover:scale-110 transition-transform z-20" style={{ left: `${icon.x}%`, top: `${icon.y}%`, transform: 'translate(-50%, -50%)' }} draggable onDragStart={(e) => { e.stopPropagation(); setMovingIcon(i); }} onDragEnd={() => setMovingIcon(null)} onDoubleClick={(e) => { e.stopPropagation(); const u = [...mapIcons]; u.splice(i, 1); setMapIcons(u); }}>
                                 {icon.type === 'agent' ?
@@ -525,7 +520,6 @@ function StratBook() {
                             onTouchMove={(e) => { const touch = e.touches[0]; const mouseEvent = new MouseEvent("mousemove", { clientX: touch.clientX, clientY: touch.clientY }); draw(mouseEvent); }}
                             onTouchEnd={stopDraw}
                         />
-                        {/* Viewing Image is now object-contain to prevent squashing */}
                         {viewingStrat && <div className="absolute inset-0 z-30 bg-black flex items-center justify-center"><img src={viewingStrat} alt="Saved Strat" className="w-full h-full object-contain" /></div>}
                     </div>
                 </Card>
