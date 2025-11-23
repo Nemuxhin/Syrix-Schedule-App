@@ -1,11 +1,11 @@
 ﻿/*
-Syrix Team Availability - v6.2 (MAP VISIBILITY FIX)
-- FIX: Map now uses 'object-fill' to ensure 100% of the map is visible (no cropping).
-- FIX: Adjusted StratBook height to 75vh to fit on standard laptop screens.
-- FIX: Aspect Ratio locked to 16:9 to ensure saved images align perfectly with screen.
+Syrix Team Availability - v7.0 (PREMIUM UX EDITION)
+- FEATURE: "Toast" Notification System (Replaces native alerts).
+- FEATURE: Performance Trend Graph (Visualizes Match History).
+- RETAINED: Square StratBook (v6.3 fix) & High Performance CSS.
 */
 
-import React, { useState, useEffect, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useMemo, useRef, createContext, useContext } from 'react';
 import { initializeApp } from 'firebase/app';
 import { getFirestore, collection, onSnapshot, doc, setDoc, deleteDoc, addDoc, updateDoc, query, where } from 'firebase/firestore';
 import { getAuth, onAuthStateChanged, signInWithPopup, signOut, OAuthProvider } from 'firebase/auth';
@@ -41,6 +41,32 @@ const AGENT_NAMES = [
     "Sova", "Fade", "Skye", "Breach", "KAY/O", "Gekko",
     "Killjoy", "Cypher", "Sage", "Chamber", "Deadlock", "Veto"
 ];
+
+// --- TOAST CONTEXT SYSTEM ---
+const ToastContext = createContext();
+const useToast = () => useContext(ToastContext);
+
+const ToastProvider = ({ children }) => {
+    const [toasts, setToasts] = useState([]);
+    const addToast = (message, type = 'success') => {
+        const id = Date.now();
+        setToasts(prev => [...prev, { id, message, type }]);
+        setTimeout(() => setToasts(prev => prev.filter(t => t.id !== id)), 4000);
+    };
+    return (
+        <ToastContext.Provider value={addToast}>
+            {children}
+            <div className="fixed bottom-6 right-6 z-[100] flex flex-col gap-3 pointer-events-none">
+                {toasts.map(t => (
+                    <div key={t.id} className={`pointer-events-auto min-w-[240px] backdrop-blur-xl border-l-4 p-4 rounded-r-lg shadow-2xl transform transition-all animate-slide-in flex items-center gap-3 ${t.type === 'success' ? 'bg-green-900/80 border-green-500 text-white' : 'bg-red-900/80 border-red-500 text-white'}`}>
+                        <div className={`w-6 h-6 rounded-full flex items-center justify-center font-bold text-xs ${t.type === 'success' ? 'bg-green-500 text-black' : 'bg-red-500 text-white'}`}>{t.type === 'success' ? '✓' : '!'}</div>
+                        <span className="font-bold text-sm">{t.message}</span>
+                    </div>
+                ))}
+            </div>
+        </ToastContext.Provider>
+    );
+};
 
 // --- VALOPLANT STYLE UTILITIES ---
 const UTILITY_TYPES = [
@@ -97,7 +123,7 @@ const convertToGMT = (day, time) => {
     return { day: jsDays[d.getUTCDay()], time: `${String(d.getUTCHours()).padStart(2, '0')}:${String(d.getUTCMinutes()).padStart(2, '0')}` };
 };
 
-// --- OPTIMIZED STYLES ---
+// --- STYLES ---
 const GlobalStyles = () => (
     <style>{`
         .glass-panel {
@@ -111,9 +137,10 @@ const GlobalStyles = () => (
             border-color: rgba(220, 38, 38, 0.4);
             background: rgba(20, 20, 20, 0.98);
         }
+        @keyframes slideIn { from { transform: translateX(100%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+        .animate-slide-in { animation: slideIn 0.3s cubic-bezier(0.2, 0.8, 0.2, 1); }
         @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
         .animate-fade-in { animation: fadeIn 0.4s ease-out forwards; }
-        
         .custom-scrollbar::-webkit-scrollbar { width: 6px; height: 6px; }
         .custom-scrollbar::-webkit-scrollbar-track { background: rgba(0,0,0,0.3); border-radius: 3px; }
         .custom-scrollbar::-webkit-scrollbar-thumb { background: #333; border-radius: 3px; }
@@ -121,7 +148,7 @@ const GlobalStyles = () => (
     `}</style>
 );
 
-// --- OPTIMIZED BACKGROUND (Static) ---
+// --- BACKGROUND ---
 const BackgroundFlare = () => (
     <div className="fixed inset-0 w-full h-full z-0 pointer-events-none bg-black">
         <div className="absolute top-[-10%] left-[-10%] w-[50%] h-[50%] rounded-full bg-[radial-gradient(circle,rgba(127,29,29,0.25)_0%,rgba(0,0,0,0)_70%)]"></div>
@@ -258,10 +285,11 @@ function TeamComps({ members }) {
     const [newComp, setNewComp] = useState({ agents: Array(5).fill(''), players: Array(5).fill('') });
     const [activeDropdown, setActiveDropdown] = useState(null);
     const { agentImages } = useValorantData();
+    const addToast = useToast();
 
     useEffect(() => { const unsub = onSnapshot(collection(db, 'comps'), (snap) => { const c = []; snap.forEach(doc => c.push({ id: doc.id, ...doc.data() })); setComps(c); }); return () => unsub(); }, []);
-    const saveComp = async () => { if (newComp.agents.some(a => !a)) return; await addDoc(collection(db, 'comps'), { map: selectedMap, ...newComp }); setNewComp({ agents: Array(5).fill(''), players: Array(5).fill('') }); };
-    const deleteComp = async (id) => await deleteDoc(doc(db, 'comps', id));
+    const saveComp = async () => { if (newComp.agents.some(a => !a)) return addToast('Please select all 5 agents', 'error'); await addDoc(collection(db, 'comps'), { map: selectedMap, ...newComp }); setNewComp({ agents: Array(5).fill(''), players: Array(5).fill('') }); addToast('Composition Saved'); };
+    const deleteComp = async (id) => { await deleteDoc(doc(db, 'comps', id)); addToast('Composition Deleted'); };
     const currentMapComps = comps.filter(c => c.map === selectedMap);
 
     const AgentCard = ({ index }) => {
@@ -296,7 +324,6 @@ function TeamComps({ members }) {
     );
 }
 
-// --- UPDATED STRATBOOK (Square Ratio - No Deformation) ---
 function StratBook() {
     const [selectedMap, setSelectedMap] = useState(MAPS[0]);
     const canvasRef = useRef(null);
@@ -304,6 +331,7 @@ function StratBook() {
     const [isDrawing, setIsDrawing] = useState(false);
     const { mapImages, agentImages } = useValorantData();
     const [color, setColor] = useState('#ef4444');
+    const addToast = useToast();
 
     // ValoPlant Features
     const [mapIcons, setMapIcons] = useState([]);
@@ -352,14 +380,13 @@ function StratBook() {
         const ctx = canvasRef.current.getContext('2d');
         ctx.clearRect(0, 0, canvasRef.current.width, canvasRef.current.height);
         setMapIcons([]);
+        addToast('Canvas Cleared', 'success');
     };
 
-    // Robust Drag & Drop
     const handleDrop = (e) => {
         e.preventDefault();
         if (!containerRef.current) return;
         const rect = containerRef.current.getBoundingClientRect();
-        // FIX: Coordinate math relies on the container being the same shape as the map
         const x = ((e.clientX - rect.left) / rect.width) * 100;
         const y = ((e.clientY - rect.top) / rect.height) * 100;
 
@@ -374,28 +401,21 @@ function StratBook() {
         }
     };
 
-    // --- EXPORT LOGIC (SQUARE) ---
     const saveStrat = async () => {
         const tempCanvas = document.createElement('canvas');
-        // FIX: Changed resolution to 1024x1024 (Square) to match map shape
-        tempCanvas.width = 1024;
-        tempCanvas.height = 1024;
+        tempCanvas.width = 1024; tempCanvas.height = 1024;
         const ctx = tempCanvas.getContext('2d');
 
-        // 1. Draw Map
         if (mapImages[selectedMap]) {
             const img = new Image();
             img.src = mapImages[selectedMap];
             img.crossOrigin = "anonymous";
             await new Promise((resolve) => { img.onload = resolve; img.onerror = resolve; img.src = mapImages[selectedMap]; });
-            // Draw square
             ctx.drawImage(img, 0, 0, 1024, 1024);
         }
 
-        // 2. Draw Drawings
         ctx.drawImage(canvasRef.current, 0, 0);
 
-        // 3. Draw Icons (With Circular Clipping for Agents)
         for (const icon of mapIcons) {
             const px = (icon.x / 100) * 1024;
             const py = (icon.y / 100) * 1024;
@@ -405,126 +425,62 @@ function StratBook() {
                 img.crossOrigin = "anonymous";
                 img.src = agentImages[icon.name];
                 await new Promise(r => { img.onload = r; img.onerror = r; });
-
                 ctx.save();
-                ctx.beginPath();
-                ctx.arc(px, py, 25, 0, Math.PI * 2);
-                ctx.closePath();
-                ctx.clip();
+                ctx.beginPath(); ctx.arc(px, py, 25, 0, Math.PI * 2); ctx.closePath(); ctx.clip();
                 ctx.drawImage(img, px - 25, py - 25, 50, 50);
-
-                // Border for Agent
-                ctx.strokeStyle = '#ffffff';
-                ctx.lineWidth = 2;
-                ctx.stroke();
-                ctx.restore();
+                ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 2; ctx.stroke(); ctx.restore();
             } else {
-                // Draw Utility shapes
                 ctx.beginPath();
                 if (icon.shape === 'ring') {
-                    ctx.arc(px, py, 20, 0, Math.PI * 2);
-                    ctx.fillStyle = icon.color;
-                    ctx.fill();
-                    ctx.lineWidth = 3;
-                    ctx.strokeStyle = icon.border;
-                    ctx.stroke();
+                    ctx.arc(px, py, 20, 0, Math.PI * 2); ctx.fillStyle = icon.color; ctx.fill(); ctx.lineWidth = 3; ctx.strokeStyle = icon.border; ctx.stroke();
                 } else if (icon.shape === 'star') {
-                    ctx.fillStyle = icon.color;
-                    ctx.moveTo(px, py - 15);
-                    ctx.lineTo(px + 15, py);
-                    ctx.lineTo(px, py + 15);
-                    ctx.lineTo(px - 15, py);
-                    ctx.fill();
+                    ctx.fillStyle = icon.color; ctx.moveTo(px, py - 15); ctx.lineTo(px + 15, py); ctx.lineTo(px, py + 15); ctx.lineTo(px - 15, py); ctx.fill();
                 } else if (icon.shape === 'triangle') {
-                    ctx.fillStyle = icon.color;
-                    ctx.moveTo(px, py - 15);
-                    ctx.lineTo(px + 15, py + 15);
-                    ctx.lineTo(px - 15, py + 15);
-                    ctx.fill();
+                    ctx.fillStyle = icon.color; ctx.moveTo(px, py - 15); ctx.lineTo(px + 15, py + 15); ctx.lineTo(px - 15, py + 15); ctx.fill();
                 } else {
-                    ctx.fillStyle = icon.color;
-                    ctx.arc(px, py, 15, 0, Math.PI * 2);
-                    ctx.fill();
+                    ctx.fillStyle = icon.color; ctx.arc(px, py, 15, 0, Math.PI * 2); ctx.fill();
                 }
             }
         }
 
         const dataUrl = tempCanvas.toDataURL();
         await addDoc(collection(db, 'strats'), { map: selectedMap, image: dataUrl, date: new Date().toISOString() });
-        alert('Strat Saved!');
+        addToast('Strategy Saved Successfully!');
     };
 
-    const addLink = async () => { if (!newLink.title || !newLink.url) return; await addDoc(collection(db, 'strat_links'), { ...newLink, map: selectedMap }); setNewLink({ title: '', url: '' }); };
-    const deleteLink = async (id) => await deleteDoc(doc(db, 'strat_links', id));
-    const deleteStrat = async (id) => { if (viewingStrat) setViewingStrat(null); await deleteDoc(doc(db, 'strats', id)); };
+    const addLink = async () => { if (!newLink.title || !newLink.url) return; await addDoc(collection(db, 'strat_links'), { ...newLink, map: selectedMap }); setNewLink({ title: '', url: '' }); addToast('Link Added'); };
+    const deleteLink = async (id) => { await deleteDoc(doc(db, 'strat_links', id)); addToast('Link Removed'); };
+    const deleteStrat = async (id) => { if (viewingStrat) setViewingStrat(null); await deleteDoc(doc(db, 'strats', id)); addToast('Strategy Deleted'); };
 
     return (
         <div className="h-full flex flex-col gap-6">
             <div className="flex gap-4 h-[75vh]">
-                {/* SIDEBAR */}
                 <Card className="w-24 flex flex-col gap-4 overflow-y-auto custom-scrollbar !p-3">
                     <div className="text-[10px] font-bold text-neutral-500 text-center uppercase">Util</div>
                     {UTILITY_TYPES.map(u => (
-                        <div
-                            key={u.id}
-                            draggable
-                            onDragStart={() => setDragItem({ type: 'util', ...u })}
-                            onDragEnd={() => setDragItem(null)}
-                            className={`w-10 h-10 mx-auto cursor-grab active:cursor-grabbing hover:scale-110 transition-transform shadow-lg flex items-center justify-center`}
-                            title={u.label}
-                        >
-                            {/* Sidebar Visuals */}
+                        <div key={u.id} draggable onDragStart={() => setDragItem({ type: 'util', ...u })} onDragEnd={() => setDragItem(null)} className={`w-10 h-10 mx-auto cursor-grab active:cursor-grabbing hover:scale-110 transition-transform shadow-lg flex items-center justify-center`} title={u.label}>
                             {u.shape === 'ring' && <div className="w-full h-full rounded-full border-4" style={{ backgroundColor: u.color, borderColor: u.border }}></div>}
                             {u.shape === 'star' && <div className="w-0 h-0 border-l-[10px] border-l-transparent border-r-[10px] border-r-transparent border-b-[20px]" style={{ borderBottomColor: u.color }}></div>}
                             {u.shape === 'triangle' && <div className="w-0 h-0 border-l-[10px] border-l-transparent border-r-[10px] border-r-transparent border-b-[20px]" style={{ borderBottomColor: u.color }}></div>}
                         </div>
                     ))}
                     <div className="text-[10px] font-bold text-neutral-500 text-center uppercase mt-4">Agents</div>
-                    {AGENT_NAMES.map(a => (
-                        <img key={a} src={agentImages[a]} alt={a} draggable onDragStart={() => setDragItem({ type: 'agent', name: a })} onDragEnd={() => setDragItem(null)} className="w-10 h-10 rounded-full mx-auto border-2 border-neutral-800 bg-black p-0.5 cursor-grab active:cursor-grabbing hover:border-red-500 transition-colors object-cover" />
-                    ))}
+                    {AGENT_NAMES.map(a => (<img key={a} src={agentImages[a]} alt={a} draggable onDragStart={() => setDragItem({ type: 'agent', name: a })} onDragEnd={() => setDragItem(null)} className="w-10 h-10 rounded-full mx-auto border-2 border-neutral-800 bg-black p-0.5 cursor-grab active:cursor-grabbing hover:border-red-500 transition-colors object-cover" />))}
                 </Card>
-
-                {/* MAIN BOARD */}
                 <Card className="flex-1 flex flex-col relative items-center justify-center bg-black/80 !p-2">
                     <div className="w-full flex justify-between items-center mb-2 px-4 pt-2">
                         <h3 className="text-2xl font-black text-white">STRATBOOK {viewingStrat && <span className="text-red-500 text-sm ml-2">(VIEWING)</span>}</h3>
                         <div className="flex gap-2">{!viewingStrat ? (<><button onClick={() => setColor('#ef4444')} className="w-6 h-6 rounded-full bg-red-500 border border-white"></button><button onClick={() => setColor('#3b82f6')} className="w-6 h-6 rounded-full bg-blue-500 border border-white"></button><button onClick={() => setColor('#ffffff')} className="w-6 h-6 rounded-full bg-white border border-white"></button><ButtonSecondary onClick={clearCanvas} className="text-xs py-1 px-3">Clear</ButtonSecondary><ButtonPrimary onClick={saveStrat} className="text-xs py-1 px-3">Save</ButtonPrimary></>) : <ButtonSecondary onClick={() => setViewingStrat(null)} className="text-xs bg-red-900/50 border-red-500 text-white">Close</ButtonSecondary>}</div>
                     </div>
                     <div className="w-full flex overflow-x-auto gap-2 pb-4 mb-2 px-4 custom-scrollbar">{MAPS.map(m => <button key={m} onClick={() => { setSelectedMap(m); clearCanvas(); setViewingStrat(null); }} className={`px-3 py-1 rounded-full text-xs font-bold ${selectedMap === m ? 'bg-red-600 text-white' : 'bg-black text-neutral-500'}`}>{m}</button>)}</div>
-
-                    {/* FIX: 'aspect-square' forces 1:1 ratio matching Valorant maps. 'h-full' keeps it within view. */}
                     <div ref={containerRef} className="relative h-full aspect-square bg-neutral-900 rounded-xl overflow-hidden border border-neutral-800 shadow-2xl mx-auto" onDragOver={e => e.preventDefault()} onDrop={handleDrop}>
-                        {/* FIX: object-cover on a square container means 100% visibility, no stretch. */}
                         {mapImages[selectedMap] && <img src={mapImages[selectedMap]} alt="Map" className="absolute inset-0 w-full h-full object-cover pointer-events-none" />}
                         {!viewingStrat && mapIcons.map((icon, i) => (
                             <div key={icon.id} className="absolute cursor-move hover:scale-110 transition-transform z-20" style={{ left: `${icon.x}%`, top: `${icon.y}%`, transform: 'translate(-50%, -50%)' }} draggable onDragStart={(e) => { e.stopPropagation(); setMovingIcon(i); }} onDragEnd={() => setMovingIcon(null)} onDoubleClick={(e) => { e.stopPropagation(); const u = [...mapIcons]; u.splice(i, 1); setMapIcons(u); }}>
-                                {icon.type === 'agent' ?
-                                    <img src={agentImages[icon.name]} alt={icon.name} className="w-10 h-10 rounded-full border-2 border-white shadow-md pointer-events-none bg-black" /> :
-                                    (icon.shape === 'ring' ?
-                                        <div className="w-12 h-12 rounded-full border-4 shadow-sm backdrop-blur-sm" style={{ backgroundColor: icon.color, borderColor: icon.border }}></div> :
-                                        (icon.shape === 'triangle' ?
-                                            <div className="w-0 h-0 border-l-[10px] border-l-transparent border-r-[10px] border-r-transparent border-b-[20px]" style={{ borderBottomColor: icon.border }}></div> :
-                                            <div className="w-6 h-6 transform rotate-45" style={{ backgroundColor: icon.color }}></div>
-                                        )
-                                    )
-                                }
+                                {icon.type === 'agent' ? <img src={agentImages[icon.name]} alt={icon.name} className="w-10 h-10 rounded-full border-2 border-white shadow-md pointer-events-none bg-black" /> : (icon.shape === 'ring' ? <div className="w-12 h-12 rounded-full border-4 shadow-sm backdrop-blur-sm" style={{ backgroundColor: icon.color, borderColor: icon.border }}></div> : (icon.shape === 'triangle' ? <div className="w-0 h-0 border-l-[10px] border-l-transparent border-r-[10px] border-r-transparent border-b-[20px]" style={{ borderBottomColor: icon.border }}></div> : <div className="w-6 h-6 transform rotate-45" style={{ backgroundColor: icon.color }}></div>))}
                             </div>
                         ))}
-                        {/* FIX: Canvas resolution matches square aspect ratio */}
-                        <canvas
-                            ref={canvasRef}
-                            width={1024}
-                            height={1024}
-                            className={`absolute inset-0 w-full h-full z-10 touch-none ${viewingStrat ? 'hidden' : 'cursor-crosshair'}`}
-                            onMouseDown={startDraw}
-                            onMouseMove={draw}
-                            onMouseUp={stopDraw}
-                            onMouseLeave={stopDraw}
-                            onTouchStart={(e) => { const touch = e.touches[0]; const mouseEvent = new MouseEvent("mousedown", { clientX: touch.clientX, clientY: touch.clientY }); startDraw(mouseEvent); }}
-                            onTouchMove={(e) => { const touch = e.touches[0]; const mouseEvent = new MouseEvent("mousemove", { clientX: touch.clientX, clientY: touch.clientY }); draw(mouseEvent); }}
-                            onTouchEnd={stopDraw}
-                        />
+                        <canvas ref={canvasRef} width={1024} height={1024} className={`absolute inset-0 w-full h-full z-10 touch-none ${viewingStrat ? 'hidden' : 'cursor-crosshair'}`} onMouseDown={startDraw} onMouseMove={draw} onMouseUp={stopDraw} onMouseLeave={stopDraw} onTouchStart={(e) => { const touch = e.touches[0]; const mouseEvent = new MouseEvent("mousedown", { clientX: touch.clientX, clientY: touch.clientY }); startDraw(mouseEvent); }} onTouchMove={(e) => { const touch = e.touches[0]; const mouseEvent = new MouseEvent("mousemove", { clientX: touch.clientX, clientY: touch.clientY }); draw(mouseEvent); }} onTouchEnd={stopDraw} />
                         {viewingStrat && <div className="absolute inset-0 z-30 bg-black flex items-center justify-center"><img src={viewingStrat} alt="Saved Strat" className="w-full h-full object-contain" /></div>}
                     </div>
                 </Card>
@@ -533,12 +489,14 @@ function StratBook() {
         </div>
     );
 }
+
 function MatchHistory() {
     const [matches, setMatches] = useState([]); const [isAdding, setIsAdding] = useState(false); const [expandedId, setExpandedId] = useState(null); const [editingId, setEditingId] = useState(null); const [editForm, setEditForm] = useState({}); const [newMatch, setNewMatch] = useState({ opponent: '', date: '', myScore: '', enemyScore: '', atkScore: '', defScore: '', map: MAPS[0], vod: '' });
+    const addToast = useToast();
     useEffect(() => { const unsub = onSnapshot(collection(db, 'events'), (snap) => { const evs = []; snap.forEach(doc => evs.push({ id: doc.id, ...doc.data() })); setMatches(evs.filter(e => e.result).sort((a, b) => new Date(b.date) - new Date(a.date))); }); return () => unsub(); }, []);
-    const handleAdd = async () => { await addDoc(collection(db, 'events'), { type: 'Scrim', opponent: newMatch.opponent, date: newMatch.date, result: { ...newMatch } }); setIsAdding(false); setNewMatch({ opponent: '', date: '', myScore: '', enemyScore: '', atkScore: '', defScore: '', map: MAPS[0], vod: '' }); };
+    const handleAdd = async () => { await addDoc(collection(db, 'events'), { type: 'Scrim', opponent: newMatch.opponent, date: newMatch.date, result: { ...newMatch } }); setIsAdding(false); setNewMatch({ opponent: '', date: '', myScore: '', enemyScore: '', atkScore: '', defScore: '', map: MAPS[0], vod: '' }); addToast('Match Logged'); };
     const startEdit = (m) => { setEditingId(m.id); setEditForm({ opponent: m.opponent, date: m.date, ...m.result }); };
-    const saveEdit = async () => { const { opponent, date, ...resultData } = editForm; await updateDoc(doc(db, 'events', editingId), { opponent, date, result: resultData }); setEditingId(null); };
+    const saveEdit = async () => { const { opponent, date, ...resultData } = editForm; await updateDoc(doc(db, 'events', editingId), { opponent, date, result: resultData }); setEditingId(null); addToast('Match Updated'); };
     const getResultColor = (my, enemy) => { const m = parseInt(my); const e = parseInt(enemy); if (m > e) return 'border-l-4 border-l-green-500'; if (m < e) return 'border-l-4 border-l-red-600'; return 'border-l-4 border-l-neutral-500'; };
 
     return (
@@ -557,15 +515,17 @@ function MatchHistory() {
 
 function AdminPanel() {
     const [applications, setApplications] = useState([]);
+    const addToast = useToast();
     useEffect(() => { const unsub = onSnapshot(collection(db, 'applications'), (snap) => { const apps = []; snap.forEach(doc => apps.push({ id: doc.id, ...doc.data() })); setApplications(apps); }); return () => unsub(); }, []);
-    const acceptApplicant = async (app) => { await setDoc(doc(db, 'roster', app.user), { rank: app.rank, role: 'Tryout', notes: `Tracker: ${app.tracker}\nWhy: ${app.why}`, joinedAt: new Date().toISOString() }); await deleteDoc(doc(db, 'applications', app.id)); };
-    const rejectApplicant = async (id) => { await deleteDoc(doc(db, 'applications', id)); };
+    const acceptApplicant = async (app) => { await setDoc(doc(db, 'roster', app.user), { rank: app.rank, role: 'Tryout', notes: `Tracker: ${app.tracker}\nWhy: ${app.why}`, joinedAt: new Date().toISOString() }); await deleteDoc(doc(db, 'applications', app.id)); addToast(`Accepted ${app.user}`); };
+    const rejectApplicant = async (id) => { await deleteDoc(doc(db, 'applications', id)); addToast('Applicant Rejected'); };
     return (<Card><h2 className="text-3xl font-black text-white mb-6 flex items-center gap-3"><span className="text-red-600">ADMIN</span> DASHBOARD</h2><div className="space-y-6">{applications.length === 0 ? <p className="text-neutral-600 italic">No pending applications.</p> : (<div className="grid grid-cols-1 gap-4">{applications.map(app => (<div key={app.id} className="bg-black border border-neutral-800 p-6 rounded-2xl flex flex-col md:flex-row justify-between gap-6"><div className="space-y-2 flex-1"><div className="flex items-center gap-3"><h4 className="text-xl font-black text-white">{app.user}</h4><span className="bg-neutral-900 text-neutral-400 text-xs px-2 py-1 rounded font-bold uppercase border border-neutral-800">{app.rank}</span><span className="bg-neutral-900 text-neutral-400 text-xs px-2 py-1 rounded font-bold uppercase border border-neutral-800">{app.role}</span></div><p className="text-neutral-400 text-sm"><strong className="text-neutral-500">Experience:</strong> {app.exp}</p><p className="text-neutral-300 text-sm italic">"{app.why}"</p><a href={app.tracker} target="_blank" rel="noreferrer" className="text-red-500 text-xs font-bold hover:underline block mt-2">View Tracker Profile &rarr;</a></div><div className="flex flex-row md:flex-col gap-3 justify-center"><button onClick={() => acceptApplicant(app)} className="bg-green-900/20 hover:bg-green-600 border border-green-900 text-green-500 hover:text-white font-bold px-6 py-3 rounded-xl transition-all">ACCEPT</button><button onClick={() => rejectApplicant(app.id)} className="bg-red-900/20 hover:bg-red-900 text-red-500 hover:text-white font-bold px-6 py-3 rounded-xl transition-all border border-red-900">REJECT</button></div></div>))}</div>)}</div></Card>);
 }
 
 function ProfileModal({ isOpen, onClose, currentUser }) {
     const [rank, setRank] = useState("Unranked"); const [agents, setAgents] = useState(""); const [status, setStatus] = useState("idle");
-    const handleSave = async () => { setStatus("saving"); try { await setDoc(doc(db, 'roster', currentUser.displayName), { rank, agents }, { merge: true }); setStatus("success"); setTimeout(() => { setStatus("idle"); onClose(); }, 1000); } catch (e) { console.error(e); setStatus("idle"); } };
+    const addToast = useToast();
+    const handleSave = async () => { setStatus("saving"); try { await setDoc(doc(db, 'roster', currentUser.displayName), { rank, agents }, { merge: true }); setStatus("success"); addToast('Profile Updated'); setTimeout(() => { setStatus("idle"); onClose(); }, 1000); } catch (e) { console.error(e); setStatus("idle"); addToast('Update Failed', 'error'); } };
     if (!isOpen) return null;
     return (<div className="fixed inset-0 bg-black/90 z-[100] flex justify-center items-center backdrop-blur-md p-4"><div className="bg-neutral-900 rounded-2xl shadow-2xl p-6 w-full max-w-md border border-white/10 animate-fade-in"><h3 className="text-2xl font-black text-white mb-6">Edit Profile</h3><div className="space-y-4"><div><label className="text-xs font-bold text-neutral-500 uppercase mb-1 block">Current Rank</label><Select value={rank} onChange={e => setRank(e.target.value)}>{RANKS.map(r => <option key={r} value={r}>{r}</option>)}</Select></div><div><label className="text-xs font-bold text-neutral-500 uppercase mb-1 block">Main Agents</label><Input type="text" value={agents} onChange={e => setAgents(e.target.value)} placeholder="Jett, Raze, Omen..." /></div></div><div className="mt-6 flex justify-end gap-3"><ButtonSecondary onClick={onClose}>Cancel</ButtonSecondary><ButtonPrimary onClick={handleSave}>{status === 'saving' ? 'Saving...' : 'Save Profile'}</ButtonPrimary></div></div></div>);
 }
@@ -587,15 +547,18 @@ function MapVeto() {
 
 function CaptainsMessage() {
     const [message, setMessage] = useState({ text: "Welcome", updatedBy: "System" }); const [isEditing, setIsEditing] = useState(false); const [draft, setDraft] = useState(""); const auth = getAuth();
+    const addToast = useToast();
     useEffect(() => { const unsub = onSnapshot(doc(db, 'general', 'captain_message'), (s) => { if (s.exists()) setMessage(s.data()); }); return () => unsub(); }, []);
-    const handleSave = async () => { await setDoc(doc(db, 'general', 'captain_message'), { text: draft, updatedBy: auth.currentUser.displayName }); setIsEditing(false); };
+    const handleSave = async () => { await setDoc(doc(db, 'general', 'captain_message'), { text: draft, updatedBy: auth.currentUser.displayName }); setIsEditing(false); addToast('Message Updated'); };
     return (<div className="bg-gradient-to-br from-red-950 to-black p-6 rounded-3xl border border-red-900/50 shadow-xl"><div className="flex justify-between items-center mb-2"><h2 className="text-lg font-black text-white">📢 CAPTAIN'S MESSAGE</h2>{!isEditing && <button onClick={() => { setDraft(message.text); setIsEditing(true) }} className="text-xs text-neutral-400">Edit</button>}</div>{isEditing ? <div><textarea value={draft} onChange={e => setDraft(e.target.value)} className="w-full bg-black p-2 text-white mb-2" /><ButtonPrimary onClick={handleSave} className="text-xs py-2">Post</ButtonPrimary></div> : <p className="text-slate-200 text-sm whitespace-pre-wrap">"{message.text}"</p>}</div>);
 }
 
 function PerformanceWidget({ events }) {
     const stats = useMemo(() => {
         let wins = 0, losses = 0; let atkWins = 0, atkPlayed = 0, defWins = 0, defPlayed = 0; const mapStats = {};
-        events.filter(e => e.result && e.result.myScore).forEach(m => {
+        const recentMatches = events.filter(e => e.result && e.result.myScore).sort((a, b) => new Date(a.date) - new Date(b.date));
+
+        recentMatches.forEach(m => {
             const my = parseInt(m.result.myScore); const enemy = parseInt(m.result.enemyScore);
             if (my > enemy) wins++; else if (my < enemy) losses++;
             if (!mapStats[m.result.map]) mapStats[m.result.map] = { played: 0, wins: 0 };
@@ -604,21 +567,61 @@ function PerformanceWidget({ events }) {
             if (m.result.atkScore) { atkWins += parseInt(m.result.atkScore); atkPlayed += 12; }
             if (m.result.defScore) { defWins += parseInt(m.result.defScore); defPlayed += 12; }
         });
+
         const totalGames = wins + losses;
         const overallWinRate = totalGames > 0 ? Math.round((wins / totalGames) * 100) : 0;
         const atkWinRate = atkPlayed > 0 ? Math.round((atkWins / atkPlayed) * 100) : 0;
         const defWinRate = defPlayed > 0 ? Math.round((defWins / defPlayed) * 100) : 0;
         let bestMap = 'N/A'; let bestRate = -1;
         Object.keys(mapStats).forEach(m => { const r = mapStats[m].wins / mapStats[m].played; if (r > bestRate) { bestRate = r; bestMap = m; } });
-        return { wins, losses, overallWinRate, bestMap, atkWinRate, defWinRate };
+
+        // Trend Data (Last 10 Games - Cumulative Score Differential)
+        let cumulative = 0;
+        const trendPoints = recentMatches.slice(-10).map((m, i) => {
+            const diff = parseInt(m.result.myScore) - parseInt(m.result.enemyScore);
+            cumulative += diff;
+            return cumulative;
+        });
+
+        return { wins, losses, overallWinRate, bestMap, atkWinRate, defWinRate, trendPoints };
     }, [events]);
-    return (<div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8"><Card className="!p-4 flex flex-col justify-between"><div className="text-[10px] text-neutral-500 font-bold uppercase">Win Rate</div><div className="text-3xl font-black text-white">{stats.overallWinRate}%</div><div className="w-full h-1 bg-neutral-800 mt-2"><div className="h-full bg-red-600" style={{ width: `${stats.overallWinRate}%` }}></div></div></Card><Card className="!p-4 flex flex-col justify-between"><div className="text-[10px] text-neutral-500 font-bold uppercase">Record</div><div className="text-2xl font-black text-white">{stats.wins}W - {stats.losses}L</div></Card><Card className="!p-4 flex flex-col justify-between"><div className="text-[10px] text-neutral-500 font-bold uppercase">ATK / DEF</div><div className="flex gap-2 text-xs font-bold text-white"><div>⚔️ {stats.atkWinRate}%</div><div>🛡️ {stats.defWinRate}%</div></div></Card><Card className="!p-4 flex flex-col justify-between"><div className="text-[10px] text-neutral-500 font-bold uppercase">Best Map</div><div className="text-xl font-black text-white truncate">{stats.bestMap}</div></Card></div>);
+
+    // SVG Path Generator
+    const generatePath = () => {
+        if (!stats.trendPoints.length) return "";
+        const max = Math.max(...stats.trendPoints.map(Math.abs)) || 10;
+        const height = 50; const width = 100;
+        const stepX = width / (stats.trendPoints.length - 1 || 1);
+        const points = stats.trendPoints.map((pt, i) => {
+            const x = i * stepX;
+            const y = height / 2 - (pt / max) * (height / 2); // Invert Y because SVG 0 is top
+            return `${x},${y}`;
+        });
+        return points.join(" ");
+    };
+
+    return (
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
+            <Card className="!p-4 flex flex-col justify-between relative overflow-hidden">
+                <div className="text-[10px] text-neutral-500 font-bold uppercase z-10">Performance Trend</div>
+                <div className="text-xs text-white font-bold z-10">Round Diff History</div>
+                <svg className="absolute inset-0 w-full h-full opacity-30" viewBox="0 0 100 50" preserveAspectRatio="none">
+                    <path d={`M 0,25 ${generatePath()}`} fill="none" stroke={stats.trendPoints[stats.trendPoints.length - 1] >= 0 ? '#22c55e' : '#ef4444'} strokeWidth="2" />
+                    <line x1="0" y1="25" x2="100" y2="25" stroke="#555" strokeWidth="0.5" strokeDasharray="2" />
+                </svg>
+            </Card>
+            <Card className="!p-4 flex flex-col justify-between"><div className="text-[10px] text-neutral-500 font-bold uppercase">Win Rate</div><div className="text-3xl font-black text-white">{stats.overallWinRate}%</div><div className="w-full h-1 bg-neutral-800 mt-2"><div className="h-full bg-red-600" style={{ width: `${stats.overallWinRate}%` }}></div></div></Card>
+            <Card className="!p-4 flex flex-col justify-between"><div className="text-[10px] text-neutral-500 font-bold uppercase">ATK / DEF</div><div className="flex gap-2 text-xs font-bold text-white"><div>⚔️ {stats.atkWinRate}%</div><div>🛡️ {stats.defWinRate}%</div></div></Card>
+            <Card className="!p-4 flex flex-col justify-between"><div className="text-[10px] text-neutral-500 font-bold uppercase">Best Map</div><div className="text-xl font-black text-white truncate">{stats.bestMap}</div></Card>
+        </div>
+    );
 }
 
 function RosterManager({ members }) {
     const [rosterData, setRosterData] = useState({}); const [mode, setMode] = useState('edit'); const [compare1, setCompare1] = useState(''); const [compare2, setCompare2] = useState(''); const [selectedMember, setSelectedMember] = useState(null); const [role, setRole] = useState('Tryout'); const [gameId, setGameId] = useState(''); const [notes, setNotes] = useState('');
+    const addToast = useToast();
     useEffect(() => { const unsub = onSnapshot(collection(db, 'roster'), (snap) => { const data = {}; snap.forEach(doc => data[doc.id] = doc.data()); setRosterData(data); }); return () => unsub(); }, []);
-    const handleSave = async () => { if (!selectedMember) return; await setDoc(doc(db, 'roster', selectedMember), { role, notes, gameId }, { merge: true }); };
+    const handleSave = async () => { if (!selectedMember) return; await setDoc(doc(db, 'roster', selectedMember), { role, notes, gameId }, { merge: true }); addToast('Player Updated'); };
     return (
         <div className="h-full flex flex-col gap-6"><div className="flex gap-4 border-b border-white/10 pb-4"><button onClick={() => setMode('edit')} className={`text-sm font-bold uppercase ${mode === 'edit' ? 'text-red-500' : 'text-neutral-500'}`}>Edit Mode</button><button onClick={() => setMode('compare')} className={`text-sm font-bold uppercase ${mode === 'compare' ? 'text-red-500' : 'text-neutral-500'}`}>Compare Players</button></div>
             {mode === 'edit' ? (<div className="grid grid-cols-1 lg:grid-cols-3 gap-8 h-full"><div className="lg:col-span-1 bg-neutral-900/80 p-6 rounded-3xl border border-white/5"><h3 className="text-white font-bold mb-4">Members</h3><div className="space-y-2 overflow-y-auto h-96 custom-scrollbar">{members.map(m => (<div key={m} onClick={() => { setSelectedMember(m); setRole(rosterData[m]?.role || 'Tryout'); setNotes(rosterData[m]?.notes || ''); setGameId(rosterData[m]?.gameId || ''); }} className={`p-3 rounded-xl cursor-pointer border transition-all flex justify-between items-center ${selectedMember === m ? 'bg-red-900/20 border-red-600' : 'bg-black border-neutral-800'}`}><span className="text-white font-bold">{m}</span><span className="text-xs text-neutral-500 uppercase">{rosterData[m]?.role}</span></div>))}</div></div><Card className="lg:col-span-2">{selectedMember ? (<div className="space-y-6"><h3 className="text-2xl font-black text-white">Managing: <span className="text-red-500">{selectedMember}</span></h3><div className="grid grid-cols-2 gap-4"><div><label className="block text-xs font-bold text-neutral-500 mb-1">Role</label><Select value={role} onChange={e => setRole(e.target.value)}>{['Captain', 'Main', 'Sub', 'Tryout'].map(r => <option key={r}>{r}</option>)}</Select></div><div><label className="block text-xs font-bold text-neutral-500 mb-1">Riot ID</label><Input value={gameId} onChange={e => setGameId(e.target.value)} /></div></div><textarea className="w-full h-40 bg-black border border-neutral-800 rounded-xl p-3 text-white" value={notes} onChange={e => setNotes(e.target.value)} placeholder="Notes..." /><ButtonPrimary onClick={handleSave} className="w-full py-3">Save Changes</ButtonPrimary></div>) : <div className="h-full flex items-center justify-center text-neutral-500">Select a player</div>}</Card></div>) : (<div className="grid grid-cols-2 gap-8 h-full">{[setCompare1, setCompare2].map((setter, i) => (<Card key={i} className="h-full"><Select onChange={e => setter(e.target.value)} className="mb-6"><option>Select Player</option>{members.map(m => <option key={m}>{m}</option>)}</Select>{((i === 0 ? compare1 : compare2) && rosterData[i === 0 ? compare1 : compare2]) && (<div className="space-y-4 text-center"><div className="w-24 h-24 mx-auto bg-red-600 rounded-full flex items-center justify-center text-3xl font-black text-white border-4 border-black shadow-xl">{(i === 0 ? compare1 : compare2)[0]}</div><div className="text-3xl font-black text-white uppercase">{(i === 0 ? compare1 : compare2)}</div><div className="flex justify-center gap-2"><span className="bg-neutral-800 px-3 py-1 rounded text-xs font-bold text-white">{rosterData[i === 0 ? compare1 : compare2]?.rank || 'Unranked'}</span><span className="bg-red-900/50 px-3 py-1 rounded text-xs font-bold text-red-400">{rosterData[i === 0 ? compare1 : compare2]?.role || 'Member'}</span></div><div className="p-4 bg-black/50 rounded-xl border border-neutral-800 text-left"><div className="text-[10px] text-neutral-500 uppercase font-bold mb-2">Performance Notes</div><p className="text-sm text-neutral-300 italic">"{rosterData[i === 0 ? compare1 : compare2]?.notes || 'No notes available.'}"</p></div></div>)}</Card>))}</div>)}
@@ -651,9 +654,11 @@ function LoginScreen({ signIn }) {
     return (<div className="fixed inset-0 bg-black flex items-center justify-center p-4 relative overflow-hidden"><BackgroundFlare /><div className="relative z-10 text-center p-12 rounded-[3rem] border border-white/10 bg-neutral-900/80 backdrop-blur-xl shadow-2xl shadow-red-900/40"><h1 className="text-7xl font-black text-white tracking-tighter drop-shadow-[0_0_30px_rgba(255,255,255,0.5)]">SYRIX</h1><div className="h-1.5 w-32 bg-red-600 mx-auto rounded-full shadow-[0_0_15px_rgba(220,38,38,1)] my-4"></div><button onClick={signIn} className="w-full bg-[#5865F2] hover:bg-[#4752C4] text-white py-4 rounded-2xl font-bold shadow-lg transition-transform hover:scale-105">LOGIN WITH DISCORD</button></div></div>);
 }
 
-// --- MAIN APP ---
-export default function App() {
+// --- MAIN DASHBOARD LOGIC ---
+function SyrixDashboard() {
     const [currentUser, setCurrentUser] = useState(null); const [activeTab, setActiveTab] = useState('dashboard'); const [availabilities, setAvailabilities] = useState({}); const [events, setEvents] = useState([]); const [day, setDay] = useState(DAYS[0]); const [start, setStart] = useState('12:00'); const [end, setEnd] = useState('23:30'); const [role, setRole] = useState('Flex'); const [saveStatus, setSaveStatus] = useState('idle'); const [userTimezone, setUserTimezone] = useState(localStorage.getItem('timezone') || Intl.DateTimeFormat().resolvedOptions().timeZone); const [authLoading, setAuthLoading] = useState(true); const [isModalOpen, setIsModalOpen] = useState(false); const [modalContent, setModalContent] = useState({ title: '', children: null }); const [isMember, setIsMember] = useState(false);
+    const addToast = useToast();
+
     useEffect(() => { return onAuthStateChanged(auth, user => { setCurrentUser(user); setAuthLoading(false); }); }, []);
     const signIn = async () => { try { await signInWithPopup(auth, new OAuthProvider('oidc.discord')); } catch (e) { console.error(e); } };
     const handleSignOut = async () => await signOut(auth);
@@ -662,10 +667,18 @@ export default function App() {
     const dynamicMembers = useMemo(() => [...new Set(Object.keys(availabilities))].sort(), [availabilities]);
     const displayAvail = useMemo(() => { const c = {}; for (const m in availabilities) { c[m] = []; availabilities[m].forEach(s => { const ls = convertFromGMT(s.day, s.start, userTimezone); const le = convertFromGMT(s.day, s.end, userTimezone); if (ls.day === le.day) { if (timeToMinutes(ls.time) < timeToMinutes(le.time)) c[m].push({ day: ls.day, start: ls.time, end: le.time, role: s.role }); } else { c[m].push({ day: ls.day, start: ls.time, end: '24:00', role: s.role }); if (timeToMinutes(le.time) > 0) c[m].push({ day: le.day, start: '00:00', end: le.time, role: s.role }); } }); } return c; }, [availabilities, userTimezone]);
     const openModal = (t, c, f) => { setModalContent({ title: t, children: c, onConfirm: f }); setIsModalOpen(true); };
-    const saveAvail = async () => { if (timeToMinutes(end) <= timeToMinutes(start)) return openModal('Error', 'Invalid time.', () => setIsModalOpen(false)); setSaveStatus('saving'); const gs = convertToGMT(day, start); const ge = convertToGMT(day, end); const old = availabilities[currentUser.displayName] || []; const others = old.filter(s => convertFromGMT(s.day, s.start, userTimezone).day !== day); await setDoc(doc(db, 'availabilities', currentUser.displayName), { slots: [...others, { day: gs.day, start: gs.time, end: ge.time, role }] }); setSaveStatus('idle'); };
-    const clearDay = async () => { const old = availabilities[currentUser.displayName] || []; await setDoc(doc(db, 'availabilities', currentUser.displayName), { slots: old.filter(s => convertFromGMT(s.day, s.start, userTimezone).day !== day) }); setIsModalOpen(false); };
-    const schedEvent = async (d) => { await addDoc(collection(db, 'events'), d); try { await fetch(discordWebhookUrl, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ embeds: [{ title: `New Event: ${d.type}`, description: `vs ${d.opponent} on ${d.date} @ ${d.time}` }] }) }); } catch (e) { } };
-    const deleteEvent = async (id) => { await deleteDoc(doc(db, 'events', id)); setIsModalOpen(false); };
+
+    const saveAvail = async () => {
+        if (timeToMinutes(end) <= timeToMinutes(start)) return addToast('End time must be after start time', 'error');
+        setSaveStatus('saving'); const gs = convertToGMT(day, start); const ge = convertToGMT(day, end); const old = availabilities[currentUser.displayName] || []; const others = old.filter(s => convertFromGMT(s.day, s.start, userTimezone).day !== day);
+        await setDoc(doc(db, 'availabilities', currentUser.displayName), { slots: [...others, { day: gs.day, start: gs.time, end: ge.time, role }] });
+        setSaveStatus('idle');
+        addToast('Availability Slot Saved');
+    };
+
+    const clearDay = async () => { const old = availabilities[currentUser.displayName] || []; await setDoc(doc(db, 'availabilities', currentUser.displayName), { slots: old.filter(s => convertFromGMT(s.day, s.start, userTimezone).day !== day) }); setIsModalOpen(false); addToast(`Cleared ${day}`); };
+    const schedEvent = async (d) => { await addDoc(collection(db, 'events'), d); try { await fetch(discordWebhookUrl, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ embeds: [{ title: `New Event: ${d.type}`, description: `vs ${d.opponent} on ${d.date} @ ${d.time}` }] }) }); } catch (e) { } addToast('Event Scheduled'); };
+    const deleteEvent = async (id) => { await deleteDoc(doc(db, 'events', id)); setIsModalOpen(false); addToast('Event Deleted'); };
 
     if (authLoading) return <div className="fixed inset-0 bg-black flex items-center justify-center text-red-600 font-black text-2xl animate-pulse">LOADING SYRIX...</div>;
     if (!currentUser) return <LoginScreen signIn={signIn} />;
@@ -677,12 +690,10 @@ export default function App() {
         <div className="fixed inset-0 h-full w-full text-neutral-200 font-sans selection:bg-red-500/30 flex flex-col overflow-hidden">
             <GlobalStyles />
             <BackgroundFlare />
-
             <header className="flex-none flex justify-between items-center px-8 py-4 border-b border-white/10 bg-black/40 backdrop-blur-md z-40">
                 <div><h1 className="text-3xl font-black tracking-tighter text-white drop-shadow-lg">SYRIX <span className="text-red-600">HUB</span></h1><div className="flex gap-6 mt-2 overflow-x-auto pb-2 scrollbar-hide"><NavBtn id="dashboard" label="Dashboard" /><NavBtn id="comps" label="Comps" /><NavBtn id="matches" label="Matches" /><NavBtn id="strats" label="Stratbook" /><NavBtn id="roster" label="Roster" /><NavBtn id="partners" label="Partners" /><NavBtn id="mapveto" label="Map Veto" />{ADMINS.includes(currentUser.displayName) && <NavBtn id="admin" label="Admin" />}</div></div>
                 <div className="flex items-center gap-4"><div className="text-right"><div className="text-sm font-bold text-white">{currentUser.displayName}</div><button onClick={handleSignOut} className="text-[10px] text-red-500 font-bold uppercase">Log Out</button></div><select value={userTimezone} onChange={e => { setUserTimezone(e.target.value); localStorage.setItem('timezone', e.target.value) }} className="bg-black/50 border border-neutral-800 text-xs rounded p-2 text-neutral-400 backdrop-blur-sm">{timezones.map(t => <option key={t} value={t}>{t}</option>)}</select></div>
             </header>
-
             <main className="flex-1 overflow-y-auto p-6 scrollbar-thin scrollbar-thumb-red-900/50 scrollbar-track-black/20 relative z-10"><div className="max-w-[1920px] mx-auto">
                 {activeTab === 'dashboard' && <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 animate-fade-in">
                     <div className="lg:col-span-4 space-y-8">
@@ -692,7 +703,7 @@ export default function App() {
                         <Card className="border-red-900/20"><div className="absolute top-0 left-0 w-1 h-full bg-red-600/50"></div><h2 className="text-xl font-bold text-white mb-6 uppercase tracking-wide">Event Operations</h2><ScrimScheduler onSchedule={schedEvent} userTimezone={userTimezone} /></Card>
                     </div>
                     <div className="lg:col-span-8 space-y-8">
-                        <div className="grid grid-cols-1 xl:grid-cols-2 gap-8"><Card><h2 className="text-lg font-bold text-white mb-4 flex justify-between items-center uppercase tracking-wide"><span>Upcoming Events</span><span className="text-[10px] bg-red-900/30 text-red-400 border border-red-900/50 px-2 py-1 rounded font-bold">{events.length} ACTIVE</span></h2><div className="space-y-3 max-h-64 overflow-y-auto pr-2 scrollbar-thin scrollbar-thumb-neutral-700">{events.map(ev => (<div key={ev.id} className="p-3 bg-black/40 rounded-xl border border-neutral-800 flex justify-between items-center group hover:border-red-900/50 transition-colors"><div><div className="font-bold text-white text-sm group-hover:text-red-400 transition-colors">{ev.type} <span className="text-neutral-500">vs</span> {ev.opponent || 'TBD'}</div><div className="text-xs text-neutral-400 mt-1">{ev.date} @ <span className="text-white font-mono">{ev.time}</span></div></div><button onClick={() => openModal('Delete Event', 'Remove?', () => deleteDoc(doc(db, 'events', ev.id)))} className="text-neutral-600 hover:text-red-500">×</button></div>))}</div></Card><Card><h2 className="text-lg font-bold text-white mb-4 uppercase tracking-wide">Availability Heatmap</h2><AvailabilityHeatmap availabilities={availabilities} members={dynamicMembers} /></Card></div>
+                        <div className="grid grid-cols-1 xl:grid-cols-2 gap-8"><Card><h2 className="text-lg font-bold text-white mb-4 flex justify-between items-center uppercase tracking-wide"><span>Upcoming Events</span><span className="text-[10px] bg-red-900/30 text-red-400 border border-red-900/50 px-2 py-1 rounded font-bold">{events.length} ACTIVE</span></h2><div className="space-y-3 max-h-64 overflow-y-auto pr-2 scrollbar-thin scrollbar-thumb-neutral-700">{events.map(ev => (<div key={ev.id} className="p-3 bg-black/40 rounded-xl border border-neutral-800 flex justify-between items-center group hover:border-red-900/50 transition-colors"><div><div className="font-bold text-white text-sm group-hover:text-red-400 transition-colors">{ev.type} <span className="text-neutral-500">vs</span> {ev.opponent || 'TBD'}</div><div className="text-xs text-neutral-400 mt-1">{ev.date} @ <span className="text-white font-mono">{ev.time}</span></div></div><button onClick={() => openModal('Delete Event', 'Remove?', () => deleteEvent(ev.id))} className="text-neutral-600 hover:text-red-500">×</button></div>))}</div></Card><Card><h2 className="text-lg font-bold text-white mb-4 uppercase tracking-wide">Availability Heatmap</h2><AvailabilityHeatmap availabilities={availabilities} members={dynamicMembers} /></Card></div>
                         <PerformanceWidget events={events} />
                         <Card><h2 className="text-xl font-bold text-white mb-6 uppercase tracking-wide">Detailed Timeline <span className="text-neutral-500 text-sm normal-case">({userTimezone})</span></h2><div className="overflow-x-auto scrollbar-thin scrollbar-thumb-neutral-700"><table className="w-full text-left border-collapse min-w-[600px]"><thead><tr className="border-b border-neutral-800"><th className="p-3 text-xs font-bold text-neutral-500 uppercase tracking-wider w-32">Team Member</th>{SHORT_DAYS.map(day => (<th key={day} className="p-3 text-xs font-bold text-red-600 uppercase tracking-wider text-center border-l border-neutral-800">{day}</th>))}</tr></thead><tbody className="divide-y divide-neutral-800/50">{dynamicMembers.map(member => (<tr key={member} className="hover:bg-neutral-800/30 transition-colors group"><td className="p-4 font-bold text-white text-sm flex items-center gap-2"><div className="w-2 h-2 rounded-full bg-red-500 shadow-red-500/50 shadow-sm"></div>{member}</td>{DAYS.map((day) => { const slots = (displayAvail[member] || []).filter(s => s.day === day); return (<td key={day} className="p-2 align-middle border-l border-neutral-800/50"><div className="flex flex-col gap-1 items-center justify-center">{slots.length > 0 ? slots.map((s, i) => (<div key={i} className="bg-gradient-to-br from-red-600 to-red-700 text-white text-[10px] font-bold px-2 py-1 rounded w-full text-center shadow-md whitespace-nowrap flex items-center justify-center gap-1">{s.start}-{s.end}{RoleIcons[s.role] || RoleIcons.Unknown}</div>)) : <div className="h-1 w-4 bg-neutral-800 rounded-full"></div>}</div></td>); })}</tr>))}</tbody></table></div></Card>
                     </div>
@@ -707,5 +718,14 @@ export default function App() {
             </div></main>
             <Modal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} onConfirm={modalContent.onConfirm} title={modalContent.title}>{modalContent.children}</Modal>
         </div>
+    );
+}
+
+// --- EXPORT WRAPPER ---
+export default function App() {
+    return (
+        <ToastProvider>
+            <SyrixDashboard />
+        </ToastProvider>
     );
 }
