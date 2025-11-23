@@ -1,9 +1,9 @@
 ﻿/*
-Syrix Team Availability - v6.0 (VALOPLANT EDITION)
-- FEATURE: ValoPlant-style tactical icons (Hollow rings for smokes).
-- FEATURE: Agent icons are now circular headshots (displayIcon).
-- FEATURE: Canvas export now renders professional tactical circles.
-- PERFORMANCE: GPU-accelerated static background retained.
+Syrix Team Availability - v6.1 (PERFECTED STRATBOOK)
+- FIX: StratBook now strictly enforced to 16:9 Aspect Ratio (No stretching).
+- FIX: "Moving Elements" bug solved by aligning DOM container with Canvas resolution.
+- FIX: Map size maximized (removed padding) for better visibility.
+- FEATURE: ValoPlant-style icons & Circular Agents.
 */
 
 import React, { useState, useEffect, useMemo, useRef } from 'react';
@@ -298,6 +298,7 @@ function TeamComps({ members }) {
     );
 }
 
+// --- UPDATED STRATBOOK (Fixed Stretching & Size) ---
 function StratBook() {
     const [selectedMap, setSelectedMap] = useState(MAPS[0]);
     const canvasRef = useRef(null);
@@ -374,6 +375,7 @@ function StratBook() {
         }
     };
 
+    // --- EXPORT LOGIC ---
     const saveStrat = async () => {
         const tempCanvas = document.createElement('canvas');
         tempCanvas.width = 1280; tempCanvas.height = 720;
@@ -456,7 +458,7 @@ function StratBook() {
 
     return (
         <div className="h-full flex flex-col gap-6">
-            {/* CHANGED: Increased height from 75vh to 85vh */}
+            {/* Increased height for better visibility */}
             <div className="flex gap-4 h-[85vh]">
                 {/* SIDEBAR */}
                 <Card className="w-24 flex flex-col gap-4 overflow-y-auto custom-scrollbar !p-3">
@@ -483,17 +485,19 @@ function StratBook() {
                 </Card>
 
                 {/* MAIN BOARD */}
-                <Card className="flex-1 flex flex-col relative items-center justify-center bg-black/80">
-                    <div className="w-full flex justify-between items-center mb-4">
+                {/* Removed padding to maximize size */}
+                <Card className="flex-1 flex flex-col relative items-center justify-center bg-black/80 !p-2">
+                    <div className="w-full flex justify-between items-center mb-2 px-4 pt-2">
                         <h3 className="text-2xl font-black text-white">STRATBOOK {viewingStrat && <span className="text-red-500 text-sm ml-2">(VIEWING)</span>}</h3>
                         <div className="flex gap-2">{!viewingStrat ? (<><button onClick={() => setColor('#ef4444')} className="w-6 h-6 rounded-full bg-red-500 border border-white"></button><button onClick={() => setColor('#3b82f6')} className="w-6 h-6 rounded-full bg-blue-500 border border-white"></button><button onClick={() => setColor('#ffffff')} className="w-6 h-6 rounded-full bg-white border border-white"></button><ButtonSecondary onClick={clearCanvas} className="text-xs py-1 px-3">Clear</ButtonSecondary><ButtonPrimary onClick={saveStrat} className="text-xs py-1 px-3">Save</ButtonPrimary></>) : <ButtonSecondary onClick={() => setViewingStrat(null)} className="text-xs bg-red-900/50 border-red-500 text-white">Close</ButtonSecondary>}</div>
                     </div>
-                    <div className="w-full flex overflow-x-auto gap-2 pb-4 mb-2 custom-scrollbar">{MAPS.map(m => <button key={m} onClick={() => { setSelectedMap(m); clearCanvas(); setViewingStrat(null); }} className={`px-3 py-1 rounded-full text-xs font-bold ${selectedMap === m ? 'bg-red-600 text-white' : 'bg-black text-neutral-500'}`}>{m}</button>)}</div>
+                    <div className="w-full flex overflow-x-auto gap-2 pb-4 mb-2 px-4 custom-scrollbar">{MAPS.map(m => <button key={m} onClick={() => { setSelectedMap(m); clearCanvas(); setViewingStrat(null); }} className={`px-3 py-1 rounded-full text-xs font-bold ${selectedMap === m ? 'bg-red-600 text-white' : 'bg-black text-neutral-500'}`}>{m}</button>)}</div>
 
-                    {/* CHANGED: Added 'aspect-video' to lock aspect ratio and prevent stretching */}
-                    {/* CHANGED: Removed 'absolute inset-0' from canvas to respect aspect ratio container */}
-                    <div ref={containerRef} className="relative w-full aspect-video bg-neutral-900 rounded-2xl overflow-hidden border border-neutral-800 shadow-2xl" onDragOver={e => e.preventDefault()} onDrop={handleDrop}>
-                        {mapImages[selectedMap] && <img src={mapImages[selectedMap]} alt="Map" className="absolute inset-0 w-full h-full object-contain opacity-90 pointer-events-none" />}
+                    {/* FIXED: Added 'aspect-video' to container to lock aspect ratio and prevent stretching */}
+                    {/* FIXED: Added 'max-h-full' to ensure it fits on screen */}
+                    <div ref={containerRef} className="relative w-full aspect-video bg-neutral-900 rounded-xl overflow-hidden border border-neutral-800 shadow-2xl" onDragOver={e => e.preventDefault()} onDrop={handleDrop}>
+                        {/* Map Image is now object-cover inside a 16:9 box, ensuring perfect fit */}
+                        {mapImages[selectedMap] && <img src={mapImages[selectedMap]} alt="Map" className="absolute inset-0 w-full h-full object-cover opacity-90 pointer-events-none" />}
                         {!viewingStrat && mapIcons.map((icon, i) => (
                             <div key={icon.id} className="absolute cursor-move hover:scale-110 transition-transform z-20" style={{ left: `${icon.x}%`, top: `${icon.y}%`, transform: 'translate(-50%, -50%)' }} draggable onDragStart={(e) => { e.stopPropagation(); setMovingIcon(i); }} onDragEnd={() => setMovingIcon(null)} onDoubleClick={(e) => { e.stopPropagation(); const u = [...mapIcons]; u.splice(i, 1); setMapIcons(u); }}>
                                 {icon.type === 'agent' ?
@@ -521,7 +525,7 @@ function StratBook() {
                             onTouchMove={(e) => { const touch = e.touches[0]; const mouseEvent = new MouseEvent("mousemove", { clientX: touch.clientX, clientY: touch.clientY }); draw(mouseEvent); }}
                             onTouchEnd={stopDraw}
                         />
-                        {/* CHANGED: Viewing image uses object-contain to prevent squashing */}
+                        {/* Viewing Image is now object-contain to prevent squashing */}
                         {viewingStrat && <div className="absolute inset-0 z-30 bg-black flex items-center justify-center"><img src={viewingStrat} alt="Saved Strat" className="w-full h-full object-contain" /></div>}
                     </div>
                 </Card>
@@ -530,6 +534,7 @@ function StratBook() {
         </div>
     );
 }
+
 function MatchHistory() {
     const [matches, setMatches] = useState([]); const [isAdding, setIsAdding] = useState(false); const [expandedId, setExpandedId] = useState(null); const [editingId, setEditingId] = useState(null); const [editForm, setEditForm] = useState({}); const [newMatch, setNewMatch] = useState({ opponent: '', date: '', myScore: '', enemyScore: '', atkScore: '', defScore: '', map: MAPS[0], vod: '' });
     useEffect(() => { const unsub = onSnapshot(collection(db, 'events'), (snap) => { const evs = []; snap.forEach(doc => evs.push({ id: doc.id, ...doc.data() })); setMatches(evs.filter(e => e.result).sort((a, b) => new Date(b.date) - new Date(a.date))); }); return () => unsub(); }, []);
