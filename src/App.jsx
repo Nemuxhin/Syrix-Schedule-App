@@ -656,8 +656,12 @@ function LoginScreen({ signIn }) {
 
 // --- MAIN DASHBOARD LOGIC ---
 function SyrixDashboard() {
-    const [currentUser, setCurrentUser] = useState(null); const [activeTab, setActiveTab] = useState('dashboard'); const [availabilities, setAvailabilities] = useState({}); const [events, setEvents] = useState([]); const [day, setDay] = useState(DAYS[0]); const [start, setStart] = useState('12:00'); const [end, setEnd] = useState('23:30'); const [role, setRole] = useState('Flex'); const [saveStatus, setSaveStatus] = useState('idle'); const [userTimezone, setUserTimezone] = useState(localStorage.getItem('timezone') || Intl.DateTimeFormat().resolvedOptions().timeZone); const [authLoading, setAuthLoading] = useState(true); const [isModalOpen, setIsModalOpen] = useState(false); const [modalContent, setModalContent] = useState({ title: '', children: null }); const [isMember, setIsMember] = useState(false);
-    const addToast = useToast();
+    const [activeTab, setActiveTab] = useState(() => localStorage.getItem('syrix_active_tab') || 'dashboard');
+
+    // ADD THIS useEffect immediately after:
+    useEffect(() => {
+        localStorage.setItem('syrix_active_tab', activeTab);
+    }, [activeTab]);
 
     useEffect(() => { return onAuthStateChanged(auth, user => { setCurrentUser(user); setAuthLoading(false); }); }, []);
     const signIn = async () => { try { await signInWithPopup(auth, new OAuthProvider('oidc.discord')); } catch (e) { console.error(e); } };
@@ -680,7 +684,32 @@ function SyrixDashboard() {
     const schedEvent = async (d) => { await addDoc(collection(db, 'events'), d); try { await fetch(discordWebhookUrl, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ embeds: [{ title: `New Event: ${d.type}`, description: `vs ${d.opponent} on ${d.date} @ ${d.time}` }] }) }); } catch (e) { } addToast('Event Scheduled'); };
     const deleteEvent = async (id) => { await deleteDoc(doc(db, 'events', id)); setIsModalOpen(false); addToast('Event Deleted'); };
 
-    if (authLoading) return <div className="fixed inset-0 bg-black flex items-center justify-center text-red-600 font-black text-2xl animate-pulse">LOADING SYRIX...</div>;
+    // REPLACE THE OLD "LOADING..." TEXT WITH THIS:
+    if (authLoading) return (
+        <div className="fixed inset-0 bg-black flex flex-col p-6 gap-6 animate-pulse overflow-hidden">
+            {/* Header Skeleton */}
+            <div className="h-16 bg-neutral-900/50 w-full rounded-xl border border-white/5 flex items-center px-8 justify-between">
+                <div className="h-8 w-48 bg-neutral-800 rounded-lg"></div>
+                <div className="h-8 w-32 bg-neutral-800 rounded-lg"></div>
+            </div>
+            {/* Body Skeleton */}
+            <div className="flex-1 grid grid-cols-12 gap-8">
+                {/* Sidebar Area */}
+                <div className="col-span-4 space-y-6">
+                    <div className="h-40 bg-neutral-900/50 rounded-3xl border border-white/5"></div>
+                    <div className="h-64 bg-neutral-900/50 rounded-3xl border border-white/5"></div>
+                </div>
+                {/* Main Content Area */}
+                <div className="col-span-8 space-y-6">
+                    <div className="grid grid-cols-2 gap-6">
+                        <div className="h-32 bg-neutral-900/50 rounded-3xl border border-white/5"></div>
+                        <div className="h-32 bg-neutral-900/50 rounded-3xl border border-white/5"></div>
+                    </div>
+                    <div className="h-96 bg-neutral-900/50 rounded-3xl border border-white/5"></div>
+                </div>
+            </div>
+        </div>
+    );
     if (!currentUser) return <LoginScreen signIn={signIn} />;
     if (!isMember) return <div className="fixed inset-0 bg-black p-8 overflow-y-auto"><GlobalStyles /><BackgroundFlare /><div className="relative z-10"><ApplicationForm currentUser={currentUser} /></div></div>;
 
