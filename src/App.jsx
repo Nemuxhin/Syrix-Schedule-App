@@ -1,8 +1,8 @@
 ﻿/*
-Syrix Team Availability - v6.2 (VITE OPTIMIZED PREMIUM)
-- ENVIRONMENT: Optimized for Vite + React (No Next.js specific code).
-- VISUALS: "Onyx & Crimson" theme with animated fog, glassmorphism, and neon accents.
-- FEATURES: Drag & Drop StratBook, Analytics, Match Editing, VODs.
+Syrix Team Availability - v6.1 (CRASH FIX)
+- FIXED: Removed Next.js specific <style jsx> tags that were breaking the render.
+- FIXED: Converted animations to standard React CSS injection.
+- VISUALS: All "Onyx & Crimson" premium themes preserved.
 */
 
 import React, { useState, useEffect, useMemo, useRef } from 'react';
@@ -223,14 +223,18 @@ function NextMatchCountdown({ events }) {
     if (!nextEvent) return null;
     return (
         <div className="bg-gradient-to-r from-neutral-950 via-black to-neutral-950 p-8 rounded-[2rem] border border-red-900/30 shadow-2xl shadow-red-900/10 mb-8 flex flex-col md:flex-row justify-between items-center gap-6 relative overflow-hidden group">
+            {/* Animated Background Mesh */}
             <div className="absolute inset-0 bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-20 mix-blend-overlay"></div>
             <div className="absolute top-0 right-0 w-[30rem] h-[30rem] bg-red-600/10 rounded-full blur-[100px] -translate-y-1/2 translate-x-1/2 pointer-events-none animate-pulse-slow"></div>
+
             <div className="z-10 text-center md:text-left relative">
                 <div className="inline-block px-3 py-1 rounded-full bg-red-500/10 border border-red-500/20 text-[10px] text-red-400 font-black uppercase tracking-[0.2em] mb-3 shadow-[0_0_10px_rgba(220,38,38,0.2)]">Next Match vs {nextEvent.opponent}</div>
                 <div className="text-4xl md:text-5xl font-black text-white italic tracking-tighter drop-shadow-lg">{nextEvent.date} @ {nextEvent.time}</div>
                 <div className="text-neutral-500 text-sm font-mono mt-2 uppercase tracking-widest flex items-center gap-2"><span className="w-2 h-2 bg-red-500 rounded-full animate-ping"></span> Type: {nextEvent.type}</div>
             </div>
-            <div className="z-10"><div className="text-6xl md:text-8xl font-black text-transparent bg-clip-text bg-gradient-to-b from-white via-neutral-200 to-neutral-600 font-mono tracking-tighter tabular-nums drop-shadow-2xl">{timeLeft}</div></div>
+            <div className="z-10">
+                <div className="text-6xl md:text-8xl font-black text-transparent bg-clip-text bg-gradient-to-b from-white via-neutral-200 to-neutral-600 font-mono tracking-tighter tabular-nums drop-shadow-2xl">{timeLeft}</div>
+            </div>
         </div>
     );
 }
@@ -254,13 +258,55 @@ function TeamComps({ members }) {
 
         return (
             <div className="relative group h-72 bg-neutral-900/80 border border-white/5 rounded-[1.5rem] overflow-hidden transition-all hover:border-red-500/50 hover:shadow-[0_0_40px_rgba(220,38,38,0.2)] flex flex-col shadow-xl">
-                {selectedAgent && agentImage && (<div className="absolute inset-0 z-0"><img src={agentImage} alt={selectedAgent} className="w-full h-full object-cover opacity-50 group-hover:opacity-70 transition-all duration-500 scale-110 group-hover:scale-100" style={{ objectPosition: 'center 20%' }} /><div className="absolute inset-0 bg-gradient-to-b from-black/0 via-neutral-900/60 to-black"></div><div className="absolute inset-0 bg-red-900/10 mix-blend-overlay"></div></div>)}
+                {/* Agent Background Image */}
+                {selectedAgent && agentImage && (
+                    <div className="absolute inset-0 z-0">
+                        <img src={agentImage} alt={selectedAgent} className="w-full h-full object-cover opacity-50 group-hover:opacity-70 transition-all duration-500 scale-110 group-hover:scale-100" style={{ objectPosition: 'center 20%' }} />
+                        <div className="absolute inset-0 bg-gradient-to-b from-black/0 via-neutral-900/60 to-black"></div>
+                        <div className="absolute inset-0 bg-red-900/10 mix-blend-overlay"></div>
+                    </div>
+                )}
+
                 <div onClick={() => setActiveDropdown(isOpen ? null : index)} className="flex-1 relative flex flex-col justify-center items-center p-4 z-10 cursor-pointer">
-                    <div className="absolute top-4 left-1/2 -translate-x-1/2 bg-black/60 backdrop-blur-md border border-white/10 px-3 py-1 rounded-full"><span className="text-[10px] font-black text-red-400 uppercase tracking-[0.2em]">Role {index + 1}</span></div>
-                    {selectedAgent ? (<div className="flex flex-col items-center animate-fade-in-up z-20 mt-auto mb-4"><div className="text-4xl font-black text-white uppercase tracking-tighter drop-shadow-[0_5px_10px_rgba(0,0,0,1)]">{selectedAgent}</div><div className="mt-2 h-0.5 w-12 bg-gradient-to-r from-transparent via-red-600 to-transparent"></div></div>) : (<div className="flex flex-col items-center justify-center border-2 border-dashed border-neutral-800 rounded-2xl p-6 w-full h-32 hover:border-red-500/50 transition-all opacity-50 hover:opacity-100 hover:bg-white/5"><span className="text-3xl text-neutral-400 mb-2 font-thin">+</span><span className="text-[10px] font-bold text-neutral-400 uppercase tracking-widest">Select Agent</span></div>)}
+                    {/* Role Label */}
+                    <div className="absolute top-4 left-1/2 -translate-x-1/2 bg-black/60 backdrop-blur-md border border-white/10 px-3 py-1 rounded-full">
+                        <span className="text-[10px] font-black text-red-400 uppercase tracking-[0.2em]">Role {index + 1}</span>
+                    </div>
+
+                    {selectedAgent ? (
+                        <div className="flex flex-col items-center animate-fade-in-up z-20 mt-auto mb-4">
+                            <div className="text-4xl font-black text-white uppercase tracking-tighter drop-shadow-[0_5px_10px_rgba(0,0,0,1)]">{selectedAgent}</div>
+                            <div className="mt-2 h-0.5 w-12 bg-gradient-to-r from-transparent via-red-600 to-transparent"></div>
+                        </div>
+                    ) : (
+                        <div className="flex flex-col items-center justify-center border-2 border-dashed border-neutral-800 rounded-2xl p-6 w-full h-32 hover:border-red-500/50 transition-all opacity-50 hover:opacity-100 hover:bg-white/5">
+                            <span className="text-3xl text-neutral-400 mb-2 font-thin">+</span>
+                            <span className="text-[10px] font-bold text-neutral-400 uppercase tracking-widest">Select Agent</span>
+                        </div>
+                    )}
                 </div>
-                {isOpen && (<div className="absolute inset-0 bg-neutral-950/95 backdrop-blur-xl z-50 flex flex-col animate-fade-in"><div className="flex justify-between items-center p-4 border-b border-white/10 bg-black/50"><span className="text-xs font-bold text-white uppercase tracking-widest">Tactical Selection</span><button onClick={(e) => { e.stopPropagation(); setActiveDropdown(null); }} className="text-neutral-500 hover:text-red-500 text-xl leading-none transition-colors">×</button></div><div className="flex-1 overflow-y-auto p-2 grid grid-cols-2 gap-2 custom-scrollbar">{AGENT_NAMES.map(agent => (<button key={agent} onClick={(e) => { e.stopPropagation(); const a = [...newComp.agents]; a[index] = agent; setNewComp({ ...newComp, agents: a }); setActiveDropdown(null); }} className={`text-[10px] font-bold uppercase py-3 rounded-lg border transition-all ${newComp.agents[index] === agent ? 'bg-red-600 text-white border-red-500' : 'bg-neutral-900/50 border-white/5 text-neutral-400 hover:text-white hover:border-red-500/50'}`}>{agent}</button>))}</div></div>)}
-                <div className="h-20 relative bg-black/90 backdrop-blur flex items-center justify-center z-20 border-t border-white/10"><select value={newComp.players[index]} onChange={e => { const p = [...newComp.players]; p[index] = e.target.value; setNewComp({ ...newComp, players: p }); }} className="appearance-none bg-transparent text-center text-sm font-bold text-neutral-400 uppercase outline-none cursor-pointer w-full h-full hover:text-white transition-all tracking-widest hover:bg-white/5 focus:text-red-500" style={{ textAlignLast: 'center' }}><option value="" className="bg-neutral-900">Assign Player</option>{members.map(m => <option key={m} value={m} className="bg-neutral-900">{m}</option>)}</select><div className="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none text-neutral-600 text-[8px]">▼</div></div>
+
+                {isOpen && (
+                    <div className="absolute inset-0 bg-neutral-950/95 backdrop-blur-xl z-50 flex flex-col animate-fade-in">
+                        <div className="flex justify-between items-center p-4 border-b border-white/10 bg-black/50">
+                            <span className="text-xs font-bold text-white uppercase tracking-widest">Tactical Selection</span>
+                            <button onClick={(e) => { e.stopPropagation(); setActiveDropdown(null); }} className="text-neutral-500 hover:text-red-500 text-xl leading-none transition-colors">×</button>
+                        </div>
+                        <div className="flex-1 overflow-y-auto p-2 grid grid-cols-2 gap-2 custom-scrollbar">
+                            {AGENT_NAMES.map(agent => (
+                                <button key={agent} onClick={(e) => { e.stopPropagation(); const a = [...newComp.agents]; a[index] = agent; setNewComp({ ...newComp, agents: a }); setActiveDropdown(null); }} className={`text-[10px] font-bold uppercase py-3 rounded-lg border transition-all ${newComp.agents[index] === agent ? 'bg-red-600 text-white border-red-500' : 'bg-neutral-900/50 border-white/5 text-neutral-400 hover:text-white hover:border-red-500/50'}`}>{agent}</button>
+                            ))}
+                        </div>
+                    </div>
+                )}
+
+                <div className="h-20 relative bg-black/90 backdrop-blur flex items-center justify-center z-20 border-t border-white/10">
+                    <select value={newComp.players[index]} onChange={e => { const p = [...newComp.players]; p[index] = e.target.value; setNewComp({ ...newComp, players: p }); }} className="appearance-none bg-transparent text-center text-sm font-bold text-neutral-400 uppercase outline-none cursor-pointer w-full h-full hover:text-white transition-all tracking-widest hover:bg-white/5 focus:text-red-500" style={{ textAlignLast: 'center' }}>
+                        <option value="" className="bg-neutral-900">Assign Player</option>
+                        {members.map(m => <option key={m} value={m} className="bg-neutral-900">{m}</option>)}
+                    </select>
+                    <div className="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none text-neutral-600 text-[8px]">▼</div>
+                </div>
             </div>
         );
     };
@@ -274,7 +320,14 @@ function TeamComps({ members }) {
                 <div className="flex justify-between items-center mb-10 relative z-10"><div className="flex items-center gap-4"><span className="flex h-4 w-4 relative"><span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-500 opacity-75"></span><span className="relative inline-flex rounded-full h-4 w-4 bg-red-600 shadow-[0_0_15px_red]"></span></span><h4 className="text-lg font-bold text-neutral-200 uppercase tracking-widest">Design {selectedMap} Strategy</h4></div><ButtonPrimary onClick={saveComp} className="text-xs py-3 px-8">Save Loadout</ButtonPrimary></div>
                 <div className="grid grid-cols-2 md:grid-cols-5 gap-6" onClick={() => setActiveDropdown(null)}>{Array.from({ length: 5 }).map((_, i) => (<div key={i} onClick={e => e.stopPropagation()}><AgentCard index={i} /></div>))}</div>
             </div>
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">{currentMapComps.map(comp => (<div key={comp.id} className="bg-neutral-900/60 backdrop-blur-md rounded-3xl border border-white/5 overflow-hidden relative group hover:border-red-600/40 transition-all shadow-lg hover:shadow-red-900/20"><div className="bg-black/40 px-6 py-4 flex justify-between items-center border-b border-white/5 group-hover:bg-red-900/10 transition-colors"><div className="flex items-center gap-3"><div className="w-2 h-2 bg-red-600 rounded-full shadow-[0_0_10px_red]"></div><div className="text-[10px] font-mono text-neutral-400 uppercase tracking-widest">ID: {comp.id.substring(0, 6)}</div></div><button onClick={() => deleteComp(comp.id)} className="text-neutral-600 hover:text-white font-bold text-[10px] bg-neutral-950 border border-neutral-800 hover:border-red-600 px-3 py-1.5 rounded-lg transition-all">DELETE</button></div><div className="p-6 grid grid-cols-5 gap-4 divide-x divide-white/5">{comp.agents.map((agent, i) => (<div key={i} className="text-center flex flex-col justify-center items-center gap-2"><div className="text-xs sm:text-sm font-black text-white uppercase tracking-tight drop-shadow-sm">{agent}</div><div className="text-[9px] text-neutral-500 font-mono uppercase tracking-widest truncate w-full px-1 bg-white/5 rounded py-1">{comp.players[i] || '-'}</div></div>))}</div></div>))}</div>
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                {currentMapComps.map(comp => (
+                    <div key={comp.id} className="bg-neutral-900/60 backdrop-blur-md rounded-3xl border border-white/5 overflow-hidden relative group hover:border-red-600/40 transition-all shadow-lg hover:shadow-red-900/20">
+                        <div className="bg-black/40 px-6 py-4 flex justify-between items-center border-b border-white/5 group-hover:bg-red-900/10 transition-colors"><div className="flex items-center gap-3"><div className="w-2 h-2 bg-red-600 rounded-full shadow-[0_0_10px_red]"></div><div className="text-[10px] font-mono text-neutral-400 uppercase tracking-widest">ID: {comp.id.substring(0, 6)}</div></div><button onClick={() => deleteComp(comp.id)} className="text-neutral-600 hover:text-white font-bold text-[10px] bg-neutral-950 border border-neutral-800 hover:border-red-600 px-3 py-1.5 rounded-lg transition-all">DELETE</button></div>
+                        <div className="p-6 grid grid-cols-5 gap-4 divide-x divide-white/5">{comp.agents.map((agent, i) => (<div key={i} className="text-center flex flex-col justify-center items-center gap-2"><div className="text-xs sm:text-sm font-black text-white uppercase tracking-tight drop-shadow-sm">{agent}</div><div className="text-[9px] text-neutral-500 font-mono uppercase tracking-widest truncate w-full px-1 bg-white/5 rounded py-1">{comp.players[i] || '-'}</div></div>))}</div>
+                    </div>
+                ))}
+            </div>
         </div>
     );
 }
