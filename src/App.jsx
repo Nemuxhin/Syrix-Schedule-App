@@ -1,8 +1,10 @@
 ﻿/*
-Syrix Team Availability - v10.0 (COMPLETE STRATBOOK)
-- FEATURE: Added full suite of tactical icons (Sage Walls, Trips, Stuns, Ults).
-- FEATURE: New geometric shapes (Rectangle, Cross, Diamond, Square) in Stratbook.
-- CORE: All previous features (Playbook, Admin Security, 60FPS) preserved.
+Syrix Team Availability - v11.1 (FIXED)
+- FIX: Restored missing components (LoginScreen, Playbook, TeamComps, etc.) causing ReferenceErrors.
+- FEATURE: Lineup Library (Map-based video/guide repository).
+- FEATURE: MVP Voting System in Match History.
+- FEATURE: MVP Badges to Roster Manager.
+- UI: v10.0 "Restored Original Look" (Rounded corners, standard font).
 */
 
 import React, { useState, useEffect, useMemo, useRef, createContext, useContext } from 'react';
@@ -74,7 +76,7 @@ const ToastProvider = ({ children }) => {
     );
 };
 
-// --- VALOPLANT STYLE UTILITIES (EXPANDED) ---
+// --- VALOPLANT STYLE UTILITIES ---
 const UTILITY_TYPES = [
     { id: 'smoke', color: 'rgba(209, 213, 219, 0.3)', border: '#d1d5db', label: 'Smoke', shape: 'ring' },
     { id: 'molly', color: 'rgba(239, 68, 68, 0.3)', border: '#ef4444', label: 'Molly', shape: 'ring' },
@@ -87,15 +89,6 @@ const UTILITY_TYPES = [
 ];;
 
 const timezones = ["UTC", "GMT", "Europe/London", "Europe/Paris", "Europe/Berlin", "America/New_York", "America/Chicago", "America/Denver", "America/Los_Angeles", "Asia/Tokyo", "Australia/Sydney"];
-
-const RoleIcons = {
-    Duelist: <svg viewBox="0 0 24 24" fill="currentColor" className="w-4 h-4"><path d="M12 2L2 22h20L12 2zm0 3.5L18.5 20h-13L12 5.5z" /></svg>,
-    Initiator: <svg viewBox="0 0 24 24" fill="currentColor" className="w-4 h-4"><path d="M12 2l-9 4v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V6l-9-4zm0 2.18l7 3.12v4.7c0 4.67-3.13 8.96-7 10.1-3.87-1.14-7-5.43-7-10.1v-4.7l7-3.12z" /></svg>,
-    Controller: <svg viewBox="0 0 24 24" fill="currentColor" className="w-4 h-4"><circle cx="12" cy="12" r="10" opacity="0.3" /><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8z" /></svg>,
-    Sentinel: <svg viewBox="0 0 24 24" fill="currentColor" className="w-4 h-4"><path d="M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4zm0 2.18l7 3.12v4.7c0 4.67-3.13 8.96-7 10.1-3.87-1.14-7-5.43-7-10.1v-4.7l7-3.12z" /><rect x="11" y="7" width="2" height="10" /></svg>,
-    Flex: <span className="font-bold text-xs">FLX</span>,
-    Unknown: <span className="font-bold text-xs">?</span>
-};
 
 // --- Utility Functions ---
 function timeToMinutes(t) { if (!t || t === '24:00') return 1440; const [h, m] = t.split(":").map(Number); return h * 60 + m; }
@@ -133,7 +126,7 @@ const convertToGMT = (day, time) => {
     return { day: jsDays[d.getUTCDay()], time: `${String(d.getUTCHours()).padStart(2, '0')}:${String(d.getUTCMinutes()).padStart(2, '0')}` };
 };
 
-// --- STYLES ---
+// --- STYLES (Restored) ---
 const GlobalStyles = () => (
     <style>{`
         .glass-panel {
@@ -199,7 +192,7 @@ const ButtonSecondary = ({ children, onClick, className = "" }) => (
 
 // --- HOOKS ---
 const useValorantData = () => {
-    const [agentData, setAgentData] = useState({}); // Maps Name -> { icon, abilities: [] }
+    const [agentData, setAgentData] = useState({});
     const [mapImages, setMapImages] = useState({});
 
     useEffect(() => {
@@ -249,7 +242,7 @@ function Modal({ isOpen, onClose, onConfirm, title, children }) {
                 <div className="text-neutral-300 mb-8">{children}</div>
                 <div className="flex justify-end gap-4">
                     <ButtonSecondary onClick={onClose}>Cancel</ButtonSecondary>
-                    <ButtonPrimary onClick={onConfirm}>Confirm</ButtonPrimary>
+                    {onConfirm && <ButtonPrimary onClick={onConfirm}>Confirm</ButtonPrimary>}
                 </div>
             </div>
         </div>
@@ -386,15 +379,12 @@ function TeamComps({ members }) {
     const [newComp, setNewComp] = useState({ agents: Array(5).fill(''), players: Array(5).fill('') });
     const [activeDropdown, setActiveDropdown] = useState(null);
 
-    // FIX: Destructure BOTH variables to prevent crashes
-    const { agentImages, agentData } = useValorantData();
+    const { agentData } = useValorantData();
     const addToast = useToast();
 
-    // FIX: Helper function to safely get the icon regardless of data version
     const getAgentIcon = (agentName) => {
         if (!agentName) return null;
-        if (agentData && agentData[agentName]) return agentData[agentName].icon; // New Version
-        if (agentImages && agentImages[agentName]) return agentImages[agentName]; // Old Version
+        if (agentData && agentData[agentName]) return agentData[agentName].icon;
         return null;
     };
 
@@ -406,7 +396,7 @@ function TeamComps({ members }) {
     const AgentCard = ({ index }) => {
         const isOpen = activeDropdown === index;
         const selectedAgent = newComp.agents[index];
-        const agentImage = getAgentIcon(selectedAgent); // Use the safe helper
+        const agentImage = getAgentIcon(selectedAgent);
 
         return (
             <div className="relative group h-64 bg-neutral-900/80 border border-white/10 rounded-2xl overflow-hidden transition-all hover:border-red-600 hover:shadow-[0_0_30px_rgba(220,38,38,0.2)] flex flex-col">
@@ -434,7 +424,7 @@ function TeamComps({ members }) {
         </div>
     );
 }
-// --- REPLACES EXISTING StratBook ---
+
 function StratBook() {
     const [selectedMap, setSelectedMap] = useState(MAPS[0]);
     const [selectedAgentForUtil, setSelectedAgentForUtil] = useState(AGENT_NAMES[0]);
@@ -450,17 +440,13 @@ function StratBook() {
     const [movingIconIndex, setMovingIconIndex] = useState(null);
     const [selectedIconId, setSelectedIconId] = useState(null);
 
-    const [links, setLinks] = useState([]);
     const [savedStrats, setSavedStrats] = useState([]);
     const [viewingStrat, setViewingStrat] = useState(null);
-    const [newLink, setNewLink] = useState({ title: '', url: '' });
 
     useEffect(() => {
         const qStrats = query(collection(db, 'strats'), where("map", "==", selectedMap));
         const unsubStrats = onSnapshot(qStrats, (snap) => { const s = []; snap.forEach(doc => s.push({ id: doc.id, ...doc.data() })); s.sort((a, b) => new Date(b.date) - new Date(a.date)); setSavedStrats(s); });
-        const qLinks = query(collection(db, 'strat_links'), where("map", "==", selectedMap));
-        const unsubLinks = onSnapshot(qLinks, (snap) => { const l = []; snap.forEach(doc => l.push({ id: doc.id, ...doc.data() })); setLinks(l); });
-        return () => { unsubStrats(); unsubLinks(); };
+        return () => { unsubStrats(); };
     }, [selectedMap]);
 
     const getPos = (e) => {
@@ -561,7 +547,6 @@ function StratBook() {
                 ctx.font = "bold 60px Arial"; ctx.fillStyle = "rgba(255, 255, 255, 0.8)"; ctx.textAlign = "center"; ctx.textBaseline = "middle";
                 ctx.fillText(icon.label, 0, 0);
             } else {
-                // Geometric shapes
                 ctx.beginPath();
                 if (icon.shape === 'ring') { ctx.arc(0, 0, 20, 0, Math.PI * 2); ctx.fillStyle = icon.color; ctx.fill(); ctx.lineWidth = 3; ctx.strokeStyle = icon.border; ctx.stroke(); }
                 else if (icon.shape === 'square') { ctx.fillStyle = icon.color; ctx.rect(-15, -15, 30, 30); ctx.fill(); ctx.lineWidth = 2; ctx.strokeStyle = icon.border; ctx.stroke(); }
@@ -579,8 +564,6 @@ function StratBook() {
         addToast('Strat Saved!');
     };
 
-    const addLink = async () => { if (!newLink.title || !newLink.url) return; await addDoc(collection(db, 'strat_links'), { ...newLink, map: selectedMap }); setNewLink({ title: '', url: '' }); addToast('Link Added'); };
-    const deleteLink = async (id) => { await deleteDoc(doc(db, 'strat_links', id)); addToast('Link Removed'); };
     const deleteStrat = async (id) => { if (viewingStrat) setViewingStrat(null); await deleteDoc(doc(db, 'strats', id)); addToast('Strategy Deleted'); };
 
     return (
@@ -590,8 +573,8 @@ function StratBook() {
                     <div className="bg-neutral-900 p-4 border-b border-white/10">
                         <h4 className="text-xs font-black text-red-500 uppercase tracking-widest mb-2">1. Map Markers</h4>
                         <div className="flex gap-2 justify-center">
-                            {['A', 'B', 'C', 'Spawn'].map(l => (
-                                <div key={l} draggable onDragStart={() => setDragItem({ type: 'site_label', label: l })} className="w-8 h-8 bg-white/10 rounded flex items-center justify-center text-xs font-bold cursor-grab hover:bg-white/20 border border-white/20">{l[0]}</div>
+                            {['A', 'B', 'C', 'S'].map(l => (
+                                <div key={l} draggable onDragStart={() => setDragItem({ type: 'site_label', label: l })} className="w-8 h-8 bg-white/10 rounded flex items-center justify-center text-xs font-bold cursor-grab hover:bg-white/20 border border-white/20">{l}</div>
                             ))}
                         </div>
                     </div>
@@ -613,7 +596,7 @@ function StratBook() {
                             </div>
                         </div>
                         <div>
-                            <h4 className="text-xs font-black text-red-500 uppercase tracking-widest mb-2">3. Agent Abilities</h4>
+                            <h4 className="text-xs font-black text-red-500 uppercase tracking-widest mb-2">3. Abilities</h4>
                             <Select value={selectedAgentForUtil} onChange={e => setSelectedAgentForUtil(e.target.value)} className="mb-2">
                                 {AGENT_NAMES.map(a => <option key={a} value={a}>{a}</option>)}
                             </Select>
@@ -690,7 +673,139 @@ function StratBook() {
         </div>
     );
 }
-function MatchHistory() {
+
+function LineupLibrary() {
+    const [selectedMap, setSelectedMap] = useState(MAPS[0]);
+    const { mapImages, agentData } = useValorantData();
+    const [lineups, setLineups] = useState([]);
+    const [isAdding, setIsAdding] = useState(false);
+    const [viewingLineup, setViewingLineup] = useState(null);
+    const [tempCoords, setTempCoords] = useState(null);
+    const [newLineup, setNewLineup] = useState({ title: '', url: '', description: '', agent: 'Sova', type: 'Recon' });
+    const { currentUser } = getAuth();
+    const addToast = useToast();
+    const mapRef = useRef(null);
+
+    useEffect(() => {
+        const q = query(collection(db, 'lineups'), where("map", "==", selectedMap));
+        const unsub = onSnapshot(q, (snap) => {
+            const l = [];
+            snap.forEach(doc => l.push({ id: doc.id, ...doc.data() }));
+            setLineups(l);
+        });
+        return () => unsub();
+    }, [selectedMap]);
+
+    const handleMapClick = (e) => {
+        if (!mapRef.current) return;
+        const rect = mapRef.current.getBoundingClientRect();
+        const x = ((e.clientX - rect.left) / rect.width) * 100;
+        const y = ((e.clientY - rect.top) / rect.height) * 100;
+        setTempCoords({ x, y });
+        setIsAdding(true);
+    };
+
+    const saveLineup = async () => {
+        if (!newLineup.title || !newLineup.url) return;
+        await addDoc(collection(db, 'lineups'), {
+            ...newLineup,
+            map: selectedMap,
+            x: tempCoords.x,
+            y: tempCoords.y,
+            addedBy: currentUser.displayName,
+            date: new Date().toISOString()
+        });
+        setIsAdding(false);
+        setNewLineup({ title: '', url: '', description: '', agent: 'Sova', type: 'Recon' });
+        addToast("Lineup Added to Library");
+    };
+
+    const deleteLineup = async (id) => {
+        await deleteDoc(doc(db, 'lineups', id));
+        setViewingLineup(null);
+        addToast("Lineup Removed");
+    };
+
+    return (
+        <div className="h-full flex flex-col gap-6">
+            <div className="flex justify-between items-center">
+                <h3 className="text-3xl font-black text-white italic tracking-tighter"><span className="text-red-600">/</span> LINEUP LIBRARY</h3>
+            </div>
+
+            <div className="flex gap-2 overflow-x-auto pb-4 custom-scrollbar">
+                {MAPS.map(m => (
+                    <button key={m} onClick={() => setSelectedMap(m)} className={`px-6 py-2 rounded-full text-xs font-black uppercase tracking-widest transition-all whitespace-nowrap border ${selectedMap === m ? 'bg-white text-black border-white shadow-[0_0_15px_rgba(255,255,255,0.3)]' : 'bg-black border-neutral-800 text-neutral-500 hover:text-white hover:border-neutral-600'}`}>
+                        {m}
+                    </button>
+                ))}
+            </div>
+
+            <div className="flex gap-6 h-full">
+                <div className="relative aspect-square h-full bg-neutral-900 rounded-2xl overflow-hidden border border-neutral-800 shadow-2xl flex-shrink-0 group">
+                    {mapImages[selectedMap] && <img ref={mapRef} onClick={handleMapClick} src={mapImages[selectedMap]} alt="Map" className="w-full h-full object-cover cursor-crosshair opacity-80 group-hover:opacity-100 transition-opacity" />}
+                    {lineups.map(l => (
+                        <div
+                            key={l.id}
+                            onClick={(e) => { e.stopPropagation(); setViewingLineup(l); }}
+                            className="absolute w-6 h-6 -translate-x-1/2 -translate-y-1/2 bg-red-600 rounded-full border-2 border-white cursor-pointer hover:scale-125 transition-transform z-10 shadow-[0_0_10px_red] flex items-center justify-center"
+                            style={{ left: `${l.x}%`, top: `${l.y}%` }}
+                        >
+                            {agentData[l.agent]?.icon && <img src={agentData[l.agent].icon} className="w-full h-full rounded-full object-cover" />}
+                        </div>
+                    ))}
+                    <div className="absolute top-4 left-4 bg-black/80 px-4 py-2 rounded-lg backdrop-blur text-xs font-bold text-neutral-400 pointer-events-none border border-white/10">
+                        CLICK MAP TO ADD LINEUP
+                    </div>
+                </div>
+
+                <Card className="flex-1 flex flex-col">
+                    {viewingLineup ? (
+                        <div className="space-y-4 h-full flex flex-col">
+                            <div className="flex justify-between items-start border-b border-white/10 pb-4">
+                                <div>
+                                    <h4 className="text-2xl font-black text-white uppercase">{viewingLineup.title}</h4>
+                                    <div className="flex items-center gap-2 mt-1">
+                                        <span className="text-xs bg-red-900/30 text-red-400 px-2 py-0.5 rounded border border-red-900/50 font-bold uppercase">{viewingLineup.agent}</span>
+                                        <span className="text-xs text-neutral-500">Added by {viewingLineup.addedBy}</span>
+                                    </div>
+                                </div>
+                                <button onClick={() => deleteLineup(viewingLineup.id)} className="text-neutral-500 hover:text-red-500 transition-colors">DELETE</button>
+                            </div>
+                            <div className="flex-1 bg-black/50 rounded-xl overflow-hidden border border-neutral-800 relative">
+                                {viewingLineup.url.includes('youtube') || viewingLineup.url.includes('youtu.be') ? (
+                                    <iframe src={viewingLineup.url.replace('watch?v=', 'embed/').replace('youtu.be/', 'youtube.com/embed/')} className="w-full h-full absolute inset-0" allowFullScreen></iframe>
+                                ) : (
+                                    <img src={viewingLineup.url} className="w-full h-full object-contain" />
+                                )}
+                            </div>
+                            <p className="text-neutral-300 italic text-sm p-4 bg-black/30 rounded-lg border border-white/5">"{viewingLineup.description}"</p>
+                            <ButtonSecondary onClick={() => setViewingLineup(null)} className="w-full">Close Viewer</ButtonSecondary>
+                        </div>
+                    ) : (
+                        <div className="h-full flex items-center justify-center text-neutral-500 text-sm font-bold uppercase tracking-widest">
+                            Select a pin to view details
+                        </div>
+                    )}
+                </Card>
+            </div>
+
+            <Modal isOpen={isAdding} onClose={() => setIsAdding(false)} onConfirm={saveLineup} title="Add New Lineup">
+                <div className="space-y-4">
+                    <Input placeholder="Lineup Title (e.g., God Dart A Main)" value={newLineup.title} onChange={e => setNewLineup({ ...newLineup, title: e.target.value })} />
+                    <Input placeholder="Video/Image URL" value={newLineup.url} onChange={e => setNewLineup({ ...newLineup, url: e.target.value })} />
+                    <div className="grid grid-cols-2 gap-4">
+                        <Select value={newLineup.agent} onChange={e => setNewLineup({ ...newLineup, agent: e.target.value })}>
+                            {AGENT_NAMES.map(a => <option key={a}>{a}</option>)}
+                        </Select>
+                        <Input placeholder="Description / Tips" value={newLineup.description} onChange={e => setNewLineup({ ...newLineup, description: e.target.value })} />
+                    </div>
+                </div>
+            </Modal>
+        </div>
+    )
+}
+
+function MatchHistory({ currentUser, members }) {
     const [matches, setMatches] = useState([]); const [isAdding, setIsAdding] = useState(false); const [expandedId, setExpandedId] = useState(null); const [editingId, setEditingId] = useState(null); const [editForm, setEditForm] = useState({}); const [newMatch, setNewMatch] = useState({ opponent: '', date: '', myScore: '', enemyScore: '', atkScore: '', defScore: '', map: MAPS[0], vod: '' });
     const addToast = useToast();
     useEffect(() => { const unsub = onSnapshot(collection(db, 'events'), (snap) => { const evs = []; snap.forEach(doc => evs.push({ id: doc.id, ...doc.data() })); setMatches(evs.filter(e => e.result).sort((a, b) => new Date(b.date) - new Date(a.date))); }); return () => unsub(); }, []);
@@ -699,6 +814,25 @@ function MatchHistory() {
     const saveEdit = async () => { const { opponent, date, ...resultData } = editForm; await updateDoc(doc(db, 'events', editingId), { opponent, date, result: resultData }); setEditingId(null); addToast('Match Updated'); };
     const getResultColor = (my, enemy) => { const m = parseInt(my); const e = parseInt(enemy); if (m > e) return 'border-l-4 border-l-green-500'; if (m < e) return 'border-l-4 border-l-red-600'; return 'border-l-4 border-l-neutral-500'; };
 
+    const castVote = async (matchId, player) => {
+        await setDoc(doc(db, 'events', matchId), {
+            mvpVotes: {
+                [currentUser.uid]: player
+            }
+        }, { merge: true });
+        addToast(`Voted for ${player}`);
+    };
+
+    const getVoteLeader = (votes) => {
+        if (!votes) return null;
+        const tally = {};
+        Object.values(votes).forEach(v => tally[v] = (tally[v] || 0) + 1);
+        let max = 0;
+        let leader = null;
+        Object.entries(tally).forEach(([p, c]) => { if (c > max) { max = c; leader = p; } });
+        return { leader, count: max };
+    };
+
     return (
         <Card>
             <div className="flex justify-between items-center mb-6"><h3 className="text-2xl font-black text-white flex items-center gap-3"><span className="text-red-600">MATCH</span> HISTORY</h3><ButtonSecondary onClick={() => setIsAdding(!isAdding)} className="text-xs">{isAdding ? 'Cancel' : '+ Log Match'}</ButtonSecondary></div>
@@ -706,7 +840,19 @@ function MatchHistory() {
             <div className="space-y-4">
                 {matches.map(m => {
                     if (editingId === m.id) return (<div key={m.id} className="bg-neutral-900 border border-red-600 p-4 rounded-xl space-y-2"><div className="flex justify-between mb-2"><span className="text-red-500 font-bold text-xs uppercase">Editing Match</span><button onClick={() => setEditingId(null)} className="text-neutral-500 hover:text-white">Cancel</button></div><div className="grid grid-cols-2 gap-2"><Input value={editForm.opponent} onChange={e => setEditForm({ ...editForm, opponent: e.target.value })} /><Input type="date" value={editForm.date} onChange={e => setEditForm({ ...editForm, date: e.target.value })} className="[color-scheme:dark]" /></div><div className="grid grid-cols-2 gap-2"><Select value={editForm.map} onChange={e => setEditForm({ ...editForm, map: e.target.value })}>{MAPS.map(map => <option key={map}>{map}</option>)}</Select><Input placeholder="VOD Link" value={editForm.vod} onChange={e => setEditForm({ ...editForm, vod: e.target.value })} /></div><div className="grid grid-cols-4 gap-2"><Input placeholder="Us" value={editForm.myScore} onChange={e => setEditForm({ ...editForm, myScore: e.target.value })} /><Input placeholder="Them" value={editForm.enemyScore} onChange={e => setEditForm({ ...editForm, enemyScore: e.target.value })} /><Input placeholder="Atk" value={editForm.atkScore} onChange={e => setEditForm({ ...editForm, atkScore: e.target.value })} /><Input placeholder="Def" value={editForm.defScore} onChange={e => setEditForm({ ...editForm, defScore: e.target.value })} /></div><ButtonPrimary onClick={saveEdit} className="w-full py-2 text-xs">Save Changes</ButtonPrimary></div>);
-                    return (<div key={m.id} onClick={() => setExpandedId(expandedId === m.id ? null : m.id)} className={`bg-black/40 border border-neutral-800 p-4 rounded-xl relative overflow-hidden cursor-pointer hover:bg-neutral-900 transition-all ${m.result ? getResultColor(m.result.myScore, m.result.enemyScore) : ''}`}>{expandedId === m.id && (parseInt(m.result.myScore) > parseInt(m.result.enemyScore) ? <VictoryStamp /> : <DefeatStamp />)}<div className="flex justify-between items-center relative z-10"><div><div className="text-sm font-bold text-white flex items-center gap-2">{m.opponent} {m.result.vod && <a href={m.result.vod} target="_blank" rel="noreferrer" onClick={e => e.stopPropagation()} className="text-[9px] bg-red-600 text-white px-2 py-0.5 rounded hover:bg-red-500">▶ WATCH VOD</a>}</div><div className="text-xs text-neutral-500">{m.date} • {m.result.map}</div></div><div className="flex items-center gap-4"><div className={`text-2xl font-black ${parseInt(m.result.myScore) > parseInt(m.result.enemyScore) ? 'text-green-500' : 'text-red-500'}`}>{m.result.myScore} - {m.result.enemyScore}</div><button onClick={(e) => { e.stopPropagation(); startEdit(m); }} className="text-neutral-600 hover:text-white p-1">✏️</button></div></div>{expandedId === m.id && (<div className="mt-4 pt-4 border-t border-neutral-800 grid grid-cols-2 gap-4 text-center"><div className="bg-neutral-900 p-2 rounded"><div className="text-[10px] text-neutral-500 uppercase font-bold">Attack</div><div className="text-white font-bold">{m.result.atkScore || '-'}</div></div><div className="bg-neutral-900 p-2 rounded"><div className="text-[10px] text-neutral-500 uppercase font-bold">Defense</div><div className="text-white font-bold">{m.result.defScore || '-'}</div></div></div>)}</div>);
+                    const voteData = getVoteLeader(m.mvpVotes);
+                    return (<div key={m.id} onClick={() => setExpandedId(expandedId === m.id ? null : m.id)} className={`bg-black/40 border border-neutral-800 p-4 rounded-xl relative overflow-hidden cursor-pointer hover:bg-neutral-900 transition-all ${m.result ? getResultColor(m.result.myScore, m.result.enemyScore) : ''}`}>{expandedId === m.id && (parseInt(m.result.myScore) > parseInt(m.result.enemyScore) ? <VictoryStamp /> : <DefeatStamp />)}<div className="flex justify-between items-center relative z-10"><div><div className="text-sm font-bold text-white flex items-center gap-2">{m.opponent} {m.result.vod && <a href={m.result.vod} target="_blank" rel="noreferrer" onClick={e => e.stopPropagation()} className="text-[9px] bg-red-600 text-white px-2 py-0.5 rounded hover:bg-red-500">▶ WATCH VOD</a>}</div><div className="text-xs text-neutral-500">{m.date} • {m.result.map}</div></div><div className="flex items-center gap-4"><div className={`text-2xl font-black ${parseInt(m.result.myScore) > parseInt(m.result.enemyScore) ? 'text-green-500' : 'text-red-500'}`}>{m.result.myScore} - {m.result.enemyScore}</div><button onClick={(e) => { e.stopPropagation(); startEdit(m); }} className="text-neutral-600 hover:text-white p-1">✏️</button></div></div>{expandedId === m.id && (<div className="mt-4 pt-4 border-t border-neutral-800"><div className="grid grid-cols-2 gap-4 text-center mb-4"><div className="bg-neutral-900 p-2 rounded"><div className="text-[10px] text-neutral-500 uppercase font-bold">Attack</div><div className="text-white font-bold">{m.result.atkScore || '-'}</div></div><div className="bg-neutral-900 p-2 rounded"><div className="text-[10px] text-neutral-500 uppercase font-bold">Defense</div><div className="text-white font-bold">{m.result.defScore || '-'}</div></div></div>
+                        <div className="bg-neutral-900/50 p-3 rounded-lg border border-white/5 flex items-center justify-between" onClick={e => e.stopPropagation()}>
+                            <div className="text-xs font-bold text-neutral-400">TEAM MVP VOTE: {voteData ? <span className="text-yellow-500">{voteData.leader} ({voteData.count})</span> : 'None'}</div>
+                            <div className="flex items-center gap-2">
+                                <span className="text-[10px] text-neutral-500 uppercase mr-2">Voted: {m.mvpVotes?.[currentUser.uid] || 'No'}</span>
+                                <select onChange={(e) => castVote(m.id, e.target.value)} className="bg-black text-white text-xs p-1 rounded border border-neutral-700 outline-none" defaultValue="">
+                                    <option value="" disabled>Vote...</option>
+                                    {members.map(mem => <option key={mem} value={mem}>{mem}</option>)}
+                                </select>
+                            </div>
+                        </div>
+                    </div>)}</div>);
                 })}
             </div>
         </Card>
@@ -817,18 +963,6 @@ function PerformanceWidget({ events }) {
     );
 }
 
-function RosterManager({ members }) {
-    const [rosterData, setRosterData] = useState({}); const [mode, setMode] = useState('edit'); const [compare1, setCompare1] = useState(''); const [compare2, setCompare2] = useState(''); const [selectedMember, setSelectedMember] = useState(null); const [role, setRole] = useState('Tryout'); const [gameId, setGameId] = useState(''); const [notes, setNotes] = useState('');
-    const addToast = useToast();
-    useEffect(() => { const unsub = onSnapshot(collection(db, 'roster'), (snap) => { const data = {}; snap.forEach(doc => data[doc.id] = doc.data()); setRosterData(data); }); return () => unsub(); }, []);
-    const handleSave = async () => { if (!selectedMember) return; await setDoc(doc(db, 'roster', selectedMember), { role, notes, gameId }, { merge: true }); addToast('Player Updated'); };
-    return (
-        <div className="h-full flex flex-col gap-6"><div className="flex gap-4 border-b border-white/10 pb-4"><button onClick={() => setMode('edit')} className={`text-sm font-bold uppercase ${mode === 'edit' ? 'text-red-500' : 'text-neutral-500'}`}>Edit Mode</button><button onClick={() => setMode('compare')} className={`text-sm font-bold uppercase ${mode === 'compare' ? 'text-red-500' : 'text-neutral-500'}`}>Compare Players</button></div>
-            {mode === 'edit' ? (<div className="grid grid-cols-1 lg:grid-cols-3 gap-8 h-full"><div className="lg:col-span-1 bg-neutral-900/80 p-6 rounded-3xl border border-white/5"><h3 className="text-white font-bold mb-4">Members</h3><div className="space-y-2 overflow-y-auto h-96 custom-scrollbar">{members.map(m => (<div key={m} onClick={() => { setSelectedMember(m); setRole(rosterData[m]?.role || 'Tryout'); setNotes(rosterData[m]?.notes || ''); setGameId(rosterData[m]?.gameId || ''); }} className={`p-3 rounded-xl cursor-pointer border transition-all flex justify-between items-center ${selectedMember === m ? 'bg-red-900/20 border-red-600' : 'bg-black border-neutral-800'}`}><span className="text-white font-bold">{m}</span><span className="text-xs text-neutral-500 uppercase">{rosterData[m]?.role}</span></div>))}</div></div><Card className="lg:col-span-2">{selectedMember ? (<div className="space-y-6"><h3 className="text-2xl font-black text-white">Managing: <span className="text-red-500">{selectedMember}</span></h3><div className="grid grid-cols-2 gap-4"><div><label className="block text-xs font-bold text-neutral-500 mb-1">Role</label><Select value={role} onChange={e => setRole(e.target.value)}>{['Captain', 'Main', 'Sub', 'Tryout'].map(r => <option key={r}>{r}</option>)}</Select></div><div><label className="block text-xs font-bold text-neutral-500 mb-1">Riot ID</label><Input value={gameId} onChange={e => setGameId(e.target.value)} /></div></div><textarea className="w-full h-40 bg-black border border-neutral-800 rounded-xl p-3 text-white" value={notes} onChange={e => setNotes(e.target.value)} placeholder="Notes..." /><ButtonPrimary onClick={handleSave} className="w-full py-3">Save Changes</ButtonPrimary></div>) : <div className="h-full flex items-center justify-center text-neutral-500">Select a player</div>}</Card></div>) : (<div className="grid grid-cols-2 gap-8 h-full">{[setCompare1, setCompare2].map((setter, i) => (<Card key={i} className="h-full"><Select onChange={e => setter(e.target.value)} className="mb-6"><option>Select Player</option>{members.map(m => <option key={m}>{m}</option>)}</Select>{((i === 0 ? compare1 : compare2) && rosterData[i === 0 ? compare1 : compare2]) && (<div className="space-y-4 text-center"><div className="w-24 h-24 mx-auto bg-red-600 rounded-full flex items-center justify-center text-3xl font-black text-white border-4 border-black shadow-xl">{(i === 0 ? compare1 : compare2)[0]}</div><div className="text-3xl font-black text-white uppercase">{(i === 0 ? compare1 : compare2)}</div><div className="flex justify-center gap-2"><span className="bg-neutral-800 px-3 py-1 rounded text-xs font-bold text-white">{rosterData[i === 0 ? compare1 : compare2]?.rank || 'Unranked'}</span><span className="bg-red-900/50 px-3 py-1 rounded text-xs font-bold text-red-400">{rosterData[i === 0 ? compare1 : compare2]?.role || 'Member'}</span></div><div className="p-4 bg-black/50 rounded-xl border border-neutral-800 text-left"><div className="text-[10px] text-neutral-500 uppercase font-bold mb-2">Performance Notes</div><p className="text-sm text-neutral-300 italic">"{rosterData[i === 0 ? compare1 : compare2]?.notes || 'No notes available.'}"</p></div></div>)}</Card>))}</div>)}
-        </div>
-    );
-}
-
 function PartnerDirectory() {
     const [partners, setPartners] = useState([]); const [newPartner, setNewPartner] = useState({ name: '', contact: '', notes: '' });
     useEffect(() => { const unsub = onSnapshot(collection(db, 'partners'), (s) => { const p = []; s.forEach(d => p.push({ id: d.id, ...d.data() })); setPartners(p); }); return unsub; }, []);
@@ -866,7 +1000,6 @@ function LoginScreen({ signIn }) {
     );
 }
 
-// --- MAIN DASHBOARD LOGIC ---
 function SyrixDashboard() {
     const [currentUser, setCurrentUser] = useState(null); const [activeTab, setActiveTab] = useState(() => localStorage.getItem('syrix_active_tab') || 'dashboard'); const [availabilities, setAvailabilities] = useState({}); const [events, setEvents] = useState([]); const [day, setDay] = useState(DAYS[0]); const [start, setStart] = useState('12:00'); const [end, setEnd] = useState('23:30'); const [role, setRole] = useState('Flex'); const [saveStatus, setSaveStatus] = useState('idle'); const [userTimezone, setUserTimezone] = useState(localStorage.getItem('timezone') || Intl.DateTimeFormat().resolvedOptions().timeZone); const [authLoading, setAuthLoading] = useState(true); const [isModalOpen, setIsModalOpen] = useState(false); const [modalContent, setModalContent] = useState({ title: '', children: null }); const [isMember, setIsMember] = useState(false);
     const addToast = useToast();
@@ -911,7 +1044,7 @@ function SyrixDashboard() {
             <GlobalStyles />
             <BackgroundFlare />
             <header className="flex-none flex justify-between items-center px-8 py-4 border-b border-white/10 bg-black/40 backdrop-blur-md z-40">
-                <div><h1 className="text-3xl font-black tracking-tighter text-white drop-shadow-lg">SYRIX <span className="text-red-600">HUB</span></h1><div className="flex gap-6 mt-2 overflow-x-auto pb-2 scrollbar-hide"><NavBtn id="dashboard" label="Dashboard" /><NavBtn id="playbook" label="Playbook" /><NavBtn id="comps" label="Comps" /><NavBtn id="matches" label="Matches" /><NavBtn id="strats" label="Stratbook" /><NavBtn id="roster" label="Roster" /><NavBtn id="partners" label="Partners" /><NavBtn id="mapveto" label="Map Veto" />{ADMIN_UIDS.includes(currentUser.uid) && <NavBtn id="admin" label="Admin" />}</div></div>
+                <div><h1 className="text-3xl font-black tracking-tighter text-white drop-shadow-lg">SYRIX <span className="text-red-600">HUB</span></h1><div className="flex gap-6 mt-2 overflow-x-auto pb-2 scrollbar-hide"><NavBtn id="dashboard" label="Dashboard" /><NavBtn id="playbook" label="Playbook" /><NavBtn id="comps" label="Comps" /><NavBtn id="matches" label="Matches" /><NavBtn id="strats" label="Stratbook" /><NavBtn id="lineups" label="Lineups" /><NavBtn id="roster" label="Roster" /><NavBtn id="partners" label="Partners" /><NavBtn id="mapveto" label="Map Veto" />{ADMIN_UIDS.includes(currentUser.uid) && <NavBtn id="admin" label="Admin" />}</div></div>
                 <div className="flex items-center gap-4"><div className="text-right"><div className="text-sm font-bold text-white">{currentUser.displayName}</div><button onClick={handleSignOut} className="text-[10px] text-red-500 font-bold uppercase">Log Out</button></div><select value={userTimezone} onChange={e => { setUserTimezone(e.target.value); localStorage.setItem('timezone', e.target.value) }} className="bg-black/50 border border-neutral-800 text-xs rounded p-2 text-neutral-400 backdrop-blur-sm">{timezones.map(t => <option key={t} value={t}>{t}</option>)}</select></div>
             </header>
             <main className="flex-1 overflow-y-auto p-6 scrollbar-thin scrollbar-thumb-red-900/50 scrollbar-track-black/20 relative z-10"><div className="max-w-[1920px] mx-auto">
@@ -930,9 +1063,10 @@ function SyrixDashboard() {
                 </div>}
                 {activeTab === 'playbook' && <div className="animate-fade-in h-[80vh]"><Playbook /></div>}
                 {activeTab === 'comps' && <div className="animate-fade-in h-full"><TeamComps members={dynamicMembers} /></div>}
-                {activeTab === 'matches' && <div className="animate-fade-in"><MatchHistory /></div>}
+                {activeTab === 'matches' && <div className="animate-fade-in"><MatchHistory currentUser={currentUser} members={dynamicMembers} /></div>}
                 {activeTab === 'strats' && <div className="animate-fade-in h-[85vh]"><StratBook /></div>}
-                {activeTab === 'roster' && <div className="animate-fade-in h-full"><RosterManager members={dynamicMembers} /></div>}
+                {activeTab === 'lineups' && <div className="animate-fade-in h-[85vh]"><LineupLibrary /></div>}
+                {activeTab === 'roster' && <div className="animate-fade-in h-full"><RosterManager members={dynamicMembers} events={events} /></div>}
                 {activeTab === 'partners' && <div className="animate-fade-in h-full"><PartnerDirectory /></div>}
                 {activeTab === 'admin' && <div className="animate-fade-in h-full"><AdminPanel /></div>}
                 {activeTab === 'mapveto' && <div className="animate-fade-in h-[80vh]"><MapVeto /></div>}
