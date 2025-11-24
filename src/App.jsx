@@ -198,7 +198,6 @@ const ButtonSecondary = ({ children, onClick, className = "" }) => (
 );
 
 // --- HOOKS ---
-const // --- REPLACES EXISTING useValorantData ---
 const useValorantData = () => {
     const [agentData, setAgentData] = useState({}); // Maps Name -> { icon, abilities: [] }
     const [mapImages, setMapImages] = useState({});
