@@ -1,9 +1,9 @@
 ﻿/*
-Syrix Team Availability - v11.4 (Roster Fix)
-- FIX: Added 'min-h-screen' and flex containers to SyrixDashboard to prevent Roster section collapsing.
-- FIX: Added "No Members Found" empty state to RosterManager for better visibility.
-- FIX: Added safety checks to MVP calculation to prevent white-screen crashes.
-- UI: Maintained v10.0/v11.0 visual style.
+Syrix Team Availability - v11.5 (Lineup Fix)
+- FIX: Added validation and error handling to 'saveLineup' to prevent silent failures.
+- FIX: Added explicit error toasts when fields are missing in Lineup Library.
+- FIX: Storing userId in lineups for better data tracking.
+- CORE: Full TOS system (Roster, Matches, Stratbook) maintained.
 */
 
 import React, { useState, useEffect, useMemo, useRef, createContext, useContext } from 'react';
@@ -710,18 +710,32 @@ function LineupLibrary() {
     };
 
     const saveLineup = async () => {
-        if (!newLineup.title || !newLineup.url) return;
-        await addDoc(collection(db, 'lineups'), {
-            ...newLineup,
-            map: selectedMap,
-            x: tempCoords.x,
-            y: tempCoords.y,
-            addedBy: currentUser.displayName,
-            date: new Date().toISOString()
-        });
-        setIsAdding(false);
-        setNewLineup({ title: '', url: '', description: '', agent: 'Sova', type: 'Recon' });
-        addToast("Lineup Added to Library");
+        if (!newLineup.title || !newLineup.url) {
+            addToast("Please enter a Title and URL", "error");
+            return;
+        }
+        if (!tempCoords) {
+            addToast("Error: No location selected", "error");
+            return;
+        }
+
+        try {
+            await addDoc(collection(db, 'lineups'), {
+                ...newLineup,
+                map: selectedMap,
+                x: tempCoords.x,
+                y: tempCoords.y,
+                addedBy: currentUser.displayName || "Unknown",
+                userId: currentUser.uid,
+                date: new Date().toISOString()
+            });
+            setIsAdding(false);
+            setNewLineup({ title: '', url: '', description: '', agent: 'Sova', type: 'Recon' });
+            addToast("Lineup Added to Library");
+        } catch (error) {
+            console.error("Error saving lineup:", error);
+            addToast("Failed to save lineup", "error");
+        }
     };
 
     const deleteLineup = async (id) => {
