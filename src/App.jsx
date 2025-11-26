@@ -311,9 +311,6 @@ const LandingPage = ({ onEnterHub }) => {
                             Pushing the limits of performance in every arena, driven by innovation, strategy, and relentless passion for the win.
                         </p>
                         <div className="flex flex-col md:flex-row gap-6 justify-center">
-                            <button onClick={onEnterHub} className="px-10 py-4 rounded-full bg-red-600 text-white font-black uppercase tracking-widest shadow-[0_0_30px_rgba(220,38,38,0.5)] hover:bg-red-500 transition-all hover:scale-105">
-                                Access Dashboard
-                            </button>
                             <a href="#roster" className="px-10 py-4 rounded-full bg-black/50 border border-white/20 text-white font-black uppercase tracking-widest hover:bg-white/10 hover:border-white/40 transition-all">
                                 View Roster
                             </a>
