@@ -216,7 +216,6 @@ const LandingPage = ({ onEnterHub }) => {
         const unsubEvents = onSnapshot(collection(db, 'events'), (snap) => {
             const e = [];
             snap.forEach(doc => e.push({ id: doc.id, ...doc.data() }));
-            // Filter for future matches
             const futureMatches = e
                 .filter(m => new Date(m.date) >= new Date())
                 .sort((a, b) => new Date(a.date) - new Date(b.date));
@@ -249,7 +248,6 @@ const LandingPage = ({ onEnterHub }) => {
                 <div className="card-inner">
                     <div className={`card-front glass-panel rounded-xl overflow-hidden shadow-2xl border-b-4 border-red-600`}>
                         <div className="w-full h-48 bg-gradient-to-b from-neutral-800 to-black flex items-center justify-center">
-                            {/* Placeholder Icon using first letter */}
                             <span className="text-6xl font-black text-neutral-700 group-hover:text-red-600 transition-colors">{player.id[0]}</span>
                         </div>
                         <div className="p-6 text-center">
@@ -272,14 +270,15 @@ const LandingPage = ({ onEnterHub }) => {
         <div className="min-h-screen w-full font-sans text-white flex flex-col relative overflow-x-hidden bg-black">
             <Background />
 
-            <header className="sticky top-0 z-50 bg-black/40 backdrop-blur-md shadow-2xl border-b border-white/10">
-                <nav className="max-w-7xl mx-auto px-6 py-4 flex justify-between items-center">
+            <header className="sticky top-0 z-50 bg-black/40 backdrop-blur-md shadow-2xl border-b border-white/10 flex justify-center">
+                <nav className="max-w-7xl w-full px-6 py-4 flex justify-between items-center">
                     <a href="#home" className="flex items-center space-x-2"><span className="text-3xl font-black text-red-600 italic">/</span><h1 className="text-xl font-black uppercase tracking-tighter italic">Syrix</h1></a>
                     <button onClick={() => setMobileMenuOpen(!mobileMenuOpen)} className="md:hidden text-2xl z-50 p-2 focus:outline-none">☰</button>
                     <div className="hidden md:flex items-center space-x-8 text-xs font-bold uppercase tracking-widest">
                         <a href="#roster" className="hover:text-red-500 transition duration-300">Roster</a>
                         <a href="#schedule" className="hover:text-red-500 transition duration-300">Matches</a>
-                        <a href="#community" className="hover:text-red-500 transition duration-300">Community</a>
+                        <a href="#vods" className="hover:text-red-500 transition duration-300">VODs</a>
+                        <a href="#merch" className="hover:text-red-500 transition duration-300">Shop</a>
                         <button onClick={onEnterHub} className="px-6 py-2 rounded-full bg-gradient-to-r from-red-800 to-red-600 hover:from-red-700 hover:to-red-500 text-white shadow-[0_0_20px_rgba(220,38,38,0.4)] transition duration-300 flex items-center gap-2 transform hover:scale-105">
                             <span>TEAM HUB</span>
                             <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M9 5l7 7-7 7"></path></svg>
@@ -293,12 +292,14 @@ const LandingPage = ({ onEnterHub }) => {
                 <div className="flex flex-col items-center space-y-8 text-xl font-black uppercase italic tracking-tighter">
                     <a onClick={() => setMobileMenuOpen(false)} href="#roster" className="text-white hover:text-red-500">Roster</a>
                     <a onClick={() => setMobileMenuOpen(false)} href="#schedule" className="text-white hover:text-red-500">Matches</a>
+                    <a onClick={() => setMobileMenuOpen(false)} href="#vods" className="text-white hover:text-red-500">VODs</a>
+                    <a onClick={() => setMobileMenuOpen(false)} href="#merch" className="text-white hover:text-red-500">Shop</a>
                     <button onClick={() => { setMobileMenuOpen(false); onEnterHub(); }} className="px-8 py-4 rounded-full bg-red-600 text-white shadow-xl">TEAM HUB</button>
                 </div>
             </div>
 
-            <main className="flex-1 relative z-10">
-                <section id="home" className="hero-section flex items-center justify-center text-center p-6 relative overflow-hidden">
+            <main className="flex-1 relative z-10 flex flex-col items-center w-full">
+                <section id="home" className="w-full hero-section flex items-center justify-center text-center p-6 relative overflow-hidden">
                     <div className="absolute inset-0 bg-gradient-to-b from-black/30 via-black/60 to-black pointer-events-none"></div>
                     <div className="relative z-10 max-w-5xl mx-auto" data-aos="zoom-in">
                         <div className="flex justify-center mb-6">
@@ -318,8 +319,28 @@ const LandingPage = ({ onEnterHub }) => {
                     </div>
                 </section>
 
-                <section id="roster" className="py-24 relative">
-                    <div className="max-w-7xl mx-auto px-6">
+                <section id="about" className="w-full py-24 relative flex justify-center">
+                    <div className="max-w-7xl w-full px-6 grid grid-cols-1 lg:grid-cols-2 gap-16 items-center">
+                        <div data-aos="fade-right">
+                            <h3 className="text-4xl font-black text-white italic tracking-tighter mb-6">OUR <span className="text-red-600">MISSION</span></h3>
+                            <p className="text-neutral-400 text-lg leading-relaxed mb-6">
+                                Syrix was founded on the principle that uncompromising skill and unified strategy conquer all. We are a disciplined organization dedicated to achieving excellence in every major competitive title.
+                            </p>
+                            <ul className="space-y-4">
+                                <li className="flex items-center gap-3 text-neutral-300"><span className="text-red-600 font-bold">01.</span> Relentless Training & Preparation</li>
+                                <li className="flex items-center gap-3 text-neutral-300"><span className="text-red-600 font-bold">02.</span> Fan-First Community Engagement</li>
+                                <li className="flex items-center gap-3 text-neutral-300"><span className="text-red-600 font-bold">03.</span> Unrivaled Professionalism</li>
+                            </ul>
+                        </div>
+                        <div className="relative h-96 glass-panel rounded-3xl border-white/10 overflow-hidden" data-aos="fade-left">
+                            <div className="absolute inset-0 bg-gradient-to-tr from-red-900/20 to-transparent"></div>
+                            <div className="absolute inset-0 flex items-center justify-center text-neutral-700 font-black text-9xl opacity-20 italic tracking-tighter">SYRIX</div>
+                        </div>
+                    </div>
+                </section>
+
+                <section id="roster" className="w-full py-24 relative flex justify-center">
+                    <div className="max-w-7xl w-full px-6">
                         <div className="text-center mb-16" data-aos="fade-up">
                             <h3 className="text-4xl md:text-5xl font-black text-white italic tracking-tighter mb-4"><span className="text-red-600">/</span> ACTIVE ROSTER</h3>
                             <p className="text-neutral-500 uppercase tracking-widest font-bold text-sm">The Squad</p>
@@ -330,8 +351,8 @@ const LandingPage = ({ onEnterHub }) => {
                     </div>
                 </section>
 
-                <section id="schedule" className="py-24 bg-gradient-to-b from-transparent to-neutral-900/20 border-y border-white/5 relative">
-                    <div className="max-w-5xl mx-auto px-6">
+                <section id="schedule" className="w-full py-24 bg-gradient-to-b from-transparent to-neutral-900/20 border-y border-white/5 relative flex justify-center">
+                    <div className="max-w-5xl w-full px-6">
                         <div className="text-center mb-16" data-aos="fade-up">
                             <h3 className="text-4xl md:text-5xl font-black text-white italic tracking-tighter mb-4"><span className="text-red-600">/</span> UPCOMING OPS</h3>
                             <p className="text-neutral-500 uppercase tracking-widest font-bold text-sm">Mission Log</p>
@@ -362,8 +383,101 @@ const LandingPage = ({ onEnterHub }) => {
                     </div>
                 </section>
 
-                <section id="community" className="py-24">
-                    <div className="max-w-4xl mx-auto px-6">
+                <section id="vods" className="w-full py-24 relative flex justify-center">
+                    <div className="max-w-7xl w-full px-6">
+                        <div className="text-center mb-16" data-aos="fade-up">
+                            <h3 className="text-4xl md:text-5xl font-black text-white italic tracking-tighter mb-4"><span className="text-red-600">/</span> RECENT INTEL</h3>
+                            <p className="text-neutral-500 uppercase tracking-widest font-bold text-sm">VODs & Highlights</p>
+                        </div>
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+                            {[1, 2, 3].map((i) => (
+                                <div key={i} className="glass-panel rounded-xl overflow-hidden group cursor-pointer" data-aos="fade-up" data-aos-delay={i * 100}>
+                                    <div className="aspect-video bg-neutral-900 relative">
+                                        <div className="absolute inset-0 flex items-center justify-center text-neutral-700 group-hover:text-red-600 transition-colors">
+                                            <svg className="w-12 h-12" fill="currentColor" viewBox="0 0 24 24"><path d="M8 5v14l11-7z" /></svg>
+                                        </div>
+                                    </div>
+                                    <div className="p-4">
+                                        <h4 className="font-bold text-white uppercase tracking-tight">Championship Finals Game {i}</h4>
+                                        <p className="text-xs text-neutral-500 mt-1">Highlight Reel</p>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                </section>
+
+                <section id="news" className="w-full py-24 relative flex justify-center bg-black/50">
+                    <div className="max-w-7xl w-full px-6">
+                        <div className="text-center mb-16" data-aos="fade-up">
+                            <h3 className="text-4xl md:text-5xl font-black text-white italic tracking-tighter mb-4"><span className="text-red-600">/</span> SITREP</h3>
+                            <p className="text-neutral-500 uppercase tracking-widest font-bold text-sm">News & Updates</p>
+                        </div>
+                        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                            <div className="glass-panel p-8 rounded-3xl border border-red-900/30" data-aos="fade-right">
+                                <span className="text-red-500 text-xs font-bold uppercase tracking-widest mb-2 block">Featured</span>
+                                <h4 className="text-3xl font-black text-white mb-4">SYRIX SECURES PLAYOFF SPOT</h4>
+                                <p className="text-neutral-400 mb-6">The team demonstrated flawless execution this past weekend, sweeping the semi-finals to secure our spot in the Grand Championship.</p>
+                                <button className="text-white font-bold text-sm hover:text-red-500 transition-colors">Read More &rarr;</button>
+                            </div>
+                            <div className="space-y-4" data-aos="fade-left">
+                                <div className="glass-panel p-6 rounded-2xl flex gap-4 items-center">
+                                    <div className="w-16 h-16 bg-neutral-800 rounded-lg flex-shrink-0"></div>
+                                    <div>
+                                        <h5 className="font-bold text-white">Patch 7.04 Analysis</h5>
+                                        <p className="text-xs text-neutral-500">Strategy Team • 2 Days Ago</p>
+                                    </div>
+                                </div>
+                                <div className="glass-panel p-6 rounded-2xl flex gap-4 items-center">
+                                    <div className="w-16 h-16 bg-neutral-800 rounded-lg flex-shrink-0"></div>
+                                    <div>
+                                        <h5 className="font-bold text-white">New Merch Drop: Core Collection</h5>
+                                        <p className="text-xs text-neutral-500">Store Team • 1 Week Ago</p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <section id="merch" className="w-full py-24 relative flex justify-center">
+                    <div className="max-w-7xl w-full px-6">
+                        <div className="text-center mb-16" data-aos="fade-up">
+                            <h3 className="text-4xl md:text-5xl font-black text-white italic tracking-tighter mb-4"><span className="text-red-600">/</span> ARMORY</h3>
+                            <p className="text-neutral-500 uppercase tracking-widest font-bold text-sm">Official Gear</p>
+                        </div>
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+                            {['Pro Jersey 2025', 'Core Hoodie', 'Tactical Mousepad'].map((item, i) => (
+                                <div key={i} className="glass-panel rounded-2xl overflow-hidden group cursor-pointer" data-aos="fade-up" data-aos-delay={i * 100}>
+                                    <div className="h-64 bg-neutral-800 flex items-center justify-center group-hover:bg-neutral-700 transition-colors">
+                                        <span className="text-neutral-500 font-black uppercase tracking-widest">{item}</span>
+                                    </div>
+                                    <div className="p-6 flex justify-between items-center">
+                                        <div>
+                                            <h4 className="font-bold text-white">{item}</h4>
+                                            <p className="text-xs text-red-500 font-bold">$??.?? USD</p>
+                                        </div>
+                                        <button className="bg-white text-black px-4 py-2 rounded-lg font-bold text-xs uppercase hover:bg-red-600 hover:text-white transition-colors">Buy</button>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                </section>
+
+                <section id="partners" className="w-full py-16 relative flex justify-center border-t border-white/5 bg-black">
+                    <div className="max-w-7xl w-full px-6">
+                        <p className="text-center text-neutral-600 text-xs font-bold uppercase tracking-[0.3em] mb-8">Trusted By</p>
+                        <div className="flex flex-wrap justify-center gap-12 md:gap-24 opacity-50 grayscale hover:grayscale-0 transition-all duration-500">
+                            {['QUANTUM', 'HYPERENERGY', 'AURA', 'OMEGANET'].map((p) => (
+                                <div key={p} className="text-2xl font-black text-white italic tracking-tighter">{p}</div>
+                            ))}
+                        </div>
+                    </div>
+                </section>
+
+                <section id="community" className="w-full py-24 relative flex justify-center">
+                    <div className="max-w-4xl w-full px-6">
                         <div className="glass-panel rounded-[3rem] p-12 text-center border border-red-600/30 relative overflow-hidden" data-aos="zoom-in">
                             <div className="absolute top-0 right-0 w-64 h-64 bg-red-600/20 rounded-full blur-[100px] pointer-events-none"></div>
                             <div className="relative z-10">
@@ -378,8 +492,8 @@ const LandingPage = ({ onEnterHub }) => {
                 </section>
             </main>
 
-            <footer className="bg-black border-t border-white/10 py-12 relative z-10">
-                <div className="max-w-7xl mx-auto px-6 text-center">
+            <footer className="bg-black border-t border-white/10 py-12 relative z-10 flex justify-center">
+                <div className="max-w-7xl w-full px-6 text-center">
                     <div className="text-3xl font-black text-neutral-800 italic tracking-tighter mb-4">SYRIX</div>
                     <div className="text-xs text-neutral-600 uppercase tracking-widest">© 2025 Syrix Team Portal. All Rights Reserved.</div>
                 </div>
@@ -1167,7 +1281,7 @@ function RosterManager({ members, events }) {
 
     return (
         <div className="h-full flex flex-col gap-6"><div className="flex gap-4 border-b border-white/10 pb-4"><button onClick={() => setMode('edit')} className={`text-sm font-bold uppercase ${mode === 'edit' ? 'text-red-500' : 'text-neutral-500'}`}>Edit Mode</button><button onClick={() => setMode('compare')} className={`text-sm font-bold uppercase ${mode === 'compare' ? 'text-red-500' : 'text-neutral-500'}`}>Compare Players</button></div>
-            {mode === 'edit' ? (<div className="grid grid-cols-1 lg:grid-cols-3 gap-8 h-full"><div className="lg:col-span-1 bg-neutral-900/80 p-6 rounded-3xl border border-white/5 flex flex-col"><h3 className="text-white font-bold mb-4">Members</h3><div className="flex-1 space-y-2 overflow-y-auto custom-scrollbar">{members.length === 0 ? <div className="text-neutral-500 text-xs italic p-4 text-center border border-dashed border-neutral-800 rounded-xl">No members found. Log availability to appear here.</div> : members.map(m => (<div key={m} onClick={() => { setSelectedMember(m); setRole(rosterData[m]?.role || 'Tryout'); setNotes(rosterData[m]?.notes || ''); setGameId(rosterData[m]?.gameId || ''); }} className={`p-3 rounded-xl cursor-pointer border transition-all flex justify-between items-center ${selectedMember === m ? 'bg-red-900/20 border-red-600' : 'bg-black border-neutral-800'}`}><span className="text-white font-bold flex items-center gap-2">{m} {mvpCounts[m] > 0 && <span className="text-[9px] bg-yellow-500/20 text-yellow-500 px-1 rounded border border-yellow-500/50">🏆 x{mvpCounts[m]}</span>}</span><span className="text-xs text-neutral-500 uppercase">{rosterData[m]?.role}</span></div>))}</div></div><Card className="lg:col-span-2">{selectedMember ? (<div className="space-y-6"><h3 className="text-2xl font-black text-white">Managing: <span className="text-red-500">{selectedMember}</span></h3><div className="grid grid-cols-2 gap-4"><div><label className="block text-xs font-bold text-neutral-500 mb-1">Role</label><Select value={role} onChange={e => setRole(e.target.value)}>{['Captain', 'Main', 'Sub', 'Tryout'].map(r => <option key={r}>{r}</option>)}</Select></div><div><label className="block text-xs font-bold text-neutral-500 mb-1">Riot ID</label><Input value={gameId} onChange={e => setGameId(e.target.value)} /></div></div><textarea className="w-full h-40 bg-black border border-neutral-800 rounded-xl p-3 text-white" value={notes} onChange={e => setNotes(e.target.value)} placeholder="Notes..." /><ButtonPrimary onClick={handleSave} className="w-full py-3">Save Changes</ButtonPrimary></div>) : <div className="h-full flex items-center justify-center text-neutral-500">Select a player</div>}</Card></div>) : (<div className="grid grid-cols-2 gap-8 h-full">{[setCompare1, setCompare2].map((setter, i) => (<Card key={i} className="h-full"><Select onChange={e => setter(e.target.value)} className="mb-6"><option>Select Player</option>{members.map(m => <option key={m}>{m}</option>)}</Select>{((i === 0 ? compare1 : compare2) && rosterData[i === 0 ? compare1 : compare2]) && (<div className="space-y-4 text-center"><div className="w-24 h-24 mx-auto bg-red-600 rounded-full flex items-center justify-center text-3xl font-black text-white border-4 border-black shadow-xl">{(i === 0 ? compare1 : compare2)[0]}</div><div className="text-3xl font-black text-white uppercase">{(i === 0 ? compare1 : compare2)}</div><div className="flex justify-center gap-2"><span className="bg-neutral-800 px-3 py-1 rounded text-xs font-bold text-white">{rosterData[i === 0 ? compare1 : compare2]?.rank || 'Unranked'}</span><span className="bg-red-900/50 px-3 py-1 rounded text-xs font-bold text-red-400">{rosterData[i === 0 ? compare1 : compare2]?.role || 'Member'}</span></div>{mvpCounts[(i === 0 ? compare1 : compare2)] > 0 && <div className="text-yellow-500 font-bold text-sm bg-yellow-900/20 py-1 rounded border border-yellow-500/20">🏆 {mvpCounts[(i === 0 ? compare1 : compare2)]} MVP Awards</div>}<div className="p-4 bg-black/50 rounded-xl border border-neutral-800 text-left"><div className="text-[10px] text-neutral-500 uppercase font-bold mb-2">Performance Notes</div><p className="text-sm text-neutral-300 italic">"{rosterData[i === 0 ? compare1 : compare2]?.notes || 'No notes available.'}"</p></div></div>)}</Card>))}</div>)}
+            {mode === 'edit' ? (<div className="grid grid-cols-1 lg:grid-cols-3 gap-8 h-full"><div className="lg:col-span-1 bg-neutral-900/80 p-6 rounded-3xl border border-white/5 flex flex-col"><h3 className="text-white font-bold mb-4">Members</h3><div className="flex-1 space-y-2 overflow-y-auto custom-scrollbar">{members.length === 0 ? <div className="text-neutral-500 text-xs italic p-4 text-center border border-dashed border-neutral-800 rounded-xl">No members found. Log availability to appear here.</div> : members.map(m => (<div key={m} onClick={() => { setSelectedMember(m); setRole(rosterData[m]?.role || 'Tryout'); setNotes(rosterData[m]?.notes || ''); setGameId(rosterData[m]?.gameId || ''); }} className={`p-3 rounded-xl cursor-pointer border transition-all flex justify-between items-center ${selectedMember === m ? 'bg-red-900/20 border-red-600' : 'bg-black border-neutral-800'}`}><span className="text-white font-bold flex items-center gap-2">{m} {mvpCounts[m] > 0 && <span className="text-[9px] bg-yellow-500/20 text-yellow-500 px-1 rounded border border-yellow-500/20">🏆 x{mvpCounts[m]}</span>}</span><span className="text-xs text-neutral-500 uppercase">{rosterData[m]?.role}</span></div>))}</div></div><Card className="lg:col-span-2">{selectedMember ? (<div className="space-y-6"><h3 className="text-2xl font-black text-white">Managing: <span className="text-red-500">{selectedMember}</span></h3><div className="grid grid-cols-2 gap-4"><div><label className="block text-xs font-bold text-neutral-500 mb-1">Role</label><Select value={role} onChange={e => setRole(e.target.value)}>{['Captain', 'Main', 'Sub', 'Tryout'].map(r => <option key={r}>{r}</option>)}</Select></div><div><label className="block text-xs font-bold text-neutral-500 mb-1">Riot ID</label><Input value={gameId} onChange={e => setGameId(e.target.value)} /></div></div><textarea className="w-full h-40 bg-black border border-neutral-800 rounded-xl p-3 text-white" value={notes} onChange={e => setNotes(e.target.value)} placeholder="Notes..." /><ButtonPrimary onClick={handleSave} className="w-full py-3">Save Changes</ButtonPrimary></div>) : <div className="h-full flex items-center justify-center text-neutral-500">Select a player</div>}</Card></div>) : (<div className="grid grid-cols-2 gap-8 h-full">{[setCompare1, setCompare2].map((setter, i) => (<Card key={i} className="h-full"><Select onChange={e => setter(e.target.value)} className="mb-6"><option>Select Player</option>{members.map(m => <option key={m}>{m}</option>)}</Select>{((i === 0 ? compare1 : compare2) && rosterData[i === 0 ? compare1 : compare2]) && (<div className="space-y-4 text-center"><div className="w-24 h-24 mx-auto bg-red-600 rounded-full flex items-center justify-center text-3xl font-black text-white border-4 border-black shadow-xl">{(i === 0 ? compare1 : compare2)[0]}</div><div className="text-3xl font-black text-white uppercase">{(i === 0 ? compare1 : compare2)}</div><div className="flex justify-center gap-2"><span className="bg-neutral-800 px-3 py-1 rounded text-xs font-bold text-white">{rosterData[i === 0 ? compare1 : compare2]?.rank || 'Unranked'}</span><span className="bg-red-900/50 px-3 py-1 rounded text-xs font-bold text-red-400">{rosterData[i === 0 ? compare1 : compare2]?.role || 'Member'}</span></div>{mvpCounts[(i === 0 ? compare1 : compare2)] > 0 && <div className="text-yellow-500 font-bold text-sm bg-yellow-900/20 py-1 rounded border border-yellow-500/20">🏆 {mvpCounts[(i === 0 ? compare1 : compare2)]} MVP Awards</div>}<div className="p-4 bg-black/50 rounded-xl border border-neutral-800 text-left"><div className="text-[10px] text-neutral-500 uppercase font-bold mb-2">Performance Notes</div><p className="text-sm text-neutral-300 italic">"{rosterData[i === 0 ? compare1 : compare2]?.notes || 'No notes available.'}"</p></div></div>)}</Card>))}</div>)}
         </div>
     );
 }
