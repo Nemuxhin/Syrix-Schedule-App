@@ -260,14 +260,18 @@ const LandingPage = ({ onEnterHub }) => {
         return (
             <div className="player-card group w-full sm:w-72" data-aos="fade-up" data-aos-delay={delay}>
                 <div className="card-inner">
-                    <div className={`card-front glass-panel rounded-xl overflow-hidden shadow-2xl border-b-4 border-red-600`}>
-                        <div className="w-full h-48 bg-gradient-to-b from-neutral-800 to-black flex items-center justify-center">
-                            {/* Placeholder Icon using first letter */}
-                            <span className="text-6xl font-black text-neutral-700 group-hover:text-red-600 transition-colors">{player.id[0]}</span>
+                    <div className={`card-front glass-panel rounded-xl overflow-hidden shadow-2xl border-b-4 border-red-600 relative`}>
+                        <div className="w-full h-48 bg-gradient-to-b from-neutral-800 to-black flex items-center justify-center overflow-hidden">
+                            {/* If player has a PFP, use it, otherwise use placeholder */}
+                            {player.pfp ? (
+                                <img src={player.pfp} alt={player.id} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500" />
+                            ) : (
+                                <span className="text-6xl font-black text-neutral-700 group-hover:text-red-600 transition-colors">{player.id[0]}</span>
+                            )}
                         </div>
-                        <div className="p-6 text-center">
+                        <div className="p-6 text-center relative">
                             <h4 className={`text-2xl font-extrabold text-white mb-1`}>{player.id}</h4>
-                            <p className="text-sm font-semibold text-red-500 mb-1 uppercase tracking-widest">{player.role || 'Member'}</p>
+                            <p className="text-sm font-black text-red-600 mb-1 uppercase tracking-widest border-y border-red-900/30 py-1 inline-block">{player.role || 'Member'}</p>
                             <div className="mt-2 text-xs text-neutral-500 font-mono bg-black/50 py-1 px-2 rounded inline-block">Rank: {player.rank || 'N/A'}</div>
                         </div>
                     </div>
@@ -1283,6 +1287,7 @@ function RosterManager({ members, events }) {
     const [role, setRole] = useState('Tryout');
     const [rank, setRank] = useState('Unranked');
     const [gameId, setGameId] = useState('');
+    const [pfp, setPfp] = useState(''); // New state for profile image URL
     const [notes, setNotes] = useState('');
 
     const addToast = useToast();
@@ -1290,7 +1295,7 @@ function RosterManager({ members, events }) {
 
     const handleSave = async () => {
         if (!selectedMember) return;
-        await setDoc(doc(db, 'roster', selectedMember), { role, rank, notes, gameId }, { merge: true });
+        await setDoc(doc(db, 'roster', selectedMember), { role, rank, notes, gameId, pfp }, { merge: true });
         addToast('Player Updated');
     };
 
@@ -1328,6 +1333,7 @@ function RosterManager({ members, events }) {
                                         setRank(rosterData[m]?.rank || 'Unranked');
                                         setNotes(rosterData[m]?.notes || '');
                                         setGameId(rosterData[m]?.gameId || '');
+                                        setPfp(rosterData[m]?.pfp || ''); // Set PFP state
                                     }} className={`p-3 rounded-xl cursor-pointer border transition-all flex justify-between items-center ${selectedMember === m ? 'bg-red-900/20 border-red-600' : 'bg-black border-neutral-800'}`}>
                                         <span className="text-white font-bold flex items-center gap-2">{m} {mvpCounts[m] > 0 && <span className="text-[9px] bg-yellow-500/20 text-yellow-500 px-1 rounded border border-yellow-500/50">🏆 x{mvpCounts[m]}</span>}</span>
                                         <span className="text-xs text-neutral-500 uppercase">{rosterData[m]?.role}</span>
@@ -1350,9 +1356,15 @@ function RosterManager({ members, events }) {
                                         <Select value={rank} onChange={e => setRank(e.target.value)}>{RANKS.map(r => <option key={r}>{r}</option>)}</Select>
                                     </div>
                                 </div>
-                                <div>
-                                    <label className="block text-xs font-bold text-neutral-500 mb-1">Riot ID</label>
-                                    <Input value={gameId} onChange={e => setGameId(e.target.value)} />
+                                <div className="grid grid-cols-2 gap-4">
+                                    <div>
+                                        <label className="block text-xs font-bold text-neutral-500 mb-1">Riot ID</label>
+                                        <Input value={gameId} onChange={e => setGameId(e.target.value)} />
+                                    </div>
+                                    <div>
+                                        <label className="block text-xs font-bold text-neutral-500 mb-1">Profile Image URL</label>
+                                        <Input value={pfp} onChange={e => setPfp(e.target.value)} placeholder="https://..." />
+                                    </div>
                                 </div>
                                 <textarea className="w-full h-40 bg-black border border-neutral-800 rounded-xl p-3 text-white" value={notes} onChange={e => setNotes(e.target.value)} placeholder="Notes..." />
                                 <ButtonPrimary onClick={handleSave} className="w-full py-3">Save Changes</ButtonPrimary>
