@@ -78,6 +78,17 @@ const convertToGMT = (day, time) => {
     return { day: jsDays[d.getUTCDay()], time: `${String(d.getUTCHours()).padStart(2, '0')}:${String(d.getUTCMinutes()).padStart(2, '0')}` };
 };
 
+// --- HELPER: SORT ROSTER ---
+const sortRosterByRole = (rosterList, lookupData = null) => {
+    const priority = { 'Captain': 0, 'Main': 1, 'Sub': 2, 'Tryout': 3 };
+    return [...rosterList].sort((a, b) => {
+        // Handle both array of objects (Landing Page) and array of strings (Hub list with lookup)
+        const roleA = (lookupData ? lookupData[a]?.role : a.role) || 'Tryout';
+        const roleB = (lookupData ? lookupData[b]?.role : b.role) || 'Tryout';
+        return (priority[roleA] ?? 99) - (priority[roleB] ?? 99);
+    });
+};
+
 // --- GLOBAL STYLES & ASSETS ---
 const GlobalStyles = () => (
     <style>{`
@@ -216,6 +227,7 @@ const LandingPage = ({ onEnterHub }) => {
         const unsubEvents = onSnapshot(collection(db, 'events'), (snap) => {
             const e = [];
             snap.forEach(doc => e.push({ id: doc.id, ...doc.data() }));
+            // Filter for future matches
             const futureMatches = e
                 .filter(m => new Date(m.date) >= new Date())
                 .sort((a, b) => new Date(a.date) - new Date(b.date));
@@ -223,6 +235,8 @@ const LandingPage = ({ onEnterHub }) => {
         });
         return () => { unsubRoster(); unsubEvents(); };
     }, []);
+
+    const sortedRoster = useMemo(() => sortRosterByRole(roster), [roster]);
 
     // Dynamic Script Loading for AOS
     useEffect(() => {
@@ -248,6 +262,7 @@ const LandingPage = ({ onEnterHub }) => {
                 <div className="card-inner">
                     <div className={`card-front glass-panel rounded-xl overflow-hidden shadow-2xl border-b-4 border-red-600`}>
                         <div className="w-full h-48 bg-gradient-to-b from-neutral-800 to-black flex items-center justify-center">
+                            {/* Placeholder Icon using first letter */}
                             <span className="text-6xl font-black text-neutral-700 group-hover:text-red-600 transition-colors">{player.id[0]}</span>
                         </div>
                         <div className="p-6 text-center">
@@ -346,7 +361,7 @@ const LandingPage = ({ onEnterHub }) => {
                             <p className="text-neutral-500 uppercase tracking-widest font-bold text-sm">The Squad</p>
                         </div>
                         <div className="flex flex-wrap justify-center gap-8">
-                            {roster.length > 0 ? roster.map((p, i) => <PlayerCard key={p.id} player={p} delay={i * 50} />) : <div className="w-full text-center text-neutral-500 py-12 border border-dashed border-neutral-800 rounded-xl">Loading Agents...</div>}
+                            {sortedRoster.length > 0 ? sortedRoster.map((p, i) => <PlayerCard key={p.id} player={p} delay={i * 50} />) : <div className="w-full text-center text-neutral-500 py-12 border border-dashed border-neutral-800 rounded-xl">Loading Agents...</div>}
                         </div>
                     </div>
                 </section>
@@ -1260,10 +1275,28 @@ function MatchHistory({ currentUser, members }) {
 }
 
 function RosterManager({ members, events }) {
-    const [rosterData, setRosterData] = useState({}); const [mode, setMode] = useState('edit'); const [compare1, setCompare1] = useState(''); const [compare2, setCompare2] = useState(''); const [selectedMember, setSelectedMember] = useState(null); const [role, setRole] = useState('Tryout'); const [gameId, setGameId] = useState(''); const [notes, setNotes] = useState('');
+    const [rosterData, setRosterData] = useState({});
+    const [mode, setMode] = useState('edit');
+    const [compare1, setCompare1] = useState('');
+    const [compare2, setCompare2] = useState('');
+    const [selectedMember, setSelectedMember] = useState(null);
+    const [role, setRole] = useState('Tryout');
+    const [rank, setRank] = useState('Unranked');
+    const [gameId, setGameId] = useState('');
+    const [notes, setNotes] = useState('');
+
     const addToast = useToast();
     useEffect(() => { const unsub = onSnapshot(collection(db, 'roster'), (snap) => { const data = {}; snap.forEach(doc => data[doc.id] = doc.data()); setRosterData(data); }); return () => unsub(); }, []);
-    const handleSave = async () => { if (!selectedMember) return; await setDoc(doc(db, 'roster', selectedMember), { role, notes, gameId }, { merge: true }); addToast('Player Updated'); };
+
+    const handleSave = async () => {
+        if (!selectedMember) return;
+        await setDoc(doc(db, 'roster', selectedMember), { role, rank, notes, gameId }, { merge: true });
+        addToast('Player Updated');
+    };
+
+    const sortedMembers = useMemo(() => {
+        return sortRosterByRole(members, rosterData);
+    }, [members, rosterData]);
 
     const mvpCounts = useMemo(() => {
         const counts = {};
@@ -1281,7 +1314,55 @@ function RosterManager({ members, events }) {
 
     return (
         <div className="h-full flex flex-col gap-6"><div className="flex gap-4 border-b border-white/10 pb-4"><button onClick={() => setMode('edit')} className={`text-sm font-bold uppercase ${mode === 'edit' ? 'text-red-500' : 'text-neutral-500'}`}>Edit Mode</button><button onClick={() => setMode('compare')} className={`text-sm font-bold uppercase ${mode === 'compare' ? 'text-red-500' : 'text-neutral-500'}`}>Compare Players</button></div>
-            {mode === 'edit' ? (<div className="grid grid-cols-1 lg:grid-cols-3 gap-8 h-full"><div className="lg:col-span-1 bg-neutral-900/80 p-6 rounded-3xl border border-white/5 flex flex-col"><h3 className="text-white font-bold mb-4">Members</h3><div className="flex-1 space-y-2 overflow-y-auto custom-scrollbar">{members.length === 0 ? <div className="text-neutral-500 text-xs italic p-4 text-center border border-dashed border-neutral-800 rounded-xl">No members found. Log availability to appear here.</div> : members.map(m => (<div key={m} onClick={() => { setSelectedMember(m); setRole(rosterData[m]?.role || 'Tryout'); setNotes(rosterData[m]?.notes || ''); setGameId(rosterData[m]?.gameId || ''); }} className={`p-3 rounded-xl cursor-pointer border transition-all flex justify-between items-center ${selectedMember === m ? 'bg-red-900/20 border-red-600' : 'bg-black border-neutral-800'}`}><span className="text-white font-bold flex items-center gap-2">{m} {mvpCounts[m] > 0 && <span className="text-[9px] bg-yellow-500/20 text-yellow-500 px-1 rounded border border-yellow-500/20">🏆 x{mvpCounts[m]}</span>}</span><span className="text-xs text-neutral-500 uppercase">{rosterData[m]?.role}</span></div>))}</div></div><Card className="lg:col-span-2">{selectedMember ? (<div className="space-y-6"><h3 className="text-2xl font-black text-white">Managing: <span className="text-red-500">{selectedMember}</span></h3><div className="grid grid-cols-2 gap-4"><div><label className="block text-xs font-bold text-neutral-500 mb-1">Role</label><Select value={role} onChange={e => setRole(e.target.value)}>{['Captain', 'Main', 'Sub', 'Tryout'].map(r => <option key={r}>{r}</option>)}</Select></div><div><label className="block text-xs font-bold text-neutral-500 mb-1">Riot ID</label><Input value={gameId} onChange={e => setGameId(e.target.value)} /></div></div><textarea className="w-full h-40 bg-black border border-neutral-800 rounded-xl p-3 text-white" value={notes} onChange={e => setNotes(e.target.value)} placeholder="Notes..." /><ButtonPrimary onClick={handleSave} className="w-full py-3">Save Changes</ButtonPrimary></div>) : <div className="h-full flex items-center justify-center text-neutral-500">Select a player</div>}</Card></div>) : (<div className="grid grid-cols-2 gap-8 h-full">{[setCompare1, setCompare2].map((setter, i) => (<Card key={i} className="h-full"><Select onChange={e => setter(e.target.value)} className="mb-6"><option>Select Player</option>{members.map(m => <option key={m}>{m}</option>)}</Select>{((i === 0 ? compare1 : compare2) && rosterData[i === 0 ? compare1 : compare2]) && (<div className="space-y-4 text-center"><div className="w-24 h-24 mx-auto bg-red-600 rounded-full flex items-center justify-center text-3xl font-black text-white border-4 border-black shadow-xl">{(i === 0 ? compare1 : compare2)[0]}</div><div className="text-3xl font-black text-white uppercase">{(i === 0 ? compare1 : compare2)}</div><div className="flex justify-center gap-2"><span className="bg-neutral-800 px-3 py-1 rounded text-xs font-bold text-white">{rosterData[i === 0 ? compare1 : compare2]?.rank || 'Unranked'}</span><span className="bg-red-900/50 px-3 py-1 rounded text-xs font-bold text-red-400">{rosterData[i === 0 ? compare1 : compare2]?.role || 'Member'}</span></div>{mvpCounts[(i === 0 ? compare1 : compare2)] > 0 && <div className="text-yellow-500 font-bold text-sm bg-yellow-900/20 py-1 rounded border border-yellow-500/20">🏆 {mvpCounts[(i === 0 ? compare1 : compare2)]} MVP Awards</div>}<div className="p-4 bg-black/50 rounded-xl border border-neutral-800 text-left"><div className="text-[10px] text-neutral-500 uppercase font-bold mb-2">Performance Notes</div><p className="text-sm text-neutral-300 italic">"{rosterData[i === 0 ? compare1 : compare2]?.notes || 'No notes available.'}"</p></div></div>)}</Card>))}</div>)}
+            {mode === 'edit' ? (
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 h-full">
+                    <div className="lg:col-span-1 bg-neutral-900/80 p-6 rounded-3xl border border-white/5 flex flex-col">
+                        <h3 className="text-white font-bold mb-4">Members</h3>
+                        <div className="flex-1 space-y-2 overflow-y-auto custom-scrollbar">
+                            {sortedMembers.length === 0 ?
+                                <div className="text-neutral-500 text-xs italic p-4 text-center border border-dashed border-neutral-800 rounded-xl">No members found. Log availability to appear here.</div> :
+                                sortedMembers.map(m => (
+                                    <div key={m} onClick={() => {
+                                        setSelectedMember(m);
+                                        setRole(rosterData[m]?.role || 'Tryout');
+                                        setRank(rosterData[m]?.rank || 'Unranked');
+                                        setNotes(rosterData[m]?.notes || '');
+                                        setGameId(rosterData[m]?.gameId || '');
+                                    }} className={`p-3 rounded-xl cursor-pointer border transition-all flex justify-between items-center ${selectedMember === m ? 'bg-red-900/20 border-red-600' : 'bg-black border-neutral-800'}`}>
+                                        <span className="text-white font-bold flex items-center gap-2">{m} {mvpCounts[m] > 0 && <span className="text-[9px] bg-yellow-500/20 text-yellow-500 px-1 rounded border border-yellow-500/50">🏆 x{mvpCounts[m]}</span>}</span>
+                                        <span className="text-xs text-neutral-500 uppercase">{rosterData[m]?.role}</span>
+                                    </div>
+                                ))
+                            }
+                        </div>
+                    </div>
+                    <Card className="lg:col-span-2">
+                        {selectedMember ? (
+                            <div className="space-y-6">
+                                <h3 className="text-2xl font-black text-white">Managing: <span className="text-red-500">{selectedMember}</span></h3>
+                                <div className="grid grid-cols-2 gap-4">
+                                    <div>
+                                        <label className="block text-xs font-bold text-neutral-500 mb-1">Role</label>
+                                        <Select value={role} onChange={e => setRole(e.target.value)}>{['Captain', 'Main', 'Sub', 'Tryout'].map(r => <option key={r}>{r}</option>)}</Select>
+                                    </div>
+                                    <div>
+                                        <label className="block text-xs font-bold text-neutral-500 mb-1">Rank</label>
+                                        <Select value={rank} onChange={e => setRank(e.target.value)}>{RANKS.map(r => <option key={r}>{r}</option>)}</Select>
+                                    </div>
+                                </div>
+                                <div>
+                                    <label className="block text-xs font-bold text-neutral-500 mb-1">Riot ID</label>
+                                    <Input value={gameId} onChange={e => setGameId(e.target.value)} />
+                                </div>
+                                <textarea className="w-full h-40 bg-black border border-neutral-800 rounded-xl p-3 text-white" value={notes} onChange={e => setNotes(e.target.value)} placeholder="Notes..." />
+                                <ButtonPrimary onClick={handleSave} className="w-full py-3">Save Changes</ButtonPrimary>
+                            </div>
+                        ) : <div className="h-full flex items-center justify-center text-neutral-500">Select a player</div>}
+                    </Card>
+                </div>
+            ) : (
+                <div className="grid grid-cols-2 gap-8 h-full">{[setCompare1, setCompare2].map((setter, i) => (<Card key={i} className="h-full"><Select onChange={e => setter(e.target.value)} className="mb-6"><option>Select Player</option>{members.map(m => <option key={m}>{m}</option>)}</Select>{((i === 0 ? compare1 : compare2) && rosterData[i === 0 ? compare1 : compare2]) && (<div className="space-y-4 text-center"><div className="w-24 h-24 mx-auto bg-red-600 rounded-full flex items-center justify-center text-3xl font-black text-white border-4 border-black shadow-xl">{(i === 0 ? compare1 : compare2)[0]}</div><div className="text-3xl font-black text-white uppercase">{(i === 0 ? compare1 : compare2)}</div><div className="flex justify-center gap-2"><span className="bg-neutral-800 px-3 py-1 rounded text-xs font-bold text-white">{rosterData[i === 0 ? compare1 : compare2]?.rank || 'Unranked'}</span><span className="bg-red-900/50 px-3 py-1 rounded text-xs font-bold text-red-400">{rosterData[i === 0 ? compare1 : compare2]?.role || 'Member'}</span></div>{mvpCounts[(i === 0 ? compare1 : compare2)] > 0 && <div className="text-yellow-500 font-bold text-sm bg-yellow-900/20 py-1 rounded border border-yellow-500/20">🏆 {mvpCounts[(i === 0 ? compare1 : compare2)]} MVP Awards</div>}<div className="p-4 bg-black/50 rounded-xl border border-neutral-800 text-left"><div className="text-[10px] text-neutral-500 uppercase font-bold mb-2">Performance Notes</div><p className="text-sm text-neutral-300 italic">"{rosterData[i === 0 ? compare1 : compare2]?.notes || 'No notes available.'}"</p></div></div>)}</Card>))}</div>
+            )}
         </div>
     );
 }
