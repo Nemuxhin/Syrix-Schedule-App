@@ -209,12 +209,14 @@ const Modal = ({ isOpen, onClose, onConfirm, title, children }) => {
 };
 
 // ==========================================
-// LANDING PAGE COMPONENT (UPDATED)
+// LANDING PAGE COMPONENT
 // ==========================================
 const LandingPage = ({ onEnterHub }) => {
     const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
     const [roster, setRoster] = useState([]);
     const [matches, setMatches] = useState([]);
+    const [newsData, setNewsData] = useState([]);
+    const [intelData, setIntelData] = useState([]);
 
     // Load real data from Firestore
     useEffect(() => {
@@ -232,10 +234,26 @@ const LandingPage = ({ onEnterHub }) => {
                 .sort((a, b) => new Date(a.date) - new Date(b.date));
             setMatches(futureMatches);
         });
-        return () => { unsubRoster(); unsubEvents(); };
+
+        // News Listener
+        const unsubNews = onSnapshot(query(collection(db, 'news')), (snap) => {
+            const n = []; snap.forEach(doc => n.push({ id: doc.id, ...doc.data() }));
+            setNewsData(n.sort((a, b) => (b.isFeatured === a.isFeatured) ? new Date(b.date) - new Date(a.date) : b.isFeatured ? 1 : -1));
+        });
+
+        // Intel (VOD) Listener
+        const unsubIntel = onSnapshot(query(collection(db, 'intel')), (snap) => {
+            const i = []; snap.forEach(doc => i.push({ id: doc.id, ...doc.data() }));
+            setIntelData(i.sort((a, b) => new Date(b.date) - new Date(a.date)).slice(0, 3));
+        });
+
+        return () => { unsubRoster(); unsubEvents(); unsubNews(); unsubIntel(); };
     }, []);
 
     const sortedRoster = useMemo(() => sortRosterByRole(roster), [roster]);
+
+    const featuredNews = newsData.find(n => n.isFeatured) || newsData[0];
+    const otherNews = newsData.filter(n => n.id !== featuredNews?.id).slice(0, 3);
 
     // Dynamic Script Loading for AOS
     useEffect(() => {
@@ -261,13 +279,11 @@ const LandingPage = ({ onEnterHub }) => {
                 <div className="card-inner">
                     <div className={`card-front glass-panel rounded-xl overflow-hidden shadow-2xl border-b-4 border-red-600 relative`}>
                         <div className="w-full h-48 bg-gradient-to-b from-neutral-800 to-black flex items-center justify-center overflow-hidden">
-                            {/* If player has a PFP, use it, otherwise use placeholder */}
                             {player.pfp ? (
                                 <img src={player.pfp} alt={player.id} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500" />
                             ) : (
                                 <span className="text-6xl font-black text-neutral-700 group-hover:text-red-600 transition-colors">{player.id[0]}</span>
                             )}
-                            {/* Agent Role Badge */}
                             {player.ingameRole && (
                                 <div className="absolute top-2 right-2 bg-red-600 text-white text-[10px] font-black uppercase px-2 py-1 rounded shadow-lg">
                                     {player.ingameRole}
@@ -414,19 +430,26 @@ const LandingPage = ({ onEnterHub }) => {
                             <p className="text-neutral-500 uppercase tracking-widest font-bold text-sm">VODs & Highlights</p>
                         </div>
                         <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-                            {[1, 2, 3].map((i) => (
-                                <div key={i} className="glass-panel rounded-xl overflow-hidden group cursor-pointer" data-aos="fade-up" data-aos-delay={i * 100}>
+                            {intelData.length > 0 ? intelData.map((item, i) => (
+                                <a key={item.id} href={item.url} target="_blank" rel="noopener noreferrer" className="glass-panel rounded-xl overflow-hidden group cursor-pointer block" data-aos="fade-up" data-aos-delay={i * 100}>
                                     <div className="aspect-video bg-neutral-900 relative">
-                                        <div className="absolute inset-0 flex items-center justify-center text-neutral-700 group-hover:text-red-600 transition-colors">
-                                            <svg className="w-12 h-12" fill="currentColor" viewBox="0 0 24 24"><path d="M8 5v14l11-7z" /></svg>
+                                        <img
+                                            src={`https://img.youtube.com/vi/${item.url.split('v=')[1]?.split('&')[0] || item.url.split('/').pop()}/maxresdefault.jpg`}
+                                            className="absolute inset-0 w-full h-full object-cover opacity-60 group-hover:scale-110 transition-transform duration-500"
+                                            onError={(e) => { e.target.style.display = 'none' }}
+                                        />
+                                        <div className="absolute inset-0 flex items-center justify-center text-white group-hover:text-red-600 transition-colors z-10">
+                                            <svg className="w-16 h-16 drop-shadow-xl" fill="currentColor" viewBox="0 0 24 24"><path d="M8 5v14l11-7z" /></svg>
                                         </div>
                                     </div>
-                                    <div className="p-4">
-                                        <h4 className="font-bold text-white uppercase tracking-tight">Championship Finals Game {i}</h4>
-                                        <p className="text-xs text-neutral-500 mt-1">Highlight Reel</p>
+                                    <div className="p-4 relative z-20 bg-black/50 backdrop-blur-sm">
+                                        <h4 className="font-bold text-white uppercase tracking-tight truncate">{item.title}</h4>
+                                        <p className="text-xs text-neutral-500 mt-1">{item.subtitle}</p>
                                     </div>
-                                </div>
-                            ))}
+                                </a>
+                            )) : (
+                                <div className="col-span-3 text-center text-neutral-500 italic">No recent intel declassified.</div>
+                            )}
                         </div>
                     </div>
                 </section>
@@ -437,30 +460,39 @@ const LandingPage = ({ onEnterHub }) => {
                             <h3 className="text-4xl md:text-5xl font-black text-white italic tracking-tighter mb-4"><span className="text-red-600">/</span> SITREP</h3>
                             <p className="text-neutral-500 uppercase tracking-widest font-bold text-sm">News & Updates</p>
                         </div>
-                        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-                            <div className="glass-panel p-8 rounded-3xl border border-red-900/30" data-aos="fade-right">
-                                <span className="text-red-500 text-xs font-bold uppercase tracking-widest mb-2 block">Featured</span>
-                                <h4 className="text-3xl font-black text-white mb-4">SYRIX SECURES PLAYOFF SPOT</h4>
-                                <p className="text-neutral-400 mb-6">The team demonstrated flawless execution this past weekend, sweeping the semi-finals to secure our spot in the Grand Championship.</p>
-                                <button className="text-white font-bold text-sm hover:text-red-500 transition-colors">Read More &rarr;</button>
-                            </div>
-                            <div className="space-y-4" data-aos="fade-left">
-                                <div className="glass-panel p-6 rounded-2xl flex gap-4 items-center">
-                                    <div className="w-16 h-16 bg-neutral-800 rounded-lg flex-shrink-0"></div>
-                                    <div>
-                                        <h5 className="font-bold text-white">Patch 7.04 Analysis</h5>
-                                        <p className="text-xs text-neutral-500">Strategy Team • 2 Days Ago</p>
+
+                        {newsData.length > 0 ? (
+                            <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                                {/* Featured Article */}
+                                {featuredNews && (
+                                    <div className="glass-panel p-8 rounded-3xl border border-red-900/30 flex flex-col justify-center" data-aos="fade-right">
+                                        <span className="text-red-500 text-xs font-bold uppercase tracking-widest mb-2 block">Featured • {featuredNews.date}</span>
+                                        <h4 className="text-3xl font-black text-white mb-4 uppercase leading-none">{featuredNews.title}</h4>
+                                        <p className="text-neutral-400 mb-6 line-clamp-4">{featuredNews.body}</p>
+                                        <button className="text-white font-bold text-sm hover:text-red-500 transition-colors self-start">Read Full Report &rarr;</button>
                                     </div>
-                                </div>
-                                <div className="glass-panel p-6 rounded-2xl flex gap-4 items-center">
-                                    <div className="w-16 h-16 bg-neutral-800 rounded-lg flex-shrink-0"></div>
-                                    <div>
-                                        <h5 className="font-bold text-white">New Merch Drop: Core Collection</h5>
-                                        <p className="text-xs text-neutral-500">Store Team • 1 Week Ago</p>
-                                    </div>
+                                )}
+
+                                {/* Other News List */}
+                                <div className="space-y-4" data-aos="fade-left">
+                                    {otherNews.map(item => (
+                                        <div key={item.id} className="glass-panel p-6 rounded-2xl flex gap-4 items-center group hover:border-red-600/30 transition-all">
+                                            <div className="w-16 h-16 bg-neutral-800 rounded-lg flex-shrink-0 flex items-center justify-center text-2xl font-black text-neutral-700">
+                                                {/* Initials as icon */}
+                                                {item.title.substring(0, 2).toUpperCase()}
+                                            </div>
+                                            <div>
+                                                <h5 className="font-bold text-white group-hover:text-red-500 transition-colors line-clamp-1">{item.title}</h5>
+                                                <p className="text-xs text-neutral-500 uppercase tracking-wider">{item.type} • {item.date}</p>
+                                                <p className="text-xs text-neutral-400 mt-1 line-clamp-1">{item.body}</p>
+                                            </div>
+                                        </div>
+                                    ))}
                                 </div>
                             </div>
-                        </div>
+                        ) : (
+                            <div className="text-center text-neutral-500 italic">Communications offline.</div>
+                        )}
                     </div>
                 </section>
 
@@ -1418,6 +1450,124 @@ function MapVeto() {
     return (<Card className="h-full"><div className="flex justify-between items-center mb-6"><h3 className="text-2xl font-black text-white">MAP VETO</h3><ButtonSecondary onClick={resetVeto} className="text-xs px-3 py-1">Reset Board</ButtonSecondary></div><div className="grid grid-cols-2 md:grid-cols-5 gap-4">{MAPS.map(map => { const status = vetoState[map] || 'neutral'; return (<div key={map} onClick={() => toggleMap(map)} className={`aspect-video rounded-xl border-2 cursor-pointer flex items-center justify-center relative group ${status === 'neutral' ? 'border-neutral-800 bg-black/50' : ''} ${status === 'ban' ? 'border-red-600 bg-red-900/20' : ''} ${status === 'pick' ? 'border-green-500 bg-green-900/20' : ''}`}><span className="font-black uppercase text-white">{map}</span><div className="absolute bottom-2 text-[10px] font-bold">{status.toUpperCase()}</div></div>); })}</div></Card>);
 }
 
+function ContentManager() {
+    const [news, setNews] = useState([]);
+    const [intel, setIntel] = useState([]);
+    const [newNews, setNewNews] = useState({ title: '', body: '', date: new Date().toISOString().split('T')[0], type: 'Update', isFeatured: false });
+    const [newIntel, setNewIntel] = useState({ title: '', subtitle: '', url: '', date: new Date().toISOString().split('T')[0] });
+    const addToast = useToast();
+
+    // Fetch Data
+    useEffect(() => {
+        const unsubNews = onSnapshot(query(collection(db, 'news')), (snap) => {
+            const n = []; snap.forEach(doc => n.push({ id: doc.id, ...doc.data() }));
+            setNews(n.sort((a, b) => new Date(b.date) - new Date(a.date)));
+        });
+        const unsubIntel = onSnapshot(query(collection(db, 'intel')), (snap) => {
+            const i = []; snap.forEach(doc => i.push({ id: doc.id, ...doc.data() }));
+            setIntel(i.sort((a, b) => new Date(b.date) - new Date(a.date)));
+        });
+        return () => { unsubNews(); unsubIntel(); };
+    }, []);
+
+    // Handlers
+    const addNews = async () => {
+        if (!newNews.title || !newNews.body) return addToast('Title and Body required', 'error');
+        await addDoc(collection(db, 'news'), newNews);
+        setNewNews({ title: '', body: '', date: new Date().toISOString().split('T')[0], type: 'Update', isFeatured: false });
+        addToast('News Posted');
+    };
+
+    const addIntel = async () => {
+        if (!newIntel.title || !newIntel.url) return addToast('Title and URL required', 'error');
+        await addDoc(collection(db, 'intel'), newIntel);
+        setNewIntel({ title: '', subtitle: '', url: '', date: new Date().toISOString().split('T')[0] });
+        addToast('Intel Added');
+    };
+
+    const deleteItem = async (collectionName, id) => {
+        await deleteDoc(doc(db, collectionName, id));
+        addToast('Item Deleted');
+    };
+
+    return (
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 h-full">
+            {/* NEWS MANAGER */}
+            <Card className="h-full flex flex-col">
+                <h3 className="text-2xl font-black text-white mb-6 flex items-center gap-2"><span className="text-red-600">/</span> MANAGE SITREP (NEWS)</h3>
+
+                <div className="bg-neutral-900/50 p-4 rounded-xl border border-white/10 space-y-3 mb-6">
+                    <div className="flex justify-between items-center mb-2">
+                        <span className="text-xs font-bold text-neutral-500 uppercase">New Entry</span>
+                        <label className="flex items-center gap-2 cursor-pointer">
+                            <input type="checkbox" checked={newNews.isFeatured} onChange={e => setNewNews({ ...newNews, isFeatured: e.target.checked })} className="accent-red-600 w-4 h-4" />
+                            <span className="text-xs font-bold text-red-500 uppercase">Make Featured</span>
+                        </label>
+                    </div>
+                    <Input placeholder="Headline" value={newNews.title} onChange={e => setNewNews({ ...newNews, title: e.target.value })} />
+                    <textarea className="w-full bg-black/40 border border-neutral-800 rounded-xl p-3 text-white text-sm" rows={3} placeholder="Content body..." value={newNews.body} onChange={e => setNewNews({ ...newNews, body: e.target.value })} />
+                    <div className="grid grid-cols-2 gap-2">
+                        <Input type="date" value={newNews.date} onChange={e => setNewNews({ ...newNews, date: e.target.value })} className="[color-scheme:dark]" />
+                        <Input placeholder="Type (e.g. Analysis, Shop)" value={newNews.type} onChange={e => setNewNews({ ...newNews, type: e.target.value })} />
+                    </div>
+                    <ButtonPrimary onClick={addNews} className="w-full py-2 text-xs">Post News</ButtonPrimary>
+                </div>
+
+                <div className="flex-1 overflow-y-auto custom-scrollbar space-y-2">
+                    {news.map(n => (
+                        <div key={n.id} className={`p-4 rounded-xl border flex justify-between items-start ${n.isFeatured ? 'bg-red-900/10 border-red-900/50' : 'bg-black/40 border-neutral-800'}`}>
+                            <div>
+                                <div className="flex items-center gap-2 mb-1">
+                                    {n.isFeatured && <span className="bg-red-600 text-white text-[9px] font-black px-1.5 py-0.5 rounded uppercase">Featured</span>}
+                                    <span className="text-neutral-500 text-[10px] font-mono uppercase">{n.date} • {n.type}</span>
+                                </div>
+                                <h4 className="font-bold text-white leading-tight">{n.title}</h4>
+                                <p className="text-neutral-400 text-xs mt-1 line-clamp-2">{n.body}</p>
+                            </div>
+                            <button onClick={() => deleteItem('news', n.id)} className="text-neutral-600 hover:text-red-500 p-1">×</button>
+                        </div>
+                    ))}
+                </div>
+            </Card>
+
+            {/* INTEL (VODS) MANAGER */}
+            <Card className="h-full flex flex-col">
+                <h3 className="text-2xl font-black text-white mb-6 flex items-center gap-2"><span className="text-red-600">/</span> MANAGE INTEL (VODS)</h3>
+
+                <div className="bg-neutral-900/50 p-4 rounded-xl border border-white/10 space-y-3 mb-6">
+                    <span className="text-xs font-bold text-neutral-500 uppercase">New Video Link</span>
+                    <Input placeholder="Video Title (e.g. Finals Map 1)" value={newIntel.title} onChange={e => setNewIntel({ ...newIntel, title: e.target.value })} />
+                    <Input placeholder="Subtitle (e.g. Highlight Reel)" value={newIntel.subtitle} onChange={e => setNewIntel({ ...newIntel, subtitle: e.target.value })} />
+                    <Input placeholder="YouTube URL" value={newIntel.url} onChange={e => setNewIntel({ ...newIntel, url: e.target.value })} />
+                    <ButtonPrimary onClick={addIntel} className="w-full py-2 text-xs">Add Video</ButtonPrimary>
+                </div>
+
+                <div className="flex-1 overflow-y-auto custom-scrollbar space-y-2">
+                    {intel.map(i => (
+                        <div key={i.id} className="p-3 bg-black/40 border border-neutral-800 rounded-xl flex gap-3 items-center group">
+                            <div className="w-16 h-12 bg-neutral-900 rounded overflow-hidden flex-shrink-0 relative">
+                                {/* Simple Youtube Thumb Logic */}
+                                <img
+                                    src={`https://img.youtube.com/vi/${i.url.split('v=')[1]?.split('&')[0] || i.url.split('/').pop()}/mqdefault.jpg`}
+                                    className="w-full h-full object-cover opacity-50"
+                                    alt="thumb"
+                                    onError={(e) => e.target.style.display = 'none'}
+                                />
+                                <div className="absolute inset-0 flex items-center justify-center text-white">▶</div>
+                            </div>
+                            <div className="flex-1 min-w-0">
+                                <h4 className="font-bold text-white text-sm truncate">{i.title}</h4>
+                                <p className="text-neutral-500 text-xs truncate">{i.subtitle}</p>
+                            </div>
+                            <button onClick={() => deleteItem('intel', i.id)} className="text-neutral-600 hover:text-red-500 px-2">×</button>
+                        </div>
+                    ))}
+                </div>
+            </Card>
+        </div>
+    );
+}
+
 function SyrixDashboard({ onBack }) {
     const [currentUser, setCurrentUser] = useState(null);
     const [activeTab, setActiveTab] = useState('dashboard');
@@ -1525,6 +1675,7 @@ function SyrixDashboard({ onBack }) {
                     <NavBtn id="lineups" label="Lineups" />
                     <NavBtn id="roster" label="Roster" />
                     <NavBtn id="partners" label="Partners" />
+                    <NavBtn id="content" label="Content Mgr" />
                     <NavBtn id="mapveto" label="Map Veto" />
                     {(ADMIN_UIDS.includes(currentUser.uid)) && <NavBtn id="admin" label="Admin" />}
                 </div>
@@ -1552,6 +1703,7 @@ function SyrixDashboard({ onBack }) {
                     {activeTab === 'lineups' && <div className="animate-fade-in h-[85vh]"><LineupLibrary /></div>}
                     {activeTab === 'roster' && <div className="animate-fade-in h-full flex-1 flex flex-col"><RosterManager members={dynamicMembers} events={events} /></div>}
                     {activeTab === 'partners' && <div className="animate-fade-in h-full"><PartnerDirectory /></div>}
+                    {activeTab === 'content' && <div className="animate-fade-in h-full"><ContentManager /></div>}
                     {activeTab === 'admin' && <div className="animate-fade-in h-full"><AdminPanel /></div>}
                     {activeTab === 'mapveto' && <div className="animate-fade-in h-[80vh]"><MapVeto /></div>}
                 </div>
