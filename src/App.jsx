@@ -245,7 +245,7 @@ const LandingPage = ({ onEnterHub }) => {
 
     const PlayerCard = ({ player, delay }) => {
         return (
-            <div className="player-card group" data-aos="fade-up" data-aos-delay={delay}>
+            <div className="player-card group w-full sm:w-72" data-aos="fade-up" data-aos-delay={delay}>
                 <div className="card-inner">
                     <div className={`card-front glass-panel rounded-xl overflow-hidden shadow-2xl border-b-4 border-red-600`}>
                         <div className="w-full h-48 bg-gradient-to-b from-neutral-800 to-black flex items-center justify-center">
@@ -273,7 +273,7 @@ const LandingPage = ({ onEnterHub }) => {
             <Background />
 
             <header className="sticky top-0 z-50 bg-black/40 backdrop-blur-md shadow-2xl border-b border-white/10">
-                <nav className="max-w-[1920px] mx-auto px-6 py-4 flex justify-between items-center">
+                <nav className="max-w-7xl mx-auto px-6 py-4 flex justify-between items-center">
                     <a href="#home" className="flex items-center space-x-2"><span className="text-3xl font-black text-red-600 italic">/</span><h1 className="text-xl font-black uppercase tracking-tighter italic">Syrix</h1></a>
                     <button onClick={() => setMobileMenuOpen(!mobileMenuOpen)} className="md:hidden text-2xl z-50 p-2 focus:outline-none">☰</button>
                     <div className="hidden md:flex items-center space-x-8 text-xs font-bold uppercase tracking-widest">
@@ -322,13 +322,13 @@ const LandingPage = ({ onEnterHub }) => {
                 </section>
 
                 <section id="roster" className="py-24 relative">
-                    <div className="max-w-[1920px] mx-auto px-6">
+                    <div className="max-w-7xl mx-auto px-6">
                         <div className="text-center mb-16" data-aos="fade-up">
                             <h3 className="text-4xl md:text-5xl font-black text-white italic tracking-tighter mb-4"><span className="text-red-600">/</span> ACTIVE ROSTER</h3>
                             <p className="text-neutral-500 uppercase tracking-widest font-bold text-sm">The Squad</p>
                         </div>
-                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-5 gap-6">
-                            {roster.length > 0 ? roster.map((p, i) => <PlayerCard key={p.id} player={p} delay={i * 50} />) : <div className="col-span-full text-center text-neutral-500 py-12 border border-dashed border-neutral-800 rounded-xl">Loading Agents...</div>}
+                        <div className="flex flex-wrap justify-center gap-8">
+                            {roster.length > 0 ? roster.map((p, i) => <PlayerCard key={p.id} player={p} delay={i * 50} />) : <div className="w-full text-center text-neutral-500 py-12 border border-dashed border-neutral-800 rounded-xl">Loading Agents...</div>}
                         </div>
                     </div>
                 </section>
@@ -382,7 +382,7 @@ const LandingPage = ({ onEnterHub }) => {
             </main>
 
             <footer className="bg-black border-t border-white/10 py-12 relative z-10">
-                <div className="max-w-[1920px] mx-auto px-6 text-center">
+                <div className="max-w-7xl mx-auto px-6 text-center">
                     <div className="text-3xl font-black text-neutral-800 italic tracking-tighter mb-4">SYRIX</div>
                     <div className="text-xs text-neutral-600 uppercase tracking-widest">© 2025 Syrix Team Portal. All Rights Reserved.</div>
                 </div>
