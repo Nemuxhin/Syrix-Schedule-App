@@ -82,7 +82,6 @@ const convertToGMT = (day, time) => {
 const sortRosterByRole = (rosterList, lookupData = null) => {
     const priority = { 'Captain': 0, 'Main': 1, 'Sub': 2, 'Tryout': 3 };
     return [...rosterList].sort((a, b) => {
-        // Handle both array of objects (Landing Page) and array of strings (Hub list with lookup)
         const roleA = (lookupData ? lookupData[a]?.role : a.role) || 'Tryout';
         const roleB = (lookupData ? lookupData[b]?.role : b.role) || 'Tryout';
         return (priority[roleA] ?? 99) - (priority[roleB] ?? 99);
@@ -268,6 +267,12 @@ const LandingPage = ({ onEnterHub }) => {
                             ) : (
                                 <span className="text-6xl font-black text-neutral-700 group-hover:text-red-600 transition-colors">{player.id[0]}</span>
                             )}
+                            {/* Agent Role Badge */}
+                            {player.ingameRole && (
+                                <div className="absolute top-2 right-2 bg-red-600 text-white text-[10px] font-black uppercase px-2 py-1 rounded shadow-lg">
+                                    {player.ingameRole}
+                                </div>
+                            )}
                         </div>
                         <div className="p-6 text-center relative">
                             <h4 className={`text-2xl font-extrabold text-white mb-1`}>{player.id}</h4>
@@ -291,13 +296,13 @@ const LandingPage = ({ onEnterHub }) => {
 
             <header className="sticky top-0 z-50 bg-black/40 backdrop-blur-md shadow-2xl border-b border-white/10 flex justify-center">
                 <nav className="max-w-7xl w-full px-6 py-4 flex justify-between items-center">
-                    <a href="#home" className="flex items-center space-x-2"><span className="text-3xl font-black text-red-600 italic">/</span><h1 className="text-xl font-black uppercase tracking-tighter italic">Syrix</h1></a>
-                    <button onClick={() => setMobileMenuOpen(!mobileMenuOpen)} className="md:hidden text-2xl z-50 p-2 focus:outline-none">☰</button>
+                    <a href="#home" className="flex items-center space-x-2 text-white hover:text-red-500 transition-colors"><span className="text-3xl font-black text-red-600 italic">/</span><h1 className="text-xl font-black uppercase tracking-tighter italic">Syrix</h1></a>
+                    <button onClick={() => setMobileMenuOpen(!mobileMenuOpen)} className="md:hidden text-2xl z-50 p-2 focus:outline-none text-white">☰</button>
                     <div className="hidden md:flex items-center space-x-8 text-xs font-bold uppercase tracking-widest">
-                        <a href="#roster" className="hover:text-red-500 transition duration-300">Roster</a>
-                        <a href="#schedule" className="hover:text-red-500 transition duration-300">Matches</a>
-                        <a href="#vods" className="hover:text-red-500 transition duration-300">VODs</a>
-                        <a href="#merch" className="hover:text-red-500 transition duration-300">Shop</a>
+                        <a href="#roster" className="text-white hover:text-red-500 transition duration-300">Roster</a>
+                        <a href="#schedule" className="text-white hover:text-red-500 transition duration-300">Matches</a>
+                        <a href="#vods" className="text-white hover:text-red-500 transition duration-300">VODs</a>
+                        <a href="#merch" className="text-white hover:text-red-500 transition duration-300">Shop</a>
                         <button onClick={onEnterHub} className="px-6 py-2 rounded-full bg-gradient-to-r from-red-800 to-red-600 hover:from-red-700 hover:to-red-500 text-white shadow-[0_0_20px_rgba(220,38,38,0.4)] transition duration-300 flex items-center gap-2 transform hover:scale-105">
                             <span>TEAM HUB</span>
                             <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M9 5l7 7-7 7"></path></svg>
@@ -1287,7 +1292,8 @@ function RosterManager({ members, events }) {
     const [role, setRole] = useState('Tryout');
     const [rank, setRank] = useState('Unranked');
     const [gameId, setGameId] = useState('');
-    const [pfp, setPfp] = useState(''); // New state for profile image URL
+    const [pfp, setPfp] = useState('');
+    const [ingameRole, setIngameRole] = useState('Flex'); // New In-Game Role state
     const [notes, setNotes] = useState('');
 
     const addToast = useToast();
@@ -1295,7 +1301,8 @@ function RosterManager({ members, events }) {
 
     const handleSave = async () => {
         if (!selectedMember) return;
-        await setDoc(doc(db, 'roster', selectedMember), { role, rank, notes, gameId, pfp }, { merge: true });
+        // Updated save to include ingameRole
+        await setDoc(doc(db, 'roster', selectedMember), { role, rank, notes, gameId, pfp, ingameRole }, { merge: true });
         addToast('Player Updated');
     };
 
@@ -1333,9 +1340,10 @@ function RosterManager({ members, events }) {
                                         setRank(rosterData[m]?.rank || 'Unranked');
                                         setNotes(rosterData[m]?.notes || '');
                                         setGameId(rosterData[m]?.gameId || '');
-                                        setPfp(rosterData[m]?.pfp || ''); // Set PFP state
+                                        setPfp(rosterData[m]?.pfp || '');
+                                        setIngameRole(rosterData[m]?.ingameRole || 'Flex'); // Load ingame role
                                     }} className={`p-3 rounded-xl cursor-pointer border transition-all flex justify-between items-center ${selectedMember === m ? 'bg-red-900/20 border-red-600' : 'bg-black border-neutral-800'}`}>
-                                        <span className="text-white font-bold flex items-center gap-2">{m} {mvpCounts[m] > 0 && <span className="text-[9px] bg-yellow-500/20 text-yellow-500 px-1 rounded border border-yellow-500/50">🏆 x{mvpCounts[m]}</span>}</span>
+                                        <span className="text-white font-bold flex items-center gap-2">{m} {mvpCounts[m] > 0 && <span className="text-[9px] bg-yellow-500/20 text-yellow-500 px-1 rounded border border-yellow-500/20">🏆 x{mvpCounts[m]}</span>}</span>
                                         <span className="text-xs text-neutral-500 uppercase">{rosterData[m]?.role}</span>
                                     </div>
                                 ))
@@ -1348,7 +1356,7 @@ function RosterManager({ members, events }) {
                                 <h3 className="text-2xl font-black text-white">Managing: <span className="text-red-500">{selectedMember}</span></h3>
                                 <div className="grid grid-cols-2 gap-4">
                                     <div>
-                                        <label className="block text-xs font-bold text-neutral-500 mb-1">Role</label>
+                                        <label className="block text-xs font-bold text-neutral-500 mb-1">Team Role</label>
                                         <Select value={role} onChange={e => setRole(e.target.value)}>{['Captain', 'Main', 'Sub', 'Tryout'].map(r => <option key={r}>{r}</option>)}</Select>
                                     </div>
                                     <div>
@@ -1358,13 +1366,19 @@ function RosterManager({ members, events }) {
                                 </div>
                                 <div className="grid grid-cols-2 gap-4">
                                     <div>
+                                        <label className="block text-xs font-bold text-neutral-500 mb-1">Agent Role</label>
+                                        <Select value={ingameRole} onChange={e => setIngameRole(e.target.value)}>
+                                            {ROLES.map(r => <option key={r}>{r}</option>)}
+                                        </Select>
+                                    </div>
+                                    <div>
                                         <label className="block text-xs font-bold text-neutral-500 mb-1">Riot ID</label>
                                         <Input value={gameId} onChange={e => setGameId(e.target.value)} />
                                     </div>
-                                    <div>
-                                        <label className="block text-xs font-bold text-neutral-500 mb-1">Profile Image URL</label>
-                                        <Input value={pfp} onChange={e => setPfp(e.target.value)} placeholder="https://..." />
-                                    </div>
+                                </div>
+                                <div>
+                                    <label className="block text-xs font-bold text-neutral-500 mb-1">Profile Image URL</label>
+                                    <Input value={pfp} onChange={e => setPfp(e.target.value)} placeholder="https://..." />
                                 </div>
                                 <textarea className="w-full h-40 bg-black border border-neutral-800 rounded-xl p-3 text-white" value={notes} onChange={e => setNotes(e.target.value)} placeholder="Notes..." />
                                 <ButtonPrimary onClick={handleSave} className="w-full py-3">Save Changes</ButtonPrimary>
