@@ -651,9 +651,41 @@ function LeaveLogger({ members }) {
 }
 
 function ScrimScheduler({ onSchedule, userTimezone }) {
-    const [form, setForm] = useState({ type: 'Scrim', date: '', time: '', opponent: '' });
+    const [form, setForm] = useState({ type: 'Scrim', date: '', time: '', opponent: '', map: MAPS[0] });
     const submit = async () => { await onSchedule({ ...form, timezone: userTimezone }); setForm({ ...form, opponent: '' }); };
-    return (<div className="space-y-4"><div className="grid grid-cols-2 gap-4"><div><label className="text-xs font-bold text-red-500 block mb-1">TYPE</label><Select value={form.type} onChange={e => setForm({ ...form, type: e.target.value })}><option>Scrim</option><option>Tournament</option></Select></div><div><label className="text-xs font-bold text-red-500 block mb-1">OPPONENT</label><Input value={form.opponent} onChange={e => setForm({ ...form, opponent: e.target.value })} /></div></div><div className="grid grid-cols-2 gap-4"><div><label className="text-xs font-bold text-red-500 block mb-1">DATE</label><Input type="date" value={form.date} onChange={e => setForm({ ...form, date: e.target.value })} className="[color-scheme:dark]" /></div><div><label className="text-xs font-bold text-red-500 block mb-1">TIME</label><Input type="time" value={form.time} onChange={e => setForm({ ...form, time: e.target.value })} className="[color-scheme:dark]" /></div></div><ButtonPrimary onClick={submit} className="w-full py-3">SCHEDULE EVENT</ButtonPrimary></div>);
+    return (
+        <div className="space-y-4">
+            <div className="grid grid-cols-2 gap-4">
+                <div>
+                    <label className="text-xs font-bold text-red-500 block mb-1">TYPE</label>
+                    <Select value={form.type} onChange={e => setForm({ ...form, type: e.target.value })}><option>Scrim</option><option>Tournament</option></Select>
+                </div>
+                <div>
+                    <label className="text-xs font-bold text-red-500 block mb-1">OPPONENT</label>
+                    <Input value={form.opponent} onChange={e => setForm({ ...form, opponent: e.target.value })} />
+                </div>
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+                <div>
+                    <label className="text-xs font-bold text-red-500 block mb-1">MAP</label>
+                    <Select value={form.map} onChange={e => setForm({ ...form, map: e.target.value })}>
+                        {MAPS.map(m => <option key={m} value={m}>{m}</option>)}
+                    </Select>
+                </div>
+                <div>
+                    <label className="text-xs font-bold text-red-500 block mb-1">TIME</label>
+                    <Input type="time" value={form.time} onChange={e => setForm({ ...form, time: e.target.value })} className="[color-scheme:dark]" />
+                </div>
+            </div>
+            <div className="grid grid-cols-1">
+                <div>
+                    <label className="text-xs font-bold text-red-500 block mb-1">DATE</label>
+                    <Input type="date" value={form.date} onChange={e => setForm({ ...form, date: e.target.value })} className="[color-scheme:dark]" />
+                </div>
+            </div>
+            <ButtonPrimary onClick={submit} className="w-full py-3">SCHEDULE EVENT</ButtonPrimary>
+        </div>
+    );
 }
 
 function AvailabilityHeatmap({ availabilities, members }) {
@@ -1649,6 +1681,8 @@ function SyrixDashboard({ onBack }) {
 
     const NavBtn = ({ id, label }) => <button onClick={() => setActiveTab(id)} className={`px-4 py-1.5 rounded-full text-xs font-bold uppercase tracking-widest transition-all duration-200 whitespace-nowrap ${activeTab === id ? 'bg-gradient-to-r from-red-700 to-red-900 text-white shadow-lg shadow-red-900/20 border border-red-500/50' : 'bg-black/30 text-neutral-400 hover:text-white hover:bg-white/10 border border-transparent'}`}>{label}</button>;
 
+    const isAdmin = currentUser && ADMIN_UIDS.includes(currentUser.uid);
+
     return (
         <div className="fixed inset-0 h-full w-full text-neutral-200 font-sans selection:bg-red-500/30 flex flex-col overflow-hidden bg-black">
             <Background />
@@ -1674,10 +1708,10 @@ function SyrixDashboard({ onBack }) {
                     <NavBtn id="strats" label="Stratbook" />
                     <NavBtn id="lineups" label="Lineups" />
                     <NavBtn id="roster" label="Roster" />
-                    <NavBtn id="partners" label="Partners" />
-                    <NavBtn id="content" label="Content Mgr" />
+                    {isAdmin && <NavBtn id="partners" label="Partners" />}
+                    {isAdmin && <NavBtn id="content" label="Content Mgr" />}
                     <NavBtn id="mapveto" label="Map Veto" />
-                    {(ADMIN_UIDS.includes(currentUser.uid)) && <NavBtn id="admin" label="Admin" />}
+                    {isAdmin && <NavBtn id="admin" label="Admin" />}
                 </div>
             </header>
 
@@ -1702,9 +1736,9 @@ function SyrixDashboard({ onBack }) {
                     {activeTab === 'strats' && <div className="animate-fade-in h-[85vh]"><StratBook /></div>}
                     {activeTab === 'lineups' && <div className="animate-fade-in h-[85vh]"><LineupLibrary /></div>}
                     {activeTab === 'roster' && <div className="animate-fade-in h-full flex-1 flex flex-col"><RosterManager members={dynamicMembers} events={events} /></div>}
-                    {activeTab === 'partners' && <div className="animate-fade-in h-full"><PartnerDirectory /></div>}
-                    {activeTab === 'content' && <div className="animate-fade-in h-full"><ContentManager /></div>}
-                    {activeTab === 'admin' && <div className="animate-fade-in h-full"><AdminPanel /></div>}
+                    {activeTab === 'partners' && isAdmin && <div className="animate-fade-in h-full"><PartnerDirectory /></div>}
+                    {activeTab === 'content' && isAdmin && <div className="animate-fade-in h-full"><ContentManager /></div>}
+                    {activeTab === 'admin' && isAdmin && <div className="animate-fade-in h-full"><AdminPanel /></div>}
                     {activeTab === 'mapveto' && <div className="animate-fade-in h-[80vh]"><MapVeto /></div>}
                 </div>
             </main>
