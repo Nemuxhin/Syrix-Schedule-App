@@ -92,13 +92,13 @@ const GlobalStyles = () => (
     <style>{`
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap');
         
-        /* Root Reset - ESSENTIAL FOR FULL SCREEN */
+        /* Root Reset - FIXED: Removed fixed height to allow scrolling */
         html, body, #root { 
-            height: 100%; 
             width: 100%; 
             margin: 0; 
             padding: 0; 
-            overflow-x: hidden;
+            overflow-x: hidden; /* Prevents side-to-side scrolling */
+            /* Removed 'height: 100%' so the page can grow and scroll */
         }
 
         /* Shared & Hub Styles */
@@ -121,16 +121,20 @@ const GlobalStyles = () => (
         .accent-bg:hover { background-color: #e02c2c; }
         
         .hero-section {
-            height: 100vh; /* FORCE EXACT SCREEN HEIGHT */
-            min-height: 100vh;
+            min-height: 100vh; /* Ensures it covers at least the full screen */
             width: 100%;
             display: flex;
             align-items: center;
             justify-content: center;
             position: relative;
+            /* background-attachment removed from here to prevent scroll glitches on some mobile browsers */
         }
         
-        @media only screen and (max-width: 768px) { .hero-section { background-attachment: scroll; } }
+        /* Move background attachment here for desktop only */
+        @media only screen and (min-width: 769px) { 
+            .hero-section { background-attachment: fixed; } 
+        }
+
         @keyframes pulse-red { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
         .live-indicator { animation: pulse-red 2s cubic-bezier(0.4, 0, 0.6, 1) infinite; }
         .player-card { perspective: 1000px; min-height: 350px; }
