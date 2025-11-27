@@ -88,11 +88,19 @@ const sortRosterByRole = (rosterList, lookupData = null) => {
     });
 };
 
-// --- GLOBAL STYLES & ASSETS ---
 const GlobalStyles = () => (
     <style>{`
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap');
         
+        /* Root Reset - ESSENTIAL FOR FULL SCREEN */
+        html, body, #root { 
+            height: 100%; 
+            width: 100%; 
+            margin: 0; 
+            padding: 0; 
+            overflow-x: hidden;
+        }
+
         /* Shared & Hub Styles */
         .glass-panel { background: rgba(15, 15, 15, 0.85); backdrop-filter: blur(12px); border: 1px solid rgba(255,255,255,0.08); box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5); }
         .card-shine:hover { border-color: rgba(220, 38, 38, 0.3); background: rgba(20, 20, 20, 0.95); box-shadow: 0 8px 32px rgba(220, 38, 38, 0.1); }
@@ -113,13 +121,13 @@ const GlobalStyles = () => (
         .accent-bg:hover { background-color: #e02c2c; }
         
         .hero-section {
-            background-size: cover; 
-            background-position: center; 
-            min-height: 100vh; /* UPDATED: Forces full screen height */
-            background-attachment: fixed;
-            position: relative;
+            height: 100vh; /* FORCE EXACT SCREEN HEIGHT */
+            min-height: 100vh;
+            width: 100%;
             display: flex;
             align-items: center;
+            justify-content: center;
+            position: relative;
         }
         
         @media only screen and (max-width: 768px) { .hero-section { background-attachment: scroll; } }
@@ -358,7 +366,7 @@ const LandingPage = ({ onEnterHub }) => {
         <div className="min-h-screen w-full font-sans text-white flex flex-col relative overflow-x-hidden bg-black">
             <Background />
 
-            <header className="sticky top-0 z-50 bg-black/40 backdrop-blur-md shadow-2xl border-b border-white/10 flex justify-center">
+            <header className="fixed top-0 w-full z-50 bg-black/40 backdrop-blur-md shadow-2xl border-b border-white/10 flex justify-center">
                 <nav className="max-w-7xl w-full px-6 py-4 flex justify-between items-center">
                     <a href="#home" className="flex items-center space-x-2 text-white hover:text-red-500 transition-colors"><span className="text-3xl font-black text-red-600 italic">/</span><h1 className="text-xl font-black uppercase tracking-tighter italic">Syrix</h1></a>
                     <button onClick={() => setMobileMenuOpen(!mobileMenuOpen)} className="md:hidden text-2xl z-50 p-2 focus:outline-none text-white">☰</button>
