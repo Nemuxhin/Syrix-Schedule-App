@@ -629,7 +629,7 @@ const LandingPage = ({ onEnterHub }) => {
                     <div className="max-w-7xl w-full px-6">
                         <p className="text-center text-neutral-600 text-xs font-bold uppercase tracking-[0.3em] mb-8">Trusted By</p>
                         <div className="flex flex-wrap justify-center gap-12 md:gap-24 opacity-50 grayscale hover:grayscale-0 transition-all duration-500">
-                            {['RougeEnergy',].map((p) => (
+                            {['RougeEnergy','Logitech'].map((p) => (
                                 <div key={p} className="text-2xl font-black text-white italic tracking-tighter">{p}</div>
                             ))}
                         </div>
