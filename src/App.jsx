@@ -337,6 +337,7 @@ const LandingPage = ({ onEnterHub }) => {
         return (
             <div className="player-card group w-full sm:w-72" data-aos="fade-up" data-aos-delay={delay}>
                 <div className="card-inner">
+                    {/* Front of Card */}
                     <div className={`card-front glass-panel rounded-xl overflow-hidden shadow-2xl border-b-4 border-red-600 relative`}>
                         <div className="w-full h-48 bg-gradient-to-b from-neutral-800 to-black flex items-center justify-center overflow-hidden">
                             {player.pfp ? (
@@ -356,10 +357,11 @@ const LandingPage = ({ onEnterHub }) => {
                             <div className="mt-2 text-xs text-neutral-500 font-mono bg-black/50 py-1 px-2 rounded inline-block">Rank: {player.rank || 'N/A'}</div>
                         </div>
                     </div>
+
+                    {/* Back of Card (Updated to remove Gamer Tag) */}
                     <div className="card-back glass-panel border border-red-900/30">
                         <h5 className="text-xl font-bold text-red-500 mb-2">{player.id}</h5>
                         <p className="text-neutral-300 text-sm italic">"{player.notes || 'No bio available.'}"</p>
-                        {player.gameId && <div className="mt-4 text-xs font-mono bg-black/50 p-2 rounded text-neutral-400">Riot ID: {player.gameId}</div>}
                     </div>
                 </div>
             </div>
