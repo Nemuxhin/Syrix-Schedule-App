@@ -754,23 +754,41 @@ function LeaveLogger({ members }) {
 
 function ScrimScheduler({ onSchedule, userTimezone }) {
     const [form, setForm] = useState({ type: 'Scrim', date: '', time: '', opponent: '', map: MAPS[0] });
-    const submit = async () => { await onSchedule({ ...form, timezone: userTimezone }); setForm({ ...form, opponent: '' }); };
+
+    const submit = async () => {
+        if (!form.date || !form.time) return; // Basic validation
+        await onSchedule({ ...form, timezone: userTimezone });
+        setForm({ ...form, opponent: '' });
+    };
+
     return (
         <div className="space-y-4">
             <div className="grid grid-cols-2 gap-4">
                 <div>
-                    <label className="text-xs font-bold text-red-500 block mb-1">TYPE</label>
-                    <Select value={form.type} onChange={e => setForm({ ...form, type: e.target.value })}><option>Scrim</option><option>Tournament</option></Select>
+                    <label className="text-xs font-bold text-red-500 block mb-1">EVENT TYPE</label>
+                    <Select value={form.type} onChange={e => setForm({ ...form, type: e.target.value })}>
+                        <option>Scrim</option>
+                        <option>Premier</option>
+                        <option>Tournament</option>
+                        <option>Competitive</option>
+                        <option>VOD Review</option>
+                        <option>Strategy Session</option>
+                    </Select>
                 </div>
                 <div>
-                    <label className="text-xs font-bold text-red-500 block mb-1">OPPONENT</label>
-                    <Input value={form.opponent} onChange={e => setForm({ ...form, opponent: e.target.value })} />
+                    <label className="text-xs font-bold text-red-500 block mb-1">OPPONENT / NOTES</label>
+                    <Input
+                        value={form.opponent}
+                        onChange={e => setForm({ ...form, opponent: e.target.value })}
+                        placeholder={form.type === 'VOD Review' ? "e.g. Reviewing Ascent Scrim" : "e.g. Team Liquid"}
+                    />
                 </div>
             </div>
             <div className="grid grid-cols-2 gap-4">
                 <div>
                     <label className="text-xs font-bold text-red-500 block mb-1">MAP</label>
                     <Select value={form.map} onChange={e => setForm({ ...form, map: e.target.value })}>
+                        <option value="General">General / None</option>
                         {MAPS.map(m => <option key={m} value={m}>{m}</option>)}
                     </Select>
                 </div>
