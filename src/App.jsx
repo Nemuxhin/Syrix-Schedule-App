@@ -1,7 +1,7 @@
 ﻿import React, { useState, useEffect, useMemo, useRef, createContext, useContext } from 'react';
 import { initializeApp } from 'firebase/app';
 import { getFirestore, collection, onSnapshot, doc, setDoc, deleteDoc, addDoc, updateDoc, query, where, getDoc } from 'firebase/firestore';
-import { getAuth, onAuthStateChanged, signInWithPopup, signOut, OAuthProvider, signInAnonymously, signInWithCustomToken } from 'firebase/auth';
+import { getAuth, onAuthStateChanged, signInWithPopup, signOut, OAuthProvider, signInWithCustomToken } from 'firebase/auth';
 
 // --- Firebase Configuration ---
 const firebaseConfig = {
@@ -686,13 +686,11 @@ function LoginScreen({ signIn, onBack }) {
             <div className="relative z-10 bg-neutral-900/80 backdrop-blur-xl border border-white/10 p-12 rounded-[3rem] shadow-2xl shadow-red-900/40 flex flex-col items-center text-center max-w-md w-full mx-4">
                 <h1 className="text-7xl font-black text-white tracking-tighter drop-shadow-[0_0_30px_rgba(255,255,255,0.5)]">SYRIX</h1>
                 <div className="h-1.5 w-32 bg-red-600 rounded-full shadow-[0_0_15px_rgba(220,38,38,1)] my-6"></div>
-                <button onClick={signIn} className="w-full bg-[#5865F2] hover:bg-[#4752C4] text-white py-4 rounded-2xl font-bold shadow-lg transition-transform hover:scale-105 flex items-center justify-center gap-3 text-lg uppercase tracking-wider mb-4">
+
+                <button onClick={signIn} className="w-full bg-[#5865F2] hover:bg-[#4752C4] text-white py-4 rounded-2xl font-bold shadow-lg transition-transform hover:scale-105 flex items-center justify-center gap-3 text-lg uppercase tracking-wider mb-8">
                     Login with Discord
                 </button>
-                <div className="text-xs text-neutral-500 mb-4">Or proceed as guest (Limited Access)</div>
-                <button onClick={() => signInAnonymously(auth)} className="w-full bg-neutral-800 hover:bg-neutral-700 text-white py-3 rounded-xl font-bold shadow-md transition-transform hover:scale-105 flex items-center justify-center gap-3 text-sm uppercase tracking-wider mb-6">
-                    Guest Access
-                </button>
+
                 <button onClick={onBack} className="text-neutral-500 hover:text-white text-sm uppercase font-bold tracking-widest">
                     &larr; Back to Home
                 </button>
