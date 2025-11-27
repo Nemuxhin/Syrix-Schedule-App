@@ -1396,19 +1396,93 @@ function LineupLibrary() {
 }
 
 function MatchHistory({ currentUser, members }) {
-    const [matches, setMatches] = useState([]); const [isAdding, setIsAdding] = useState(false); const [expandedId, setExpandedId] = useState(null); const [editingId, setEditingId] = useState(null); const [editForm, setEditForm] = useState({}); const [newMatch, setNewMatch] = useState({ opponent: '', date: '', myScore: '', enemyScore: '', atkScore: '', defScore: '', map: MAPS[0], vod: '' });
+    const [history, setHistory] = useState([]);
+    const [pending, setPending] = useState([]);
+    const [isAdding, setIsAdding] = useState(false);
+    const [expandedId, setExpandedId] = useState(null);
+
+    // State for Editing/Finalizing
+    const [editingId, setEditingId] = useState(null);
+    const [editForm, setEditForm] = useState({});
+
+    // State for New Manual Logs
+    const [newMatch, setNewMatch] = useState({ opponent: '', date: '', myScore: '', enemyScore: '', atkScore: '', defScore: '', map: 'Ascent', vod: '' });
+
     const addToast = useToast();
-    useEffect(() => { const unsub = onSnapshot(collection(db, 'events'), (snap) => { const evs = []; snap.forEach(doc => evs.push({ id: doc.id, ...doc.data() })); setMatches(evs.filter(e => e.result).sort((a, b) => new Date(b.date) - new Date(a.date))); }); return () => unsub(); }, []);
-    const handleAdd = async () => { await addDoc(collection(db, 'events'), { type: 'Scrim', opponent: newMatch.opponent, date: newMatch.date, result: { ...newMatch } }); setIsAdding(false); setNewMatch({ opponent: '', date: '', myScore: '', enemyScore: '', atkScore: '', defScore: '', map: MAPS[0], vod: '' }); addToast('Match Logged'); };
-    const startEdit = (m) => { setEditingId(m.id); setEditForm({ opponent: m.opponent, date: m.date, ...m.result }); };
-    const saveEdit = async () => { const { opponent, date, ...resultData } = editForm; await updateDoc(doc(db, 'events', editingId), { opponent, date, result: resultData }); setEditingId(null); addToast('Match Updated'); };
-    const getResultColor = (my, enemy) => { const m = parseInt(my); const e = parseInt(enemy); if (m > e) return 'border-l-4 border-l-green-500'; if (m < e) return 'border-l-4 border-l-red-600'; return 'border-l-4 border-l-neutral-500'; };
+
+    // Load Events and separate them into History vs Pending
+    useEffect(() => {
+        const unsub = onSnapshot(collection(db, 'events'), (snap) => {
+            const evs = [];
+            snap.forEach(doc => evs.push({ id: doc.id, ...doc.data() }));
+
+            // History: Has a result
+            setHistory(evs.filter(e => e.result).sort((a, b) => new Date(b.date) - new Date(a.date)));
+
+            // Pending: No result yet (Scheduled)
+            setPending(evs.filter(e => !e.result).sort((a, b) => new Date(a.date) - new Date(b.date)));
+        });
+        return () => unsub();
+    }, []);
+
+    // 1. Log a brand new match manually (Not previously scheduled)
+    const handleManualAdd = async () => {
+        if (!newMatch.opponent || !newMatch.myScore) return addToast("Opponent & Score required", "error");
+
+        await addDoc(collection(db, 'events'), {
+            type: 'Scrim', // Default type
+            opponent: newMatch.opponent,
+            date: newMatch.date || new Date().toISOString().split('T')[0],
+            result: { ...newMatch }
+        });
+        setIsAdding(false);
+        setNewMatch({ opponent: '', date: '', myScore: '', enemyScore: '', atkScore: '', defScore: '', map: 'Ascent', vod: '' });
+        addToast('Manual Match Logged');
+    };
+
+    // 2. Start Editing (or Finalizing a Pending Match)
+    const openEditor = (match, isFinalizing = false) => {
+        setEditingId(match.id);
+        // If finalizing, we might not have result data yet, so we prep basic scheduled info
+        // If editing history, we load the existing result
+        setEditForm({
+            opponent: match.opponent,
+            date: match.date,
+            map: match.map || (match.result ? match.result.map : 'Ascent'),
+            vod: match.result?.vod || '',
+            myScore: match.result?.myScore || '',
+            enemyScore: match.result?.enemyScore || '',
+            atkScore: match.result?.atkScore || '',
+            defScore: match.result?.defScore || '',
+            isFinalizing: isFinalizing // Flag to know if we are converting pending->history
+        });
+    };
+
+    // 3. Save Changes (Used for both Editing History AND Finalizing Pending)
+    const saveEdit = async () => {
+        const { opponent, date, isFinalizing, ...resultData } = editForm;
+
+        // Update the document
+        await updateDoc(doc(db, 'events', editingId), {
+            opponent,
+            date,
+            result: resultData // This adds/updates the 'result' field, making it "History"
+        });
+
+        setEditingId(null);
+        addToast(isFinalizing ? 'Match Finalized & Moved to History' : 'Match Updated');
+    };
+
+    const deleteEvent = async (id) => {
+        if (window.confirm("Delete this match record?")) {
+            await deleteDoc(doc(db, 'events', id));
+            addToast("Record Deleted");
+        }
+    }
 
     const castVote = async (matchId, player) => {
         await setDoc(doc(db, 'events', matchId), {
-            mvpVotes: {
-                [currentUser.uid]: player
-            }
+            mvpVotes: { [currentUser.uid]: player }
         }, { merge: true });
         addToast(`Voted for ${player}`);
     };
@@ -1417,38 +1491,199 @@ function MatchHistory({ currentUser, members }) {
         if (!votes) return null;
         const tally = {};
         Object.values(votes).forEach(v => tally[v] = (tally[v] || 0) + 1);
-        let max = 0;
-        let leader = null;
+        let max = 0; let leader = null;
         Object.entries(tally).forEach(([p, c]) => { if (c > max) { max = c; leader = p; } });
         return { leader, count: max };
     };
 
+    const getResultColor = (my, enemy) => {
+        const m = parseInt(my); const e = parseInt(enemy);
+        if (m > e) return 'border-l-4 border-l-green-500';
+        if (m < e) return 'border-l-4 border-l-red-600';
+        return 'border-l-4 border-l-neutral-500';
+    };
+
     return (
-        <Card>
-            <div className="flex justify-between items-center mb-6"><h3 className="text-2xl font-black text-white flex items-center gap-3"><span className="text-red-600">MATCH</span> HISTORY</h3><ButtonSecondary onClick={() => setIsAdding(!isAdding)} className="text-xs">{isAdding ? 'Cancel' : '+ Log Match'}</ButtonSecondary></div>
-            {isAdding && (<div className="mb-6 bg-black/50 p-4 rounded-xl border border-white/10 space-y-2 animate-fade-in"><div className="grid grid-cols-2 gap-2"><Input placeholder="Opponent" value={newMatch.opponent} onChange={e => setNewMatch({ ...newMatch, opponent: e.target.value })} /><Input type="date" value={newMatch.date} onChange={e => setNewMatch({ ...newMatch, date: e.target.value })} className="[color-scheme:dark]" /></div><div className="grid grid-cols-2 gap-2"><Select value={newMatch.map} onChange={e => setNewMatch({ ...newMatch, map: e.target.value })}>{MAPS.map(m => <option key={m}>{m}</option>)}</Select><Input placeholder="VOD Link" value={newMatch.vod} onChange={e => setNewMatch({ ...newMatch, vod: e.target.value })} /></div><div className="grid grid-cols-4 gap-2"><Input placeholder="Us" value={newMatch.myScore} onChange={e => setNewMatch({ ...newMatch, myScore: e.target.value })} /><Input placeholder="Them" value={newMatch.enemyScore} onChange={e => setNewMatch({ ...newMatch, enemyScore: e.target.value })} /><Input placeholder="Atk" value={newMatch.atkScore} onChange={e => setNewMatch({ ...newMatch, atkScore: e.target.value })} /><Input placeholder="Def" value={newMatch.defScore} onChange={e => setNewMatch({ ...newMatch, defScore: e.target.value })} /></div><ButtonPrimary onClick={handleAdd} className="w-full py-2 text-xs">Save Result</ButtonPrimary></div>)}
-            <div className="space-y-4">
-                {matches.map(m => {
-                    if (editingId === m.id) return (<div key={m.id} className="bg-neutral-900 border border-red-600 p-4 rounded-xl space-y-2"><div className="flex justify-between mb-2"><span className="text-red-500 font-bold text-xs uppercase">Editing Match</span><button onClick={() => setEditingId(null)} className="text-neutral-500 hover:text-white">Cancel</button></div><div className="grid grid-cols-2 gap-2"><Input value={editForm.opponent} onChange={e => setEditForm({ ...editForm, opponent: e.target.value })} /><Input type="date" value={editForm.date} onChange={e => setEditForm({ ...editForm, date: e.target.value })} className="[color-scheme:dark]" /></div><div className="grid grid-cols-2 gap-2"><Select value={editForm.map} onChange={e => setEditForm({ ...editForm, map: e.target.value })}>{MAPS.map(map => <option key={map}>{map}</option>)}</Select><Input placeholder="VOD Link" value={editForm.vod} onChange={e => setEditForm({ ...editForm, vod: e.target.value })} /></div><div className="grid grid-cols-4 gap-2"><Input placeholder="Us" value={editForm.myScore} onChange={e => setEditForm({ ...editForm, myScore: e.target.value })} /><Input placeholder="Them" value={editForm.enemyScore} onChange={e => setEditForm({ ...editForm, enemyScore: e.target.value })} /><Input placeholder="Atk" value={editForm.atkScore} onChange={e => setEditForm({ ...editForm, atkScore: e.target.value })} /><Input placeholder="Def" value={editForm.defScore} onChange={e => setEditForm({ ...editForm, defScore: e.target.value })} /></div><ButtonPrimary onClick={saveEdit} className="w-full py-2 text-xs">Save Changes</ButtonPrimary></div>);
-                    const voteData = getVoteLeader(m.mvpVotes);
-                    return (<div key={m.id} onClick={() => setExpandedId(expandedId === m.id ? null : m.id)} className={`bg-black/40 border border-neutral-800 p-4 rounded-xl relative overflow-hidden cursor-pointer hover:bg-neutral-900 transition-all ${m.result ? getResultColor(m.result.myScore, m.result.enemyScore) : ''}`}>{expandedId === m.id && (parseInt(m.result.myScore) > parseInt(m.result.enemyScore) ? <VictoryStamp /> : <DefeatStamp />)}<div className="flex justify-between items-center relative z-10"><div><div className="text-sm font-bold text-white flex items-center gap-2">{m.opponent} {m.result.vod && <a href={m.result.vod} target="_blank" rel="noreferrer" onClick={e => e.stopPropagation()} className="text-[9px] bg-red-600 text-white px-2 py-0.5 rounded hover:bg-red-500">▶ WATCH VOD</a>}</div><div className="text-xs text-neutral-500">{m.date} • {m.result.map}</div></div><div className="flex items-center gap-4"><div className={`text-2xl font-black ${parseInt(m.result.myScore) > parseInt(m.result.enemyScore) ? 'text-green-500' : 'text-red-500'}`}>{m.result.myScore} - {m.result.enemyScore}</div><button onClick={(e) => { e.stopPropagation(); startEdit(m); }} className="text-neutral-600 hover:text-white p-1">✏️</button></div></div>{expandedId === m.id && (<div className="mt-4 pt-4 border-t border-neutral-800"><div className="grid grid-cols-2 gap-4 text-center mb-4"><div className="bg-neutral-900 p-2 rounded"><div className="text-[10px] text-neutral-500 uppercase font-bold">Attack</div><div className="text-white font-bold">{m.result.atkScore || '-'}</div></div><div className="bg-neutral-900 p-2 rounded"><div className="text-[10px] text-neutral-500 uppercase font-bold">Defense</div><div className="text-white font-bold">{m.result.defScore || '-'}</div></div></div>
-                        <div className="bg-neutral-900/50 p-3 rounded-lg border border-white/5 flex items-center justify-between" onClick={e => e.stopPropagation()}>
-                            <div className="text-xs font-bold text-neutral-400">TEAM MVP VOTE: {voteData ? <span className="text-yellow-500">{voteData.leader} ({voteData.count})</span> : 'None'}</div>
-                            <div className="flex items-center gap-2">
-                                <span className="text-[10px] text-neutral-500 uppercase mr-2">Voted: {m.mvpVotes?.[currentUser.uid] || 'No'}</span>
-                                <select onChange={(e) => castVote(m.id, e.target.value)} className="bg-black text-white text-xs p-1 rounded border border-neutral-700 outline-none" defaultValue="">
-                                    <option value="" disabled>Vote...</option>
-                                    {members.map(mem => <option key={mem} value={mem}>{mem}</option>)}
-                                </select>
-                            </div>
+        <Card className="min-h-full">
+            <div className="flex justify-between items-center mb-6">
+                <h3 className="text-2xl font-black text-white flex items-center gap-3"><span className="text-red-600">MATCH</span> HISTORY</h3>
+                <ButtonSecondary onClick={() => setIsAdding(!isAdding)} className="text-xs">
+                    {isAdding ? 'Cancel' : '+ Log Past Match'}
+                </ButtonSecondary>
+            </div>
+
+            {/* --- MANUAL ADD FORM --- */}
+            {isAdding && (
+                <div className="mb-8 bg-black/50 p-6 rounded-2xl border border-white/10 space-y-4 animate-fade-in relative overflow-hidden">
+                    <div className="absolute top-0 left-0 w-1 h-full bg-red-600"></div>
+                    <h4 className="text-white font-bold uppercase text-sm">Log Unscheduled Match</h4>
+                    <div className="grid grid-cols-2 gap-3">
+                        <Input placeholder="Opponent Name" value={newMatch.opponent} onChange={e => setNewMatch({ ...newMatch, opponent: e.target.value })} />
+                        <Input type="date" value={newMatch.date} onChange={e => setNewMatch({ ...newMatch, date: e.target.value })} className="[color-scheme:dark]" />
+                    </div>
+                    <div className="grid grid-cols-2 gap-3">
+                        <Select value={newMatch.map} onChange={e => setNewMatch({ ...newMatch, map: e.target.value })}>
+                            {MAPS.map(m => <option key={m} value={m}>{m}</option>)}
+                        </Select>
+                        <Input placeholder="VOD Link (Optional)" value={newMatch.vod} onChange={e => setNewMatch({ ...newMatch, vod: e.target.value })} />
+                    </div>
+                    <div className="grid grid-cols-4 gap-2">
+                        <div className="col-span-2 flex gap-2">
+                            <Input placeholder="My Score" value={newMatch.myScore} onChange={e => setNewMatch({ ...newMatch, myScore: e.target.value })} type="number" />
+                            <Input placeholder="Enemy Score" value={newMatch.enemyScore} onChange={e => setNewMatch({ ...newMatch, enemyScore: e.target.value })} type="number" />
                         </div>
-                    </div>)}</div>);
+                        <Input placeholder="Atk Wins" value={newMatch.atkScore} onChange={e => setNewMatch({ ...newMatch, atkScore: e.target.value })} type="number" />
+                        <Input placeholder="Def Wins" value={newMatch.defScore} onChange={e => setNewMatch({ ...newMatch, defScore: e.target.value })} type="number" />
+                    </div>
+                    <ButtonPrimary onClick={handleManualAdd} className="w-full py-3 text-xs">Save to History</ButtonPrimary>
+                </div>
+            )}
+
+            {/* --- PENDING REPORTS SECTION --- */}
+            {pending.length > 0 && (
+                <div className="mb-8">
+                    <h4 className="text-xs font-black text-neutral-500 uppercase tracking-widest mb-3 flex items-center gap-2">
+                        <span className="w-2 h-2 rounded-full bg-yellow-500 animate-pulse"></span> Pending Reports (Scheduled)
+                    </h4>
+                    <div className="grid grid-cols-1 gap-3">
+                        {pending.map(p => (
+                            <div key={p.id} className="bg-neutral-900/50 border border-yellow-500/20 p-4 rounded-xl flex flex-col md:flex-row justify-between items-center gap-4">
+                                <div>
+                                    <div className="font-bold text-white text-lg">{p.opponent}</div>
+                                    <div className="text-xs text-neutral-400">{p.date} • {p.time} • <span className="text-red-400">{p.map}</span></div>
+                                </div>
+                                {editingId === p.id ? (
+                                    <div className="flex-1 w-full bg-black p-4 rounded-lg border border-neutral-700 animate-fade-in">
+                                        <div className="text-xs text-yellow-500 font-bold mb-2 uppercase">Finalize Score</div>
+                                        <div className="grid grid-cols-4 gap-2 mb-2">
+                                            <Input placeholder="Us" value={editForm.myScore} onChange={e => setEditForm({ ...editForm, myScore: e.target.value })} type="number" />
+                                            <Input placeholder="Them" value={editForm.enemyScore} onChange={e => setEditForm({ ...editForm, enemyScore: e.target.value })} type="number" />
+                                            <Input placeholder="Atk" value={editForm.atkScore} onChange={e => setEditForm({ ...editForm, atkScore: e.target.value })} type="number" />
+                                            <Input placeholder="Def" value={editForm.defScore} onChange={e => setEditForm({ ...editForm, defScore: e.target.value })} type="number" />
+                                        </div>
+                                        <div className="flex gap-2">
+                                            <ButtonPrimary onClick={saveEdit} className="text-xs py-2 flex-1">Confirm Score</ButtonPrimary>
+                                            <ButtonSecondary onClick={() => setEditingId(null)} className="text-xs py-2">Cancel</ButtonSecondary>
+                                        </div>
+                                    </div>
+                                ) : (
+                                    <button onClick={() => openEditor(p, true)} className="bg-yellow-600/20 hover:bg-yellow-600 text-yellow-500 hover:text-white border border-yellow-600/50 px-6 py-2 rounded-lg font-bold text-xs uppercase transition-all shadow-lg">
+                                        ✅ Report Score
+                                    </button>
+                                )}
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            )}
+
+            {/* --- MATCH HISTORY LIST --- */}
+            <h4 className="text-xs font-black text-neutral-500 uppercase tracking-widest mb-3">Completed Operations</h4>
+            <div className="space-y-4">
+                {history.length === 0 && <div className="text-neutral-600 italic text-center py-8">No match history recorded.</div>}
+
+                {history.map(m => {
+                    // --- EDIT MODE FOR EXISTING HISTORY ---
+                    if (editingId === m.id) return (
+                        <div key={m.id} className="bg-neutral-900 border border-red-600 p-4 rounded-xl space-y-3 animate-fade-in">
+                            <div className="flex justify-between items-center border-b border-red-900/30 pb-2">
+                                <span className="text-red-500 font-bold text-xs uppercase">Editing Record</span>
+                                <button onClick={() => setEditingId(null)} className="text-neutral-500 hover:text-white text-xs">Cancel</button>
+                            </div>
+                            <div className="grid grid-cols-2 gap-3">
+                                <Input value={editForm.opponent} onChange={e => setEditForm({ ...editForm, opponent: e.target.value })} />
+                                <Input type="date" value={editForm.date} onChange={e => setEditForm({ ...editForm, date: e.target.value })} className="[color-scheme:dark]" />
+                            </div>
+                            <div className="grid grid-cols-2 gap-3">
+                                <Select value={editForm.map} onChange={e => setEditForm({ ...editForm, map: e.target.value })}>
+                                    {MAPS.map(map => <option key={map} value={map}>{map}</option>)}
+                                </Select>
+                                <Input placeholder="VOD Link" value={editForm.vod} onChange={e => setEditForm({ ...editForm, vod: e.target.value })} />
+                            </div>
+                            <div className="grid grid-cols-4 gap-2">
+                                <div className="col-span-2 flex gap-2">
+                                    <Input placeholder="Us" value={editForm.myScore} onChange={e => setEditForm({ ...editForm, myScore: e.target.value })} />
+                                    <Input placeholder="Them" value={editForm.enemyScore} onChange={e => setEditForm({ ...editForm, enemyScore: e.target.value })} />
+                                </div>
+                                <Input placeholder="Atk" value={editForm.atkScore} onChange={e => setEditForm({ ...editForm, atkScore: e.target.value })} />
+                                <Input placeholder="Def" value={editForm.defScore} onChange={e => setEditForm({ ...editForm, defScore: e.target.value })} />
+                            </div>
+                            <ButtonPrimary onClick={saveEdit} className="w-full py-2 text-xs">Update Record</ButtonPrimary>
+                        </div>
+                    );
+
+                    // --- VIEW MODE ---
+                    const voteData = getVoteLeader(m.mvpVotes);
+                    const isWin = parseInt(m.result.myScore) > parseInt(m.result.enemyScore);
+
+                    return (
+                        <div key={m.id} onClick={() => setExpandedId(expandedId === m.id ? null : m.id)} className={`bg-black/40 border border-neutral-800 p-4 rounded-xl relative overflow-hidden cursor-pointer hover:bg-neutral-900 transition-all ${getResultColor(m.result.myScore, m.result.enemyScore)}`}>
+
+                            {/* Visual Stamp */}
+                            {expandedId === m.id && (isWin ? <VictoryStamp /> : <DefeatStamp />)}
+
+                            <div className="flex justify-between items-center relative z-10">
+                                <div>
+                                    <div className="text-sm font-bold text-white flex items-center gap-2">
+                                        {m.opponent}
+                                        {m.result.vod && (
+                                            <a href={m.result.vod} target="_blank" rel="noreferrer" onClick={e => e.stopPropagation()} className="text-[9px] bg-red-600 text-white px-2 py-0.5 rounded hover:bg-red-500 font-black uppercase flex items-center gap-1">
+                                                <span>▶</span> VOD
+                                            </a>
+                                        )}
+                                    </div>
+                                    <div className="text-xs text-neutral-500 font-mono mt-0.5">{m.date} • {m.result.map}</div>
+                                </div>
+                                <div className="flex items-center gap-4">
+                                    <div className={`text-2xl font-black ${isWin ? 'text-green-500' : 'text-red-500'}`}>
+                                        {m.result.myScore} - {m.result.enemyScore}
+                                    </div>
+                                    <div className="flex gap-2">
+                                        <button onClick={(e) => { e.stopPropagation(); openEditor(m); }} className="text-neutral-600 hover:text-white p-1" title="Edit">✏️</button>
+                                        <button onClick={(e) => { e.stopPropagation(); deleteEvent(m.id); }} className="text-neutral-600 hover:text-red-500 p-1" title="Delete">🗑️</button>
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* Details Drawer */}
+                            {expandedId === m.id && (
+                                <div className="mt-4 pt-4 border-t border-neutral-800 animate-slide-in">
+                                    <div className="grid grid-cols-2 gap-4 text-center mb-4">
+                                        <div className="bg-neutral-900 p-2 rounded border border-neutral-800">
+                                            <div className="text-[10px] text-neutral-500 uppercase font-bold">Attack Wins</div>
+                                            <div className="text-white font-bold text-lg">{m.result.atkScore || '-'}</div>
+                                        </div>
+                                        <div className="bg-neutral-900 p-2 rounded border border-neutral-800">
+                                            <div className="text-[10px] text-neutral-500 uppercase font-bold">Defense Wins</div>
+                                            <div className="text-white font-bold text-lg">{m.result.defScore || '-'}</div>
+                                        </div>
+                                    </div>
+
+                                    <div className="bg-neutral-900/50 p-3 rounded-lg border border-white/5 flex flex-wrap gap-4 items-center justify-between" onClick={e => e.stopPropagation()}>
+                                        <div className="text-xs font-bold text-neutral-400 flex items-center gap-2">
+                                            <span>⭐ MVP VOTE:</span>
+                                            {voteData ? <span className="text-yellow-500 text-sm">{voteData.leader} ({voteData.count})</span> : <span className="text-neutral-600">No votes</span>}
+                                        </div>
+                                        <div className="flex items-center gap-2">
+                                            {m.mvpVotes?.[currentUser.uid] ? (
+                                                <span className="text-[10px] bg-green-900/30 text-green-500 px-2 py-1 rounded border border-green-900/50">Voted for {m.mvpVotes[currentUser.uid]}</span>
+                                            ) : (
+                                                <select onChange={(e) => castVote(m.id, e.target.value)} className="bg-black text-white text-xs p-1.5 rounded border border-neutral-700 outline-none focus:border-red-500 cursor-pointer" defaultValue="">
+                                                    <option value="" disabled>Select MVP...</option>
+                                                    {members.map(mem => <option key={mem} value={mem}>{mem}</option>)}
+                                                </select>
+                                            )}
+                                        </div>
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+                    );
                 })}
             </div>
         </Card>
     );
 }
-
 function RosterManager({ members, events }) {
     const [rosterData, setRosterData] = useState({});
     const [mode, setMode] = useState('edit');
