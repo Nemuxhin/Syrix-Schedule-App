@@ -215,8 +215,10 @@ const LandingPage = ({ onEnterHub }) => {
     const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
     const [roster, setRoster] = useState([]);
     const [matches, setMatches] = useState([]);
+    const [allEvents, setAllEvents] = useState([]); // Added to store all events for stats
     const [newsData, setNewsData] = useState([]);
     const [intelData, setIntelData] = useState([]);
+    const [merchData, setMerchData] = useState([]);
 
     // Load real data from Firestore
     useEffect(() => {
@@ -228,6 +230,7 @@ const LandingPage = ({ onEnterHub }) => {
         const unsubEvents = onSnapshot(collection(db, 'events'), (snap) => {
             const e = [];
             snap.forEach(doc => e.push({ id: doc.id, ...doc.data() }));
+            setAllEvents(e); // Store all events for stats calculation
             // Filter for future matches
             const futureMatches = e
                 .filter(m => new Date(m.date) >= new Date())
@@ -247,10 +250,48 @@ const LandingPage = ({ onEnterHub }) => {
             setIntelData(i.sort((a, b) => new Date(b.date) - new Date(a.date)).slice(0, 3));
         });
 
-        return () => { unsubRoster(); unsubEvents(); unsubNews(); unsubIntel(); };
+        // Merch Listener
+        const unsubMerch = onSnapshot(collection(db, 'merch'), (snap) => {
+            const m = [];
+            snap.forEach(doc => m.push({ id: doc.id, ...doc.data() }));
+            setMerchData(m);
+        });
+
+        return () => { unsubRoster(); unsubEvents(); unsubNews(); unsubIntel(); unsubMerch(); };
     }, []);
 
     const sortedRoster = useMemo(() => sortRosterByRole(roster), [roster]);
+
+    // --- NEW STATS CALCULATION ---
+    const teamStats = useMemo(() => {
+        const pastMatches = allEvents.filter(e => e.result && e.result.myScore).sort((a, b) => new Date(a.date) - new Date(b.date));
+        let wins = 0, losses = 0;
+        pastMatches.forEach(m => {
+            const my = parseInt(m.result.myScore);
+            const enemy = parseInt(m.result.enemyScore);
+            if (my > enemy) wins++;
+            else if (my < enemy) losses++;
+        });
+        const total = wins + losses;
+        const winRate = total > 0 ? Math.round((wins / total) * 100) : 0;
+
+        let cumulative = 0;
+        const trendPoints = pastMatches.slice(-10).map(m => {
+            cumulative += (parseInt(m.result.myScore) - parseInt(m.result.enemyScore));
+            return cumulative;
+        });
+
+        return { winRate, wins, losses, trendPoints };
+    }, [allEvents]);
+
+    const generateTrendPath = (points) => {
+        if (!points.length) return "";
+        const max = Math.max(...points.map(Math.abs)) || 10;
+        const height = 50; const width = 150;
+        const stepX = width / (points.length - 1 || 1);
+        return points.map((pt, i) => `${i * stepX},${height / 2 - (pt / max) * (height / 2)}`).join(" ");
+    };
+    // -----------------------------
 
     const featuredNews = newsData.find(n => n.isFeatured) || newsData[0];
     const otherNews = newsData.filter(n => n.id !== featuredNews?.id).slice(0, 3);
@@ -358,6 +399,44 @@ const LandingPage = ({ onEnterHub }) => {
                         </div>
                     </div>
                 </section>
+
+                {/* --- NEW TEAM STATS SECTION --- */}
+                <section className="w-full py-12 bg-black border-b border-white/10 flex justify-center relative z-20">
+                    <div className="max-w-7xl w-full px-6 grid grid-cols-1 md:grid-cols-3 gap-6">
+                        <div className="glass-panel p-6 rounded-2xl flex items-center justify-between border border-red-900/30" data-aos="fade-up" data-aos-delay="0">
+                            <div>
+                                <div className="text-xs text-neutral-500 font-bold uppercase tracking-widest mb-1">Season Win Rate</div>
+                                <div className="text-5xl font-black text-white italic tracking-tighter">{teamStats.winRate}%</div>
+                            </div>
+                            <div className="h-16 w-16 rounded-full border-4 border-red-600 flex items-center justify-center bg-red-900/20 shadow-[0_0_15px_rgba(220,38,38,0.4)]">
+                                <span className="text-2xl">🔥</span>
+                            </div>
+                        </div>
+                        <div className="glass-panel p-6 rounded-2xl flex items-center justify-between border border-white/10" data-aos="fade-up" data-aos-delay="100">
+                            <div>
+                                <div className="text-xs text-neutral-500 font-bold uppercase tracking-widest mb-1">Current Record</div>
+                                <div className="text-5xl font-black text-white italic tracking-tighter flex gap-3">
+                                    <span className="text-green-500">{teamStats.wins}W</span>
+                                    <span className="text-neutral-600">-</span>
+                                    <span className="text-red-500">{teamStats.losses}L</span>
+                                </div>
+                            </div>
+                        </div>
+                        <div className="glass-panel p-6 rounded-2xl flex items-center justify-between border border-white/10 relative overflow-hidden" data-aos="fade-up" data-aos-delay="200">
+                            <div className="relative z-10">
+                                <div className="text-xs text-neutral-500 font-bold uppercase tracking-widest mb-1">Performance Trend</div>
+                                <div className="text-sm text-neutral-300 font-mono">Last 10 Matches</div>
+                            </div>
+                            <div className="absolute right-0 bottom-0 w-1/2 h-full opacity-50">
+                                <svg className="w-full h-full" viewBox="0 0 150 50" preserveAspectRatio="none">
+                                    <path d={`M 0,25 ${generateTrendPath(teamStats.trendPoints)}`} fill="none" stroke={teamStats.trendPoints[teamStats.trendPoints.length - 1] >= 0 ? '#22c55e' : '#ef4444'} strokeWidth="3" />
+                                    <line x1="0" y1="25" x2="150" y2="25" stroke="#555" strokeWidth="1" strokeDasharray="4" />
+                                </svg>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+                {/* ------------------------------- */}
 
                 <section id="about" className="w-full py-24 relative flex justify-center">
                     <div className="max-w-7xl w-full px-6 grid grid-cols-1 lg:grid-cols-2 gap-16 items-center">
@@ -503,20 +582,26 @@ const LandingPage = ({ onEnterHub }) => {
                             <p className="text-neutral-500 uppercase tracking-widest font-bold text-sm">Official Gear</p>
                         </div>
                         <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-                            {['Pro Jersey 2025', 'Core Hoodie', 'Tactical Mousepad'].map((item, i) => (
-                                <div key={i} className="glass-panel rounded-2xl overflow-hidden group cursor-pointer" data-aos="fade-up" data-aos-delay={i * 100}>
-                                    <div className="h-64 bg-neutral-800 flex items-center justify-center group-hover:bg-neutral-700 transition-colors">
-                                        <span className="text-neutral-500 font-black uppercase tracking-widest">{item}</span>
+                            {merchData.length > 0 ? merchData.map((item, i) => (
+                                <div key={item.id} className="glass-panel rounded-2xl overflow-hidden group cursor-pointer" data-aos="fade-up" data-aos-delay={i * 100}>
+                                    <div className="h-64 bg-neutral-800 flex items-center justify-center group-hover:bg-neutral-700 transition-colors relative">
+                                        <span className="text-neutral-500 font-black uppercase tracking-widest z-10">{item.name}</span>
+                                        {/* Placeholder gradient background if no image provided */}
+                                        <div className="absolute inset-0 bg-gradient-to-tr from-transparent to-white/5 opacity-0 group-hover:opacity-100 transition-opacity"></div>
                                     </div>
                                     <div className="p-6 flex justify-between items-center">
                                         <div>
-                                            <h4 className="font-bold text-white">{item}</h4>
-                                            <p className="text-xs text-red-500 font-bold">$??.?? USD</p>
+                                            <h4 className="font-bold text-white truncate max-w-[150px]">{item.name}</h4>
+                                            <p className="text-xs text-red-500 font-bold">{item.price}</p>
                                         </div>
-                                        <button className="bg-white text-black px-4 py-2 rounded-lg font-bold text-xs uppercase hover:bg-red-600 hover:text-white transition-colors">Buy</button>
+                                        <a href={item.link || '#'} target={item.link ? "_blank" : "_self"} rel="noreferrer" className="bg-white text-black px-4 py-2 rounded-lg font-bold text-xs uppercase hover:bg-red-600 hover:text-white transition-colors">
+                                            Buy
+                                        </a>
                                     </div>
                                 </div>
-                            ))}
+                            )) : (
+                                <div className="col-span-3 text-center text-neutral-500 italic py-12">New collection dropping soon.</div>
+                            )}
                         </div>
                     </div>
                 </section>
@@ -1485,8 +1570,10 @@ function MapVeto() {
 function ContentManager() {
     const [news, setNews] = useState([]);
     const [intel, setIntel] = useState([]);
+    const [merch, setMerch] = useState([]);
     const [newNews, setNewNews] = useState({ title: '', body: '', date: new Date().toISOString().split('T')[0], type: 'Update', isFeatured: false });
     const [newIntel, setNewIntel] = useState({ title: '', subtitle: '', url: '', date: new Date().toISOString().split('T')[0] });
+    const [newMerch, setNewMerch] = useState({ name: '', price: '', link: '' });
     const addToast = useToast();
 
     // Fetch Data
@@ -1499,7 +1586,11 @@ function ContentManager() {
             const i = []; snap.forEach(doc => i.push({ id: doc.id, ...doc.data() }));
             setIntel(i.sort((a, b) => new Date(b.date) - new Date(a.date)));
         });
-        return () => { unsubNews(); unsubIntel(); };
+        const unsubMerch = onSnapshot(collection(db, 'merch'), (snap) => {
+            const m = []; snap.forEach(doc => m.push({ id: doc.id, ...doc.data() }));
+            setMerch(m);
+        });
+        return () => { unsubNews(); unsubIntel(); unsubMerch(); };
     }, []);
 
     // Handlers
@@ -1517,13 +1608,20 @@ function ContentManager() {
         addToast('Intel Added');
     };
 
+    const addMerch = async () => {
+        if (!newMerch.name || !newMerch.price) return addToast('Name and Price required', 'error');
+        await addDoc(collection(db, 'merch'), newMerch);
+        setNewMerch({ name: '', price: '', link: '' });
+        addToast('Item Added to Armory');
+    };
+
     const deleteItem = async (collectionName, id) => {
         await deleteDoc(doc(db, collectionName, id));
         addToast('Item Deleted');
     };
 
     return (
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 h-full">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 h-full">
             {/* NEWS MANAGER */}
             <Card className="h-full flex flex-col">
                 <h3 className="text-2xl font-black text-white mb-6 flex items-center gap-2"><span className="text-red-600">/</span> MANAGE SITREP (NEWS)</h3>
@@ -1592,6 +1690,31 @@ function ContentManager() {
                                 <p className="text-neutral-500 text-xs truncate">{i.subtitle}</p>
                             </div>
                             <button onClick={() => deleteItem('intel', i.id)} className="text-neutral-600 hover:text-red-500 px-2">×</button>
+                        </div>
+                    ))}
+                </div>
+            </Card>
+
+            {/* ARMORY (MERCH) MANAGER */}
+            <Card className="h-full flex flex-col">
+                <h3 className="text-2xl font-black text-white mb-6 flex items-center gap-2"><span className="text-red-600">/</span> MANAGE ARMORY</h3>
+
+                <div className="bg-neutral-900/50 p-4 rounded-xl border border-white/10 space-y-3 mb-6">
+                    <span className="text-xs font-bold text-neutral-500 uppercase">New Product</span>
+                    <Input placeholder="Item Name (e.g. Jersey)" value={newMerch.name} onChange={e => setNewMerch({ ...newMerch, name: e.target.value })} />
+                    <Input placeholder="Price (e.g. $60.00 USD)" value={newMerch.price} onChange={e => setNewMerch({ ...newMerch, price: e.target.value })} />
+                    <Input placeholder="Store Link (Optional)" value={newMerch.link} onChange={e => setNewMerch({ ...newMerch, link: e.target.value })} />
+                    <ButtonPrimary onClick={addMerch} className="w-full py-2 text-xs">Add Product</ButtonPrimary>
+                </div>
+
+                <div className="flex-1 overflow-y-auto custom-scrollbar space-y-2">
+                    {merch.map(item => (
+                        <div key={item.id} className="p-3 bg-black/40 border border-neutral-800 rounded-xl flex justify-between items-center group">
+                            <div>
+                                <h4 className="font-bold text-white text-sm truncate">{item.name}</h4>
+                                <p className="text-red-500 text-xs font-bold">{item.price}</p>
+                            </div>
+                            <button onClick={() => deleteItem('merch', item.id)} className="text-neutral-600 hover:text-red-500 px-2">×</button>
                         </div>
                     ))}
                 </div>
