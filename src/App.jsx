@@ -111,10 +111,17 @@ const GlobalStyles = () => (
         .accent-text { color: var(--primary-red); }
         .accent-bg { background-color: var(--primary-red); transition: background-color 0.3s; }
         .accent-bg:hover { background-color: #e02c2c; }
+        
         .hero-section {
-            background-size: cover; background-position: center; min-height: 85vh; background-attachment: fixed;
+            background-size: cover; 
+            background-position: center; 
+            min-height: 100vh; /* UPDATED: Forces full screen height */
+            background-attachment: fixed;
             position: relative;
+            display: flex;
+            align-items: center;
         }
+        
         @media only screen and (max-width: 768px) { .hero-section { background-attachment: scroll; } }
         @keyframes pulse-red { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
         .live-indicator { animation: pulse-red 2s cubic-bezier(0.4, 0, 0.6, 1) infinite; }
