@@ -262,6 +262,7 @@ const LandingPage = ({ onEnterHub }) => {
     const [newsData, setNewsData] = useState([]);
     const [intelData, setIntelData] = useState([]);
     const [merchData, setMerchData] = useState([]);
+    const [achievements, setAchievements] = useState([]);
 
     // Load real data from Firestore
     useEffect(() => {
