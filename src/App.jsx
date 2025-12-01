@@ -479,6 +479,35 @@ const LandingPage = ({ onEnterHub }) => {
                     </div>
                 </section>
 
+                {/* --- TROPHY CASE SECTION --- */}
+                <section className="w-full py-12 border-y border-white/5 bg-neutral-900/30 flex justify-center relative overflow-hidden">
+                    {/* Background decoration */}
+                    <div className="absolute top-0 left-0 w-full h-px bg-gradient-to-r from-transparent via-red-600/50 to-transparent"></div>
+
+                    <div className="max-w-7xl w-full px-6 flex flex-wrap justify-center gap-8 md:gap-24 text-center">
+                        {/* Achievement 1 */}
+                        <div className="group" data-aos="fade-up" data-aos-delay="0">
+                            <div className="text-4xl mb-2 group-hover:-translate-y-2 transition-transform duration-300">🏆</div>
+                            <div className="text-2xl font-black text-white italic tracking-tighter">PREMIER <span className="text-red-600">CHAMPS</span></div>
+                            <div className="text-xs text-neutral-500 font-bold uppercase tracking-widest">Division 15 • 2024</div>
+                        </div>
+
+                        {/* Achievement 2 */}
+                        <div className="group" data-aos="fade-up" data-aos-delay="100">
+                            <div className="text-4xl mb-2 group-hover:-translate-y-2 transition-transform duration-300">🥈</div>
+                            <div className="text-2xl font-black text-white italic tracking-tighter">RADIANT <span className="text-neutral-400">OPEN</span></div>
+                            <div className="text-xs text-neutral-500 font-bold uppercase tracking-widest">Finalist • Season 2</div>
+                        </div>
+
+                        {/* Achievement 3 */}
+                        <div className="group" data-aos="fade-up" data-aos-delay="200">
+                            <div className="text-4xl mb-2 group-hover:-translate-y-2 transition-transform duration-300">🎖️</div>
+                            <div className="text-2xl font-black text-white italic tracking-tighter">TOP 50 <span className="text-red-600">EU</span></div>
+                            <div className="text-xs text-neutral-500 font-bold uppercase tracking-widest">Regional Rankings</div>
+                        </div>
+                    </div>
+                </section>
+
                 <section id="roster" className="w-full py-24 relative flex justify-center">
                     <div className="max-w-7xl w-full px-6">
                         <div className="text-center mb-16" data-aos="fade-up">
