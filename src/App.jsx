@@ -1425,46 +1425,42 @@ function MatchHistory({ currentUser, members }) {
     const [editingId, setEditingId] = useState(null);
     const [editForm, setEditForm] = useState({});
 
-    // State for New Manual Logs
-    const [newMatch, setNewMatch] = useState({ opponent: '', date: '', myScore: '', enemyScore: '', atkScore: '', defScore: '', map: 'Ascent', vod: '' });
+    // State for New Manual Logs - UPDATED WITH ANALYTICS FIELDS
+    const [newMatch, setNewMatch] = useState({
+        opponent: '', date: '', myScore: '', enemyScore: '',
+        atkScore: '', defScore: '', map: 'Ascent', vod: '',
+        pistols: '', ecos: '', fb: ''
+    });
 
     const addToast = useToast();
 
-    // Load Events and separate them into History vs Pending
+    // Load Events
     useEffect(() => {
         const unsub = onSnapshot(collection(db, 'events'), (snap) => {
             const evs = [];
             snap.forEach(doc => evs.push({ id: doc.id, ...doc.data() }));
-
-            // History: Has a result
             setHistory(evs.filter(e => e.result).sort((a, b) => new Date(b.date) - new Date(a.date)));
-
-            // Pending: No result yet (Scheduled)
             setPending(evs.filter(e => !e.result).sort((a, b) => new Date(a.date) - new Date(b.date)));
         });
         return () => unsub();
     }, []);
 
-    // 1. Log a brand new match manually (Not previously scheduled)
     const handleManualAdd = async () => {
         if (!newMatch.opponent || !newMatch.myScore) return addToast("Opponent & Score required", "error");
 
         await addDoc(collection(db, 'events'), {
-            type: 'Scrim', // Default type
+            type: 'Scrim',
             opponent: newMatch.opponent,
             date: newMatch.date || new Date().toISOString().split('T')[0],
             result: { ...newMatch }
         });
         setIsAdding(false);
-        setNewMatch({ opponent: '', date: '', myScore: '', enemyScore: '', atkScore: '', defScore: '', map: 'Ascent', vod: '' });
-        addToast('Manual Match Logged');
+        setNewMatch({ opponent: '', date: '', myScore: '', enemyScore: '', atkScore: '', defScore: '', map: 'Ascent', vod: '', pistols: '', ecos: '', fb: '' });
+        addToast('Match Analysis Logged');
     };
 
-    // 2. Start Editing (or Finalizing a Pending Match)
     const openEditor = (match, isFinalizing = false) => {
         setEditingId(match.id);
-        // If finalizing, we might not have result data yet, so we prep basic scheduled info
-        // If editing history, we load the existing result
         setEditForm({
             opponent: match.opponent,
             date: match.date,
@@ -1474,23 +1470,23 @@ function MatchHistory({ currentUser, members }) {
             enemyScore: match.result?.enemyScore || '',
             atkScore: match.result?.atkScore || '',
             defScore: match.result?.defScore || '',
-            isFinalizing: isFinalizing // Flag to know if we are converting pending->history
+            // Load new stats if they exist, otherwise empty
+            pistols: match.result?.pistols || '',
+            ecos: match.result?.ecos || '',
+            fb: match.result?.fb || '',
+            isFinalizing: isFinalizing
         });
     };
 
-    // 3. Save Changes (Used for both Editing History AND Finalizing Pending)
     const saveEdit = async () => {
         const { opponent, date, isFinalizing, ...resultData } = editForm;
-
-        // Update the document
         await updateDoc(doc(db, 'events', editingId), {
             opponent,
             date,
-            result: resultData // This adds/updates the 'result' field, making it "History"
+            result: resultData
         });
-
         setEditingId(null);
-        addToast(isFinalizing ? 'Match Finalized & Moved to History' : 'Match Updated');
+        addToast('Match Stats Updated');
     };
 
     const deleteEvent = async (id) => {
@@ -1528,7 +1524,7 @@ function MatchHistory({ currentUser, members }) {
             <div className="flex justify-between items-center mb-6">
                 <h3 className="text-2xl font-black text-white flex items-center gap-3"><span className="text-red-600">MATCH</span> HISTORY</h3>
                 <ButtonSecondary onClick={() => setIsAdding(!isAdding)} className="text-xs">
-                    {isAdding ? 'Cancel' : '+ Log Past Match'}
+                    {isAdding ? 'Cancel' : '+ Log Analysis'}
                 </ButtonSecondary>
             </div>
 
@@ -1547,6 +1543,8 @@ function MatchHistory({ currentUser, members }) {
                         </Select>
                         <Input placeholder="VOD Link (Optional)" value={newMatch.vod} onChange={e => setNewMatch({ ...newMatch, vod: e.target.value })} />
                     </div>
+
+                    {/* Scores */}
                     <div className="grid grid-cols-4 gap-2">
                         <div className="col-span-2 flex gap-2">
                             <Input placeholder="My Score" value={newMatch.myScore} onChange={e => setNewMatch({ ...newMatch, myScore: e.target.value })} type="number" />
@@ -1555,6 +1553,23 @@ function MatchHistory({ currentUser, members }) {
                         <Input placeholder="Atk Wins" value={newMatch.atkScore} onChange={e => setNewMatch({ ...newMatch, atkScore: e.target.value })} type="number" />
                         <Input placeholder="Def Wins" value={newMatch.defScore} onChange={e => setNewMatch({ ...newMatch, defScore: e.target.value })} type="number" />
                     </div>
+
+                    {/* NEW: ADVANCED ANALYTICS ROW */}
+                    <div className="grid grid-cols-3 gap-3 p-3 bg-neutral-900/50 rounded-lg border border-white/5">
+                        <div>
+                            <label className="text-[10px] text-neutral-500 font-bold uppercase block mb-1">Pistols (0-2)</label>
+                            <Input placeholder="#" value={newMatch.pistols} onChange={e => setNewMatch({ ...newMatch, pistols: e.target.value })} type="number" />
+                        </div>
+                        <div>
+                            <label className="text-[10px] text-neutral-500 font-bold uppercase block mb-1">Eco Wins</label>
+                            <Input placeholder="#" value={newMatch.ecos} onChange={e => setNewMatch({ ...newMatch, ecos: e.target.value })} type="number" />
+                        </div>
+                        <div>
+                            <label className="text-[10px] text-neutral-500 font-bold uppercase block mb-1">First Blood %</label>
+                            <Input placeholder="%" value={newMatch.fb} onChange={e => setNewMatch({ ...newMatch, fb: e.target.value })} type="number" />
+                        </div>
+                    </div>
+
                     <ButtonPrimary onClick={handleManualAdd} className="w-full py-3 text-xs">Save to History</ButtonPrimary>
                 </div>
             )}
@@ -1563,7 +1578,7 @@ function MatchHistory({ currentUser, members }) {
             {pending.length > 0 && (
                 <div className="mb-8">
                     <h4 className="text-xs font-black text-neutral-500 uppercase tracking-widest mb-3 flex items-center gap-2">
-                        <span className="w-2 h-2 rounded-full bg-yellow-500 animate-pulse"></span> Pending Reports (Scheduled)
+                        <span className="w-2 h-2 rounded-full bg-yellow-500 animate-pulse"></span> Pending Reports
                     </h4>
                     <div className="grid grid-cols-1 gap-3">
                         {pending.map(p => (
@@ -1574,15 +1589,21 @@ function MatchHistory({ currentUser, members }) {
                                 </div>
                                 {editingId === p.id ? (
                                     <div className="flex-1 w-full bg-black p-4 rounded-lg border border-neutral-700 animate-fade-in">
-                                        <div className="text-xs text-yellow-500 font-bold mb-2 uppercase">Finalize Score</div>
+                                        <div className="text-xs text-yellow-500 font-bold mb-2 uppercase">Input Stats</div>
                                         <div className="grid grid-cols-4 gap-2 mb-2">
                                             <Input placeholder="Us" value={editForm.myScore} onChange={e => setEditForm({ ...editForm, myScore: e.target.value })} type="number" />
                                             <Input placeholder="Them" value={editForm.enemyScore} onChange={e => setEditForm({ ...editForm, enemyScore: e.target.value })} type="number" />
                                             <Input placeholder="Atk" value={editForm.atkScore} onChange={e => setEditForm({ ...editForm, atkScore: e.target.value })} type="number" />
                                             <Input placeholder="Def" value={editForm.defScore} onChange={e => setEditForm({ ...editForm, defScore: e.target.value })} type="number" />
                                         </div>
+                                        {/* NEW: ANALYTICS FOR PENDING */}
+                                        <div className="grid grid-cols-3 gap-2 mb-2">
+                                            <Input placeholder="Pistols" value={editForm.pistols} onChange={e => setEditForm({ ...editForm, pistols: e.target.value })} type="number" />
+                                            <Input placeholder="Ecos" value={editForm.ecos} onChange={e => setEditForm({ ...editForm, ecos: e.target.value })} type="number" />
+                                            <Input placeholder="FB %" value={editForm.fb} onChange={e => setEditForm({ ...editForm, fb: e.target.value })} type="number" />
+                                        </div>
                                         <div className="flex gap-2">
-                                            <ButtonPrimary onClick={saveEdit} className="text-xs py-2 flex-1">Confirm Score</ButtonPrimary>
+                                            <ButtonPrimary onClick={saveEdit} className="text-xs py-2 flex-1">Confirm</ButtonPrimary>
                                             <ButtonSecondary onClick={() => setEditingId(null)} className="text-xs py-2">Cancel</ButtonSecondary>
                                         </div>
                                     </div>
@@ -1628,6 +1649,12 @@ function MatchHistory({ currentUser, members }) {
                                 <Input placeholder="Atk" value={editForm.atkScore} onChange={e => setEditForm({ ...editForm, atkScore: e.target.value })} />
                                 <Input placeholder="Def" value={editForm.defScore} onChange={e => setEditForm({ ...editForm, defScore: e.target.value })} />
                             </div>
+                            {/* NEW: ANALYTICS EDITING */}
+                            <div className="grid grid-cols-3 gap-2">
+                                <Input placeholder="Pistols" value={editForm.pistols} onChange={e => setEditForm({ ...editForm, pistols: e.target.value })} />
+                                <Input placeholder="Ecos" value={editForm.ecos} onChange={e => setEditForm({ ...editForm, ecos: e.target.value })} />
+                                <Input placeholder="FB %" value={editForm.fb} onChange={e => setEditForm({ ...editForm, fb: e.target.value })} />
+                            </div>
                             <ButtonPrimary onClick={saveEdit} className="w-full py-2 text-xs">Update Record</ButtonPrimary>
                         </div>
                     );
@@ -1638,26 +1665,19 @@ function MatchHistory({ currentUser, members }) {
 
                     return (
                         <div key={m.id} onClick={() => setExpandedId(expandedId === m.id ? null : m.id)} className={`bg-black/40 border border-neutral-800 p-4 rounded-xl relative overflow-hidden cursor-pointer hover:bg-neutral-900 transition-all ${getResultColor(m.result.myScore, m.result.enemyScore)}`}>
-
-                            {/* Visual Stamp */}
                             {expandedId === m.id && (isWin ? <VictoryStamp /> : <DefeatStamp />)}
-
                             <div className="flex justify-between items-center relative z-10">
                                 <div>
                                     <div className="text-sm font-bold text-white flex items-center gap-2">
                                         {m.opponent}
                                         {m.result.vod && (
-                                            <a href={m.result.vod} target="_blank" rel="noreferrer" onClick={e => e.stopPropagation()} className="text-[9px] bg-red-600 text-white px-2 py-0.5 rounded hover:bg-red-500 font-black uppercase flex items-center gap-1">
-                                                <span>▶</span> VOD
-                                            </a>
+                                            <a href={m.result.vod} target="_blank" rel="noreferrer" onClick={e => e.stopPropagation()} className="text-[9px] bg-red-600 text-white px-2 py-0.5 rounded hover:bg-red-500 font-black uppercase flex items-center gap-1"><span>▶</span> VOD</a>
                                         )}
                                     </div>
                                     <div className="text-xs text-neutral-500 font-mono mt-0.5">{m.date} • {m.result.map}</div>
                                 </div>
                                 <div className="flex items-center gap-4">
-                                    <div className={`text-2xl font-black ${isWin ? 'text-green-500' : 'text-red-500'}`}>
-                                        {m.result.myScore} - {m.result.enemyScore}
-                                    </div>
+                                    <div className={`text-2xl font-black ${isWin ? 'text-green-500' : 'text-red-500'}`}>{m.result.myScore} - {m.result.enemyScore}</div>
                                     <div className="flex gap-2">
                                         <button onClick={(e) => { e.stopPropagation(); openEditor(m); }} className="text-neutral-600 hover:text-white p-1" title="Edit">✏️</button>
                                         <button onClick={(e) => { e.stopPropagation(); deleteEvent(m.id); }} className="text-neutral-600 hover:text-red-500 p-1" title="Delete">🗑️</button>
@@ -1668,6 +1688,7 @@ function MatchHistory({ currentUser, members }) {
                             {/* Details Drawer */}
                             {expandedId === m.id && (
                                 <div className="mt-4 pt-4 border-t border-neutral-800 animate-slide-in">
+                                    {/* SCORES ROW */}
                                     <div className="grid grid-cols-2 gap-4 text-center mb-4">
                                         <div className="bg-neutral-900 p-2 rounded border border-neutral-800">
                                             <div className="text-[10px] text-neutral-500 uppercase font-bold">Attack Wins</div>
@@ -1676,6 +1697,22 @@ function MatchHistory({ currentUser, members }) {
                                         <div className="bg-neutral-900 p-2 rounded border border-neutral-800">
                                             <div className="text-[10px] text-neutral-500 uppercase font-bold">Defense Wins</div>
                                             <div className="text-white font-bold text-lg">{m.result.defScore || '-'}</div>
+                                        </div>
+                                    </div>
+
+                                    {/* NEW: ANALYTICS ROW */}
+                                    <div className="grid grid-cols-3 gap-2 text-center mb-4">
+                                        <div className="bg-neutral-900/50 p-2 rounded border border-white/5">
+                                            <div className="text-[9px] text-neutral-400 uppercase font-bold">Pistols Won</div>
+                                            <div className={`text-sm font-black ${m.result.pistols >= 1 ? 'text-green-500' : 'text-neutral-500'}`}>{m.result.pistols || '0'}/2</div>
+                                        </div>
+                                        <div className="bg-neutral-900/50 p-2 rounded border border-white/5">
+                                            <div className="text-[9px] text-neutral-400 uppercase font-bold">Eco Wins</div>
+                                            <div className="text-sm font-black text-white">{m.result.ecos || '0'}</div>
+                                        </div>
+                                        <div className="bg-neutral-900/50 p-2 rounded border border-white/5">
+                                            <div className="text-[9px] text-neutral-400 uppercase font-bold">FB %</div>
+                                            <div className="text-sm font-black text-white">{m.result.fb || '0'}%</div>
                                         </div>
                                     </div>
 
