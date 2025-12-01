@@ -300,6 +300,26 @@ const LandingPage = ({ onEnterHub }) => {
             setMerchData(m);
         });
 
+        // ... inside LandingPage component ...
+        const [achievements, setAchievements] = useState([]); // Add this state
+
+        useEffect(() => {
+            // ... existing listeners for roster, events, news, etc ...
+
+            // NEW: Achievements Listener for Landing Page
+            const unsubAchieve = onSnapshot(collection(db, 'achievements'), (snap) => {
+                const a = [];
+                snap.forEach(doc => a.push({ id: doc.id, ...doc.data() }));
+                // Sort by created date (newest first) or any other logic
+                setAchievements(a.sort((x, y) => new Date(y.createdAt) - new Date(x.createdAt)));
+            });
+
+            return () => {
+                // ... existing unsubs ...
+                unsubAchieve();
+            };
+        }, []);
+
         return () => { unsubRoster(); unsubEvents(); unsubNews(); unsubIntel(); unsubMerch(); };
     }, []);
 
@@ -503,32 +523,25 @@ const LandingPage = ({ onEnterHub }) => {
                     </div>
                 </section>
 
-                {/* --- TROPHY CASE SECTION --- */}
+                {/* --- TROPHY CASE SECTION (DYNAMIC) --- */}
                 <section className="w-full py-12 border-y border-white/5 bg-neutral-900/30 flex justify-center relative overflow-hidden">
-                    {/* Background decoration */}
                     <div className="absolute top-0 left-0 w-full h-px bg-gradient-to-r from-transparent via-red-600/50 to-transparent"></div>
 
                     <div className="max-w-7xl w-full px-6 flex flex-wrap justify-center gap-8 md:gap-24 text-center">
-                        {/* Achievement 1 */}
-                        <div className="group" data-aos="fade-up" data-aos-delay="0">
-                            <div className="text-4xl mb-2 group-hover:-translate-y-2 transition-transform duration-300">🏆</div>
-                            <div className="text-2xl font-black text-white italic tracking-tighter">PREMIER <span className="text-red-600">CHAMPS</span></div>
-                            <div className="text-xs text-neutral-500 font-bold uppercase tracking-widest">Division 15 • 2024</div>
-                        </div>
-
-                        {/* Achievement 2 */}
-                        <div className="group" data-aos="fade-up" data-aos-delay="100">
-                            <div className="text-4xl mb-2 group-hover:-translate-y-2 transition-transform duration-300">🥈</div>
-                            <div className="text-2xl font-black text-white italic tracking-tighter">RADIANT <span className="text-neutral-400">OPEN</span></div>
-                            <div className="text-xs text-neutral-500 font-bold uppercase tracking-widest">Finalist • Season 2</div>
-                        </div>
-
-                        {/* Achievement 3 */}
-                        <div className="group" data-aos="fade-up" data-aos-delay="200">
-                            <div className="text-4xl mb-2 group-hover:-translate-y-2 transition-transform duration-300">🎖️</div>
-                            <div className="text-2xl font-black text-white italic tracking-tighter">TOP 50 <span className="text-red-600">EU</span></div>
-                            <div className="text-xs text-neutral-500 font-bold uppercase tracking-widest">Regional Rankings</div>
-                        </div>
+                        {achievements.length > 0 ? (
+                            achievements.map((item, index) => (
+                                <div key={item.id} className="group" data-aos="fade-up" data-aos-delay={index * 100}>
+                                    <div className="text-4xl mb-2 group-hover:-translate-y-2 transition-transform duration-300">{item.icon}</div>
+                                    <div className="text-2xl font-black text-white italic tracking-tighter uppercase">
+                                        {item.highlight ? <span className="text-red-600">{item.title}</span> : item.title}
+                                    </div>
+                                    <div className="text-xs text-neutral-500 font-bold uppercase tracking-widest">{item.subtitle}</div>
+                                </div>
+                            ))
+                        ) : (
+                            // Placeholder if no trophies yet
+                            <div className="text-neutral-600 italic text-sm">Achievements loading or empty...</div>
+                        )}
                     </div>
                 </section>
 
@@ -1930,15 +1943,21 @@ function MapVeto() {
 }
 
 function ContentManager() {
+    // Existing State
     const [news, setNews] = useState([]);
     const [intel, setIntel] = useState([]);
     const [merch, setMerch] = useState([]);
     const [newNews, setNewNews] = useState({ title: '', body: '', date: new Date().toISOString().split('T')[0], type: 'Update', isFeatured: false });
     const [newIntel, setNewIntel] = useState({ title: '', subtitle: '', url: '', date: new Date().toISOString().split('T')[0] });
     const [newMerch, setNewMerch] = useState({ name: '', price: '', link: '' });
+
+    // NEW: Achievements State
+    const [achievements, setAchievements] = useState([]);
+    const [newAchievement, setNewAchievement] = useState({ title: '', subtitle: '', icon: '🏆', highlight: false });
+
     const addToast = useToast();
 
-    // Fetch Data
+    // Fetch Data (Updated to include achievements)
     useEffect(() => {
         const unsubNews = onSnapshot(query(collection(db, 'news')), (snap) => {
             const n = []; snap.forEach(doc => n.push({ id: doc.id, ...doc.data() }));
@@ -1952,7 +1971,14 @@ function ContentManager() {
             const m = []; snap.forEach(doc => m.push({ id: doc.id, ...doc.data() }));
             setMerch(m);
         });
-        return () => { unsubNews(); unsubIntel(); unsubMerch(); };
+        // NEW: Achievements Listener
+        const unsubAchieve = onSnapshot(collection(db, 'achievements'), (snap) => {
+            const a = []; snap.forEach(doc => a.push({ id: doc.id, ...doc.data() }));
+            // Sort by creation or specific order if you added a date field, here just default order
+            setAchievements(a);
+        });
+
+        return () => { unsubNews(); unsubIntel(); unsubMerch(); unsubAchieve(); };
     }, []);
 
     // Handlers
@@ -1974,7 +2000,18 @@ function ContentManager() {
         if (!newMerch.name || !newMerch.price) return addToast('Name and Price required', 'error');
         await addDoc(collection(db, 'merch'), newMerch);
         setNewMerch({ name: '', price: '', link: '' });
-        addToast('Item Added to Armory');
+        addToast('Item Added');
+    };
+
+    // NEW: Add Achievement Handler
+    const addAchievement = async () => {
+        if (!newAchievement.title || !newAchievement.subtitle) return addToast('Details required', 'error');
+        await addDoc(collection(db, 'achievements'), {
+            ...newAchievement,
+            createdAt: new Date().toISOString()
+        });
+        setNewAchievement({ title: '', subtitle: '', icon: '🏆', highlight: false });
+        addToast('Trophy Added');
     };
 
     const deleteItem = async (collectionName, id) => {
@@ -1983,100 +2020,75 @@ function ContentManager() {
     };
 
     return (
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 h-full">
-            {/* NEWS MANAGER */}
-            <Card className="h-full flex flex-col">
-                <h3 className="text-2xl font-black text-white mb-6 flex items-center gap-2"><span className="text-red-600">/</span> MANAGE SITREP (NEWS)</h3>
+        <div className="grid grid-cols-1 lg:grid-cols-4 gap-8 h-full">
 
-                <div className="bg-neutral-900/50 p-4 rounded-xl border border-white/10 space-y-3 mb-6">
-                    <div className="flex justify-between items-center mb-2">
-                        <span className="text-xs font-bold text-neutral-500 uppercase">New Entry</span>
-                        <label className="flex items-center gap-2 cursor-pointer">
-                            <input type="checkbox" checked={newNews.isFeatured} onChange={e => setNewNews({ ...newNews, isFeatured: e.target.checked })} className="accent-red-600 w-4 h-4" />
-                            <span className="text-xs font-bold text-red-500 uppercase">Make Featured</span>
-                        </label>
+            {/* 1. NEWS MANAGER */}
+            <Card className="h-full flex flex-col">
+                <h3 className="text-xl font-black text-white mb-4 flex items-center gap-2"><span className="text-red-600">/</span> SITREP</h3>
+                <div className="bg-neutral-900/50 p-4 rounded-xl border border-white/10 space-y-3 mb-4">
+                    <div className="flex justify-between items-center mb-1">
+                        <span className="text-[10px] font-bold text-neutral-500 uppercase">Post News</span>
+                        <label className="flex items-center gap-2 cursor-pointer"><input type="checkbox" checked={newNews.isFeatured} onChange={e => setNewNews({ ...newNews, isFeatured: e.target.checked })} className="accent-red-600 w-3 h-3" /><span className="text-[10px] font-bold text-red-500 uppercase">Featured</span></label>
                     </div>
                     <Input placeholder="Headline" value={newNews.title} onChange={e => setNewNews({ ...newNews, title: e.target.value })} />
-                    <textarea className="w-full bg-black/40 border border-neutral-800 rounded-xl p-3 text-white text-sm" rows={3} placeholder="Content body..." value={newNews.body} onChange={e => setNewNews({ ...newNews, body: e.target.value })} />
-                    <div className="grid grid-cols-2 gap-2">
-                        <Input type="date" value={newNews.date} onChange={e => setNewNews({ ...newNews, date: e.target.value })} className="[color-scheme:dark]" />
-                        <Input placeholder="Type (e.g. Analysis, Shop)" value={newNews.type} onChange={e => setNewNews({ ...newNews, type: e.target.value })} />
+                    <textarea className="w-full bg-black/40 border border-neutral-800 rounded-xl p-3 text-white text-xs" rows={2} placeholder="Body..." value={newNews.body} onChange={e => setNewNews({ ...newNews, body: e.target.value })} />
+                    <ButtonPrimary onClick={addNews} className="w-full py-2 text-xs">Post</ButtonPrimary>
+                </div>
+                <div className="flex-1 overflow-y-auto custom-scrollbar space-y-2">{news.map(n => (<div key={n.id} className="p-3 bg-black/40 rounded border border-neutral-800 flex justify-between items-start"><div className="w-full"><div className="font-bold text-white text-xs truncate">{n.title}</div></div><button onClick={() => deleteItem('news', n.id)} className="text-neutral-500 hover:text-red-500 ml-2">×</button></div>))}</div>
+            </Card>
+
+            {/* 2. INTEL MANAGER */}
+            <Card className="h-full flex flex-col">
+                <h3 className="text-xl font-black text-white mb-4 flex items-center gap-2"><span className="text-red-600">/</span> INTEL</h3>
+                <div className="bg-neutral-900/50 p-4 rounded-xl border border-white/10 space-y-3 mb-4">
+                    <span className="text-[10px] font-bold text-neutral-500 uppercase">Add VOD</span>
+                    <Input placeholder="Title" value={newIntel.title} onChange={e => setNewIntel({ ...newIntel, title: e.target.value })} />
+                    <Input placeholder="URL" value={newIntel.url} onChange={e => setNewIntel({ ...newIntel, url: e.target.value })} />
+                    <ButtonPrimary onClick={addIntel} className="w-full py-2 text-xs">Add</ButtonPrimary>
+                </div>
+                <div className="flex-1 overflow-y-auto custom-scrollbar space-y-2">{intel.map(i => (<div key={i.id} className="p-3 bg-black/40 rounded border border-neutral-800 flex justify-between items-center"><div className="truncate text-xs text-white font-bold">{i.title}</div><button onClick={() => deleteItem('intel', i.id)} className="text-neutral-500 hover:text-red-500">×</button></div>))}</div>
+            </Card>
+
+            {/* 3. ARMORY MANAGER */}
+            <Card className="h-full flex flex-col">
+                <h3 className="text-xl font-black text-white mb-4 flex items-center gap-2"><span className="text-red-600">/</span> ARMORY</h3>
+                <div className="bg-neutral-900/50 p-4 rounded-xl border border-white/10 space-y-3 mb-4">
+                    <span className="text-[10px] font-bold text-neutral-500 uppercase">New Item</span>
+                    <Input placeholder="Name" value={newMerch.name} onChange={e => setNewMerch({ ...newMerch, name: e.target.value })} />
+                    <Input placeholder="Price" value={newMerch.price} onChange={e => setNewMerch({ ...newMerch, price: e.target.value })} />
+                    <ButtonPrimary onClick={addMerch} className="w-full py-2 text-xs">Add</ButtonPrimary>
+                </div>
+                <div className="flex-1 overflow-y-auto custom-scrollbar space-y-2">{merch.map(m => (<div key={m.id} className="p-3 bg-black/40 rounded border border-neutral-800 flex justify-between items-center"><div className="truncate text-xs text-white font-bold">{m.name}</div><button onClick={() => deleteItem('merch', m.id)} className="text-neutral-500 hover:text-red-500">×</button></div>))}</div>
+            </Card>
+
+            {/* 4. NEW: TROPHY MANAGER */}
+            <Card className="h-full flex flex-col">
+                <h3 className="text-xl font-black text-white mb-4 flex items-center gap-2"><span className="text-red-600">/</span> TROPHIES</h3>
+                <div className="bg-neutral-900/50 p-4 rounded-xl border border-white/10 space-y-3 mb-4">
+                    <div className="flex justify-between items-center mb-1">
+                        <span className="text-[10px] font-bold text-neutral-500 uppercase">New Achievement</span>
+                        <label className="flex items-center gap-2 cursor-pointer"><input type="checkbox" checked={newAchievement.highlight} onChange={e => setNewAchievement({ ...newAchievement, highlight: e.target.checked })} className="accent-red-600 w-3 h-3" /><span className="text-[10px] font-bold text-red-500 uppercase">Red Text</span></label>
                     </div>
-                    <ButtonPrimary onClick={addNews} className="w-full py-2 text-xs">Post News</ButtonPrimary>
+                    <div className="flex gap-2">
+                        <Select value={newAchievement.icon} onChange={e => setNewAchievement({ ...newAchievement, icon: e.target.value })} className="w-16 text-center text-xl">
+                            {['🏆', '🥇', '🥈', '🥉', '🎖️', '⭐', '🔥', '👑'].map(icon => <option key={icon}>{icon}</option>)}
+                        </Select>
+                        <Input placeholder="Title (e.g. PREMIER)" value={newAchievement.title} onChange={e => setNewAchievement({ ...newAchievement, title: e.target.value })} />
+                    </div>
+                    <Input placeholder="Subtitle (e.g. Winner 2024)" value={newAchievement.subtitle} onChange={e => setNewAchievement({ ...newAchievement, subtitle: e.target.value })} />
+                    <ButtonPrimary onClick={addAchievement} className="w-full py-2 text-xs">Add Trophy</ButtonPrimary>
                 </div>
-
                 <div className="flex-1 overflow-y-auto custom-scrollbar space-y-2">
-                    {news.map(n => (
-                        <div key={n.id} className={`p-4 rounded-xl border flex justify-between items-start ${n.isFeatured ? 'bg-red-900/10 border-red-900/50' : 'bg-black/40 border-neutral-800'}`}>
-                            <div>
-                                <div className="flex items-center gap-2 mb-1">
-                                    {n.isFeatured && <span className="bg-red-600 text-white text-[9px] font-black px-1.5 py-0.5 rounded uppercase">Featured</span>}
-                                    <span className="text-neutral-500 text-[10px] font-mono uppercase">{n.date} • {n.type}</span>
+                    {achievements.map(a => (
+                        <div key={a.id} className="p-3 bg-black/40 rounded border border-neutral-800 flex justify-between items-center group">
+                            <div className="flex items-center gap-3">
+                                <span className="text-xl">{a.icon}</span>
+                                <div>
+                                    <div className={`text-xs font-black uppercase ${a.highlight ? 'text-red-500' : 'text-white'}`}>{a.title}</div>
+                                    <div className="text-[10px] text-neutral-500 font-bold uppercase">{a.subtitle}</div>
                                 </div>
-                                <h4 className="font-bold text-white leading-tight">{n.title}</h4>
-                                <p className="text-neutral-400 text-xs mt-1 line-clamp-2">{n.body}</p>
                             </div>
-                            <button onClick={() => deleteItem('news', n.id)} className="text-neutral-600 hover:text-red-500 p-1">×</button>
-                        </div>
-                    ))}
-                </div>
-            </Card>
-
-            {/* INTEL (VODS) MANAGER */}
-            <Card className="h-full flex flex-col">
-                <h3 className="text-2xl font-black text-white mb-6 flex items-center gap-2"><span className="text-red-600">/</span> MANAGE INTEL (VODS)</h3>
-
-                <div className="bg-neutral-900/50 p-4 rounded-xl border border-white/10 space-y-3 mb-6">
-                    <span className="text-xs font-bold text-neutral-500 uppercase">New Video Link</span>
-                    <Input placeholder="Video Title (e.g. Finals Map 1)" value={newIntel.title} onChange={e => setNewIntel({ ...newIntel, title: e.target.value })} />
-                    <Input placeholder="Subtitle (e.g. Highlight Reel)" value={newIntel.subtitle} onChange={e => setNewIntel({ ...newIntel, subtitle: e.target.value })} />
-                    <Input placeholder="YouTube URL" value={newIntel.url} onChange={e => setNewIntel({ ...newIntel, url: e.target.value })} />
-                    <ButtonPrimary onClick={addIntel} className="w-full py-2 text-xs">Add Video</ButtonPrimary>
-                </div>
-
-                <div className="flex-1 overflow-y-auto custom-scrollbar space-y-2">
-                    {intel.map(i => (
-                        <div key={i.id} className="p-3 bg-black/40 border border-neutral-800 rounded-xl flex gap-3 items-center group">
-                            <div className="w-16 h-12 bg-neutral-900 rounded overflow-hidden flex-shrink-0 relative">
-                                {/* Simple Youtube Thumb Logic */}
-                                <img
-                                    src={`https://img.youtube.com/vi/${i.url.split('v=')[1]?.split('&')[0] || i.url.split('/').pop()}/mqdefault.jpg`}
-                                    className="w-full h-full object-cover opacity-50"
-                                    alt="thumb"
-                                    onError={(e) => e.target.style.display = 'none'}
-                                />
-                                <div className="absolute inset-0 flex items-center justify-center text-white">▶</div>
-                            </div>
-                            <div className="flex-1 min-w-0">
-                                <h4 className="font-bold text-white text-sm truncate">{i.title}</h4>
-                                <p className="text-neutral-500 text-xs truncate">{i.subtitle}</p>
-                            </div>
-                            <button onClick={() => deleteItem('intel', i.id)} className="text-neutral-600 hover:text-red-500 px-2">×</button>
-                        </div>
-                    ))}
-                </div>
-            </Card>
-
-            {/* ARMORY (MERCH) MANAGER */}
-            <Card className="h-full flex flex-col">
-                <h3 className="text-2xl font-black text-white mb-6 flex items-center gap-2"><span className="text-red-600">/</span> MANAGE ARMORY</h3>
-
-                <div className="bg-neutral-900/50 p-4 rounded-xl border border-white/10 space-y-3 mb-6">
-                    <span className="text-xs font-bold text-neutral-500 uppercase">New Product</span>
-                    <Input placeholder="Item Name (e.g. Jersey)" value={newMerch.name} onChange={e => setNewMerch({ ...newMerch, name: e.target.value })} />
-                    <Input placeholder="Price (e.g. $60.00 USD)" value={newMerch.price} onChange={e => setNewMerch({ ...newMerch, price: e.target.value })} />
-                    <Input placeholder="Store Link (Optional)" value={newMerch.link} onChange={e => setNewMerch({ ...newMerch, link: e.target.value })} />
-                    <ButtonPrimary onClick={addMerch} className="w-full py-2 text-xs">Add Product</ButtonPrimary>
-                </div>
-
-                <div className="flex-1 overflow-y-auto custom-scrollbar space-y-2">
-                    {merch.map(item => (
-                        <div key={item.id} className="p-3 bg-black/40 border border-neutral-800 rounded-xl flex justify-between items-center group">
-                            <div>
-                                <h4 className="font-bold text-white text-sm truncate">{item.name}</h4>
-                                <p className="text-red-500 text-xs font-bold">{item.price}</p>
-                            </div>
-                            <button onClick={() => deleteItem('merch', item.id)} className="text-neutral-600 hover:text-red-500 px-2">×</button>
+                            <button onClick={() => deleteItem('achievements', a.id)} className="text-neutral-600 hover:text-red-500 px-2">×</button>
                         </div>
                     ))}
                 </div>
