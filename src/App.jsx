@@ -308,12 +308,6 @@ const LandingPage = ({ onEnterHub }) => {
             setAchievements(a.sort((x, y) => new Date(y.createdAt) - new Date(x.createdAt)));
         });
 
-            return () => {
-                // ... existing unsubs ...
-                unsubAchieve();
-            };
-        }, []);
-
         return () => { unsubRoster(); unsubEvents(); unsubNews(); unsubIntel(); unsubMerch(); };
     }, []);
 
