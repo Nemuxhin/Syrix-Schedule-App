@@ -308,7 +308,9 @@ const LandingPage = ({ onEnterHub }) => {
             setAchievements(a.sort((x, y) => new Date(y.createdAt) - new Date(x.createdAt)));
         });
 
-        return () => { unsubRoster(); unsubEvents(); unsubNews(); unsubIntel(); unsubMerch(); };
+        return () => {
+            unsubRoster(); unsubEvents(); unsubNews(); unsubIntel(); unsubMerch(); unsubAchieve();
+        };
     }, []);
 
     const sortedRoster = useMemo(() => sortRosterByRole(roster), [roster]);
