@@ -300,19 +300,13 @@ const LandingPage = ({ onEnterHub }) => {
             setMerchData(m);
         });
 
-        // ... inside LandingPage component ...
-        const [achievements, setAchievements] = useState([]); // Add this state
-
-        useEffect(() => {
-            // ... existing listeners for roster, events, news, etc ...
-
-            // NEW: Achievements Listener for Landing Page
-            const unsubAchieve = onSnapshot(collection(db, 'achievements'), (snap) => {
-                const a = [];
-                snap.forEach(doc => a.push({ id: doc.id, ...doc.data() }));
+        // NEW: Achievements Listener for Landing Page
+        const unsubAchieve = onSnapshot(collection(db, 'achievements'), (snap) => {
+            const a = [];
+            snap.forEach(doc => a.push({ id: doc.id, ...doc.data() }));
                 // Sort by created date (newest first) or any other logic
-                setAchievements(a.sort((x, y) => new Date(y.createdAt) - new Date(x.createdAt)));
-            });
+            setAchievements(a.sort((x, y) => new Date(y.createdAt) - new Date(x.createdAt)));
+        });
 
             return () => {
                 // ... existing unsubs ...
