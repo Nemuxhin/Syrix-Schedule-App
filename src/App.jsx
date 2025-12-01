@@ -1942,13 +1942,13 @@ function ContentManager() {
     const [newIntel, setNewIntel] = useState({ title: '', subtitle: '', url: '', date: new Date().toISOString().split('T')[0] });
     const [newMerch, setNewMerch] = useState({ name: '', price: '', link: '' });
 
-    // NEW: Achievements State
+    // Achievements State
     const [achievements, setAchievements] = useState([]);
     const [newAchievement, setNewAchievement] = useState({ title: '', subtitle: '', icon: '🏆', highlight: false });
 
     const addToast = useToast();
 
-    // Fetch Data (Updated to include achievements)
+    // Fetch Data
     useEffect(() => {
         const unsubNews = onSnapshot(query(collection(db, 'news')), (snap) => {
             const n = []; snap.forEach(doc => n.push({ id: doc.id, ...doc.data() }));
@@ -1962,10 +1962,8 @@ function ContentManager() {
             const m = []; snap.forEach(doc => m.push({ id: doc.id, ...doc.data() }));
             setMerch(m);
         });
-        // NEW: Achievements Listener
         const unsubAchieve = onSnapshot(collection(db, 'achievements'), (snap) => {
             const a = []; snap.forEach(doc => a.push({ id: doc.id, ...doc.data() }));
-            // Sort by creation or specific order if you added a date field, here just default order
             setAchievements(a);
         });
 
@@ -1994,7 +1992,6 @@ function ContentManager() {
         addToast('Item Added');
     };
 
-    // NEW: Add Achievement Handler
     const addAchievement = async () => {
         if (!newAchievement.title || !newAchievement.subtitle) return addToast('Details required', 'error');
         await addDoc(collection(db, 'achievements'), {
@@ -2011,10 +2008,11 @@ function ContentManager() {
     };
 
     return (
-        <div className="grid grid-cols-1 lg:grid-cols-4 gap-8 h-full">
+        // UPDATED GRID CLASS HERE: grid-cols-1 md:grid-cols-2 (Creates 2x2 layout)
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-8 h-full">
 
             {/* 1. NEWS MANAGER */}
-            <Card className="h-full flex flex-col">
+            <Card className="h-full flex flex-col min-h-[400px]">
                 <h3 className="text-xl font-black text-white mb-4 flex items-center gap-2"><span className="text-red-600">/</span> SITREP</h3>
                 <div className="bg-neutral-900/50 p-4 rounded-xl border border-white/10 space-y-3 mb-4">
                     <div className="flex justify-between items-center mb-1">
@@ -2029,7 +2027,7 @@ function ContentManager() {
             </Card>
 
             {/* 2. INTEL MANAGER */}
-            <Card className="h-full flex flex-col">
+            <Card className="h-full flex flex-col min-h-[400px]">
                 <h3 className="text-xl font-black text-white mb-4 flex items-center gap-2"><span className="text-red-600">/</span> INTEL</h3>
                 <div className="bg-neutral-900/50 p-4 rounded-xl border border-white/10 space-y-3 mb-4">
                     <span className="text-[10px] font-bold text-neutral-500 uppercase">Add VOD</span>
@@ -2041,7 +2039,7 @@ function ContentManager() {
             </Card>
 
             {/* 3. ARMORY MANAGER */}
-            <Card className="h-full flex flex-col">
+            <Card className="h-full flex flex-col min-h-[400px]">
                 <h3 className="text-xl font-black text-white mb-4 flex items-center gap-2"><span className="text-red-600">/</span> ARMORY</h3>
                 <div className="bg-neutral-900/50 p-4 rounded-xl border border-white/10 space-y-3 mb-4">
                     <span className="text-[10px] font-bold text-neutral-500 uppercase">New Item</span>
@@ -2052,8 +2050,8 @@ function ContentManager() {
                 <div className="flex-1 overflow-y-auto custom-scrollbar space-y-2">{merch.map(m => (<div key={m.id} className="p-3 bg-black/40 rounded border border-neutral-800 flex justify-between items-center"><div className="truncate text-xs text-white font-bold">{m.name}</div><button onClick={() => deleteItem('merch', m.id)} className="text-neutral-500 hover:text-red-500">×</button></div>))}</div>
             </Card>
 
-            {/* 4. NEW: TROPHY MANAGER */}
-            <Card className="h-full flex flex-col">
+            {/* 4. TROPHY MANAGER */}
+            <Card className="h-full flex flex-col min-h-[400px]">
                 <h3 className="text-xl font-black text-white mb-4 flex items-center gap-2"><span className="text-red-600">/</span> TROPHIES</h3>
                 <div className="bg-neutral-900/50 p-4 rounded-xl border border-white/10 space-y-3 mb-4">
                     <div className="flex justify-between items-center mb-1">
@@ -2087,7 +2085,6 @@ function ContentManager() {
         </div>
     );
 }
-
 function SyrixDashboard({ onBack }) {
     const [currentUser, setCurrentUser] = useState(null);
     const [activeTab, setActiveTab] = useState('dashboard');
