@@ -142,7 +142,31 @@ const GlobalStyles = () => (
         .player-card:hover .card-inner { transform: rotateY(180deg); }
         .card-front, .card-back { position: absolute; width: 100%; height: 100%; backface-visibility: hidden; border-radius: 0.75rem; }
         .card-back { background-color: var(--card-bg); color: white; transform: rotateY(180deg); display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 1.5rem; text-align: center; }
-    `}</style>
+        /* Scroll Mouse Animation */
+        .scroll-mouse {
+            width: 26px;
+            height: 42px;
+            border: 2px solid rgba(255, 255, 255, 0.5);
+            border-radius: 20px;
+            position: relative;
+        }
+        .scroll-wheel {
+            width: 2px;
+            height: 6px;
+            background: #ef4444;
+            border-radius: 2px;
+            position: absolute;
+            top: 8px;
+            left: 50%;
+            transform: translateX(-50%);
+            animation: scroll-bounce 2s infinite;
+        }
+        @keyframes scroll-bounce {
+            0% { transform: translate(-50%, 0); opacity: 1; }
+            50% { transform: translate(-50%, 8px); opacity: 0; }
+            100% { transform: translate(-50%, 0); opacity: 1; }
+        }    `
+    }</style>
 );
 
 // --- SHARED COMPONENTS ---
