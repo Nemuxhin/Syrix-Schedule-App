@@ -778,23 +778,33 @@ function ApplicationForm({ currentUser }) {
         why: ''
     });
     const [status, setStatus] = useState('idle');
+    const addToast = useToast(); // Added toast for feedback
 
     const submitApp = async () => {
-        if (!form.name || !form.tracker || !form.why) return; // Check for name
+        if (!form.name || !form.tracker || !form.why) {
+            addToast('Please fill in all required fields (Name, Tracker, Why)', 'error');
+            return;
+        }
         setStatus('saving');
 
-        const appData = {
-            ...form,
-            user: form.name, // Use the form name specifically
-            uid: currentUser.uid,
-            submittedAt: new Date().toISOString()
-        };
+        try {
+            const appData = {
+                ...form,
+                user: form.name, // Use the form name specifically
+                uid: currentUser.uid,
+                submittedAt: new Date().toISOString()
+            };
 
-        await addDoc(collection(db, 'applications'), appData);
+            await addDoc(collection(db, 'applications'), appData);
 
-        const content = { embeds: [{ title: `New App: ${form.name}`, color: 16776960, fields: [{ name: 'Rank', value: form.rank }, { name: 'Role', value: form.role }, { name: 'Tracker', value: form.tracker }] }] };
-        try { await fetch(discordWebhookUrl, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(content) }); } catch (e) { }
-        setStatus('success');
+            const content = { embeds: [{ title: `New App: ${form.name}`, color: 16776960, fields: [{ name: 'Rank', value: form.rank }, { name: 'Role', value: form.role }, { name: 'Tracker', value: form.tracker }] }] };
+            await fetch(discordWebhookUrl, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(content) }).catch(err => console.error("Webhook failed", err));
+            setStatus('success');
+        } catch (e) {
+            console.error("Submission error:", e);
+            addToast('Failed to submit application. Try again.', 'error');
+            setStatus('idle');
+        }
     };
 
     if (status === 'success') return <div className="h-full flex items-center justify-center text-white font-black text-2xl">Application Sent.</div>;
@@ -805,7 +815,7 @@ function ApplicationForm({ currentUser }) {
             <div className="space-y-4">
                 {/* Added Name Input */}
                 <div className="space-y-1">
-                    <label className="text-xs font-bold text-neutral-500 uppercase">Agent Name / IGN</label>
+                    <label className="text-xs font-bold text-neutral-500 uppercase">Agent Name / IGN <span className="text-red-500">*</span></label>
                     <Input
                         value={form.name}
                         onChange={e => setForm({ ...form, name: e.target.value })}
@@ -813,7 +823,7 @@ function ApplicationForm({ currentUser }) {
                     />
                 </div>
                 <div className="space-y-1">
-                    <label className="text-xs font-bold text-neutral-500 uppercase">Tracker.gg URL</label>
+                    <label className="text-xs font-bold text-neutral-500 uppercase">Tracker.gg URL <span className="text-red-500">*</span></label>
                     <Input value={form.tracker} onChange={e => setForm({ ...form, tracker: e.target.value })} placeholder="https://tracker.gg/valorant/..." />
                 </div>
                 <div className="grid grid-cols-2 gap-4">
@@ -827,7 +837,7 @@ function ApplicationForm({ currentUser }) {
                     </div>
                 </div>
                 <div className="space-y-1">
-                    <label className="text-xs font-bold text-neutral-500 uppercase">Why do you want to join?</label>
+                    <label className="text-xs font-bold text-neutral-500 uppercase">Why do you want to join? <span className="text-red-500">*</span></label>
                     <textarea className="w-full bg-black border border-neutral-800 rounded-xl p-3 text-white" value={form.why} onChange={e => setForm({ ...form, why: e.target.value })} placeholder="Tell us about your experience..." rows={4} />
                 </div>
                 <ButtonPrimary onClick={submitApp} disabled={status !== 'idle'}>Submit Application</ButtonPrimary>
@@ -1630,10 +1640,56 @@ function RosterManager({ members, events }) {
 function AdminPanel() {
     const [applications, setApplications] = useState([]);
     const addToast = useToast();
-    useEffect(() => { const unsub = onSnapshot(collection(db, 'applications'), (snap) => { const apps = []; snap.forEach(doc => apps.push({ id: doc.id, ...doc.data() })); setApplications(apps); }); return () => unsub(); }, []);
-    const acceptApplicant = async (app) => { await setDoc(doc(db, 'roster', app.user), { rank: app.rank, role: 'Tryout', notes: `Tracker: ${app.tracker}\nWhy: ${app.why}`, joinedAt: new Date().toISOString() }); await deleteDoc(doc(db, 'applications', app.id)); addToast(`Accepted ${app.user}`); };
-    const rejectApplicant = async (id) => { await deleteDoc(doc(db, 'applications', id)); addToast('Applicant Rejected'); };
-    return (<Card><h2 className="text-3xl font-black text-white mb-6 flex items-center gap-3"><span className="text-red-600">ADMIN</span> DASHBOARD</h2><div className="space-y-6">{applications.length === 0 ? <p className="text-neutral-600 italic">No pending applications.</p> : (<div className="grid grid-cols-1 gap-4">{applications.map(app => (<div key={app.id} className="bg-black border border-neutral-800 p-6 rounded-2xl flex flex-col md:flex-row justify-between gap-6"><div className="space-y-2 flex-1"><div className="flex items-center gap-3"><h4 className="text-xl font-black text-white">{app.user}</h4><span className="bg-neutral-900 text-neutral-400 text-xs px-2 py-1 rounded font-bold uppercase border border-neutral-800">{app.rank}</span><span className="bg-neutral-900 text-neutral-400 text-xs px-2 py-1 rounded font-bold uppercase border border-neutral-800">{app.role}</span></div><p className="text-neutral-400 text-sm"><strong className="text-neutral-500">Experience:</strong> {app.exp}</p><p className="text-neutral-300 text-sm italic">"{app.why}"</p><a href={app.tracker} target="_blank" rel="noreferrer" className="text-red-500 text-xs font-bold hover:underline block mt-2">View Tracker Profile &rarr;</a></div><div className="flex flex-row md:flex-col gap-3 justify-center"><button onClick={() => acceptApplicant(app)} className="bg-green-900/20 hover:bg-green-600 border border-green-900 text-green-500 hover:text-white font-bold px-6 py-3 rounded-xl transition-all">ACCEPT</button><button onClick={() => rejectApplicant(app.id)} className="bg-red-900/20 hover:bg-red-900 text-red-500 hover:text-white font-bold px-6 py-3 rounded-xl transition-all border border-red-900">REJECT</button></div></div>))}</div>)}</div></Card>);
+    useEffect(() => {
+        // Added error logging to the snapshot listener
+        const unsub = onSnapshot(collection(db, 'applications'),
+            (snap) => {
+                const apps = [];
+                snap.forEach(doc => apps.push({ id: doc.id, ...doc.data() }));
+                setApplications(apps);
+            },
+            (error) => {
+                console.error("AdminPanel Snapshot Error:", error);
+                // Optionally show a toast if critical
+            }
+        );
+        return () => unsub();
+    }, []);
+
+    const acceptApplicant = async (app) => {
+        try {
+            // Validate and sanitize data before writing to Firestore
+            // Use app.user if available, otherwise generate a fallback based on UID or random string
+            const safeUsername = app.user || `Agent-${app.uid ? app.uid.slice(0, 5) : Math.random().toString(36).substr(2, 5)}`;
+
+            const rosterData = {
+                rank: app.rank || 'Unranked',
+                role: 'Tryout',
+                notes: `Tracker: ${app.tracker || 'N/A'}\nWhy: ${app.why || 'N/A'}\nExp: ${app.exp || 'N/A'}`,
+                joinedAt: new Date().toISOString(),
+                uid: app.uid || null // Helper for permissions if needed later
+            };
+
+            await setDoc(doc(db, 'roster', safeUsername), rosterData);
+            await deleteDoc(doc(db, 'applications', app.id));
+            addToast(`Accepted ${safeUsername}`);
+        } catch (error) {
+            console.error("Error accepting applicant:", error);
+            addToast("Error: " + error.message, "error");
+        }
+    };
+
+    const rejectApplicant = async (id) => {
+        try {
+            await deleteDoc(doc(db, 'applications', id));
+            addToast('Applicant Rejected');
+        } catch (error) {
+            console.error("Error rejecting applicant:", error);
+            addToast("Error: " + error.message, "error");
+        }
+    };
+
+    return (<Card><h2 className="text-3xl font-black text-white mb-6 flex items-center gap-3"><span className="text-red-600">ADMIN</span> DASHBOARD</h2><div className="space-y-6">{applications.length === 0 ? <p className="text-neutral-600 italic">No pending applications.</p> : (<div className="grid grid-cols-1 gap-4">{applications.map(app => (<div key={app.id} className="bg-black border border-neutral-800 p-6 rounded-2xl flex flex-col md:flex-row justify-between gap-6"><div className="space-y-2 flex-1"><div className="flex items-center gap-3"><h4 className="text-xl font-black text-white">{app.user || 'Unknown Agent'}</h4><span className="bg-neutral-900 text-neutral-400 text-xs px-2 py-1 rounded font-bold uppercase border border-neutral-800">{app.rank}</span><span className="bg-neutral-900 text-neutral-400 text-xs px-2 py-1 rounded font-bold uppercase border border-neutral-800">{app.role}</span></div><p className="text-neutral-400 text-sm"><strong className="text-neutral-500">Experience:</strong> {app.exp || 'N/A'}</p><p className="text-neutral-300 text-sm italic">"{app.why}"</p><a href={app.tracker} target="_blank" rel="noreferrer" className="text-red-500 text-xs font-bold hover:underline block mt-2">View Tracker Profile &rarr;</a></div><div className="flex flex-row md:flex-col gap-3 justify-center"><button onClick={() => acceptApplicant(app)} className="bg-green-900/20 hover:bg-green-600 border border-green-900 text-green-500 hover:text-white font-bold px-6 py-3 rounded-xl transition-all">ACCEPT</button><button onClick={() => rejectApplicant(app.id)} className="bg-red-900/20 hover:bg-red-900 text-red-500 hover:text-white font-bold px-6 py-3 rounded-xl transition-all border border-red-900">REJECT</button></div></div>))}</div>)}</div></Card>);
 }
 
 function PartnerDirectory() {
