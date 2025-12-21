@@ -221,25 +221,17 @@ const LandingPage = ({ onEnterHub }) => {
     const [merchData, setMerchData] = useState([]);
     const [user, setUser] = useState(null); // Track auth state for public read access
 
-    // 1. Handle Anonymous Auth for Public Read Access
+    // 1. Handle Auth State (Removed forced Anonymous Auth to prevent errors)
     useEffect(() => {
         const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
-            if (currentUser) {
-                setUser(currentUser);
-            } else {
-                // If not logged in, sign in anonymously to allow reading public data
-                signInAnonymously(auth).catch((error) => {
-                    console.error("Failed to sign in anonymously for public access:", error);
-                });
-            }
+            setUser(currentUser);
         });
         return () => unsubscribe();
     }, []);
 
-    // 2. Load real data from Firestore (Only after Auth is ready)
+    // 2. Load real data from Firestore
+    // Removed "if (!user) return" check so public data loads even if not logged in
     useEffect(() => {
-        if (!user) return; // Wait for authentication before querying to prevent permission errors
-
         const unsubRoster = onSnapshot(collection(db, 'roster'), (snap) => {
             const r = [];
             snap.forEach(doc => r.push({ id: doc.id, ...doc.data() }));
@@ -276,7 +268,7 @@ const LandingPage = ({ onEnterHub }) => {
         });
 
         return () => { unsubRoster(); unsubEvents(); unsubNews(); unsubIntel(); unsubMerch(); };
-    }, [user]); // Add user as dependency
+    }, []); // Run once on mount
 
     const sortedRoster = useMemo(() => sortRosterByRole(roster), [roster]);
 
@@ -1501,6 +1493,7 @@ function RosterManager({ members, events }) {
     const [pfp, setPfp] = useState('');
     const [ingameRole, setIngameRole] = useState('Flex'); // New In-Game Role state
     const [notes, setNotes] = useState('');
+    const [newMemberName, setNewMemberName] = useState(''); // Add Manual Add State
 
     const addToast = useToast();
     useEffect(() => { const unsub = onSnapshot(collection(db, 'roster'), (snap) => { const data = {}; snap.forEach(doc => data[doc.id] = doc.data()); setRosterData(data); }); return () => unsub(); }, []);
@@ -1510,6 +1503,25 @@ function RosterManager({ members, events }) {
         // Updated save to include ingameRole
         await setDoc(doc(db, 'roster', selectedMember), { role, rank, notes, gameId, pfp, ingameRole }, { merge: true });
         addToast('Player Updated');
+    };
+
+    const handleDelete = async () => {
+        if (!selectedMember || !window.confirm(`Remove ${selectedMember} from roster?`)) return;
+        await deleteDoc(doc(db, 'roster', selectedMember));
+        setSelectedMember(null);
+        addToast('Member Removed');
+    };
+
+    const handleAddManual = async () => {
+        if (!newMemberName) return;
+        await setDoc(doc(db, 'roster', newMemberName), {
+            role: 'Tryout',
+            rank: 'Unranked',
+            joinedAt: new Date().toISOString(),
+            notes: 'Manually added'
+        });
+        setNewMemberName('');
+        addToast('Member Added');
     };
 
     const sortedMembers = useMemo(() => {
@@ -1536,6 +1548,18 @@ function RosterManager({ members, events }) {
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 h-full">
                     <div className="lg:col-span-1 bg-neutral-900/80 p-6 rounded-3xl border border-white/5 flex flex-col">
                         <h3 className="text-white font-bold mb-4">Members</h3>
+
+                        {/* New Add Member Section */}
+                        <div className="mb-4 flex gap-2">
+                            <Input
+                                placeholder="Add new member..."
+                                value={newMemberName}
+                                onChange={e => setNewMemberName(e.target.value)}
+                                className="py-2 text-xs"
+                            />
+                            <ButtonPrimary onClick={handleAddManual} className="py-2 px-3 text-xs whitespace-nowrap">+</ButtonPrimary>
+                        </div>
+
                         <div className="flex-1 space-y-2 overflow-y-auto custom-scrollbar">
                             {sortedMembers.length === 0 ?
                                 <div className="text-neutral-500 text-xs italic p-4 text-center border border-dashed border-neutral-800 rounded-xl">No members found. Log availability to appear here.</div> :
@@ -1587,7 +1611,11 @@ function RosterManager({ members, events }) {
                                     <Input value={pfp} onChange={e => setPfp(e.target.value)} placeholder="https://..." />
                                 </div>
                                 <textarea className="w-full h-40 bg-black border border-neutral-800 rounded-xl p-3 text-white" value={notes} onChange={e => setNotes(e.target.value)} placeholder="Notes..." />
-                                <ButtonPrimary onClick={handleSave} className="w-full py-3">Save Changes</ButtonPrimary>
+
+                                <div className="flex gap-4">
+                                    <ButtonPrimary onClick={handleSave} className="flex-1 py-3">Save Changes</ButtonPrimary>
+                                    <button onClick={handleDelete} className="bg-red-900/30 hover:bg-red-900 text-red-500 border border-red-900/50 font-bold px-6 py-3 rounded-xl transition-all uppercase tracking-wider text-xs">Delete Member</button>
+                                </div>
                             </div>
                         ) : <div className="h-full flex items-center justify-center text-neutral-500">Select a player</div>}
                     </Card>
@@ -1602,75 +1630,10 @@ function RosterManager({ members, events }) {
 function AdminPanel() {
     const [applications, setApplications] = useState([]);
     const addToast = useToast();
-
-    useEffect(() => {
-        const unsub = onSnapshot(collection(db, 'applications'), (snap) => {
-            const apps = [];
-            snap.forEach(doc => apps.push({ id: doc.id, ...doc.data() }));
-            setApplications(apps);
-        });
-        return () => unsub();
-    }, []);
-
-    const acceptApplicant = async (app) => {
-        try {
-            // Check for valid username or generate fallback to prevent crash
-            const safeUsername = app.user || `Agent-${app.uid ? app.uid.slice(0, 5) : Math.random().toString(36).substr(2, 5)}`;
-
-            await setDoc(doc(db, 'roster', safeUsername), {
-                rank: app.rank || 'Unranked',
-                role: 'Tryout',
-                notes: `Tracker: ${app.tracker || 'N/A'}\nWhy: ${app.why || 'N/A'}\nExp: ${app.exp || 'N/A'}`,
-                joinedAt: new Date().toISOString(),
-                uid: app.uid || null
-            });
-
-            await deleteDoc(doc(db, 'applications', app.id));
-            addToast(`Accepted ${safeUsername}`);
-        } catch (e) {
-            console.error("Accept Error:", e);
-            addToast(`Failed: ${e.message}`, 'error');
-        }
-    };
-
-    const rejectApplicant = async (id) => {
-        try {
-            await deleteDoc(doc(db, 'applications', id));
-            addToast('Applicant Rejected');
-        } catch (e) {
-            addToast('Error rejecting', 'error');
-        }
-    };
-
-    return (
-        <Card>
-            <h2 className="text-3xl font-black text-white mb-6 flex items-center gap-3"><span className="text-red-600">ADMIN</span> DASHBOARD</h2>
-            <div className="space-y-6">
-                {applications.length === 0 ? <p className="text-neutral-600 italic">No pending applications.</p> : (
-                    <div className="grid grid-cols-1 gap-4">
-                        {applications.map(app => (
-                            <div key={app.id} className="bg-black border border-neutral-800 p-6 rounded-2xl flex flex-col md:flex-row justify-between gap-6">
-                                <div className="space-y-2 flex-1">
-                                    <div className="flex items-center gap-3">
-                                        <h4 className="text-xl font-black text-white">{app.user || 'Unknown User'}</h4>
-                                        <span className="bg-neutral-900 text-neutral-400 text-xs px-2 py-1 rounded font-bold uppercase border border-neutral-800">{app.rank}</span>
-                                        <span className="bg-neutral-900 text-neutral-400 text-xs px-2 py-1 rounded font-bold uppercase border border-neutral-800">{app.role}</span>
-                                    </div>
-                                    <p className="text-neutral-400 text-sm"><strong className="text-neutral-500">Experience:</strong> {app.exp || 'N/A'}</p>
-                                    <p className="text-neutral-300 text-sm italic">"{app.why}"</p>
-                                    <a href={app.tracker} target="_blank" rel="noreferrer" className="text-red-500 text-xs font-bold hover:underline block mt-2">View Tracker Profile &rarr;</a>
-                                </div>
-                                <div className="flex flex-row md:flex-col gap-3 justify-center">
-                                    <button onClick={() => acceptApplicant(app)} className="bg-green-900/20 hover:bg-green-600 border border-green-900 text-green-500 hover:text-white font-bold px-6 py-3 rounded-xl transition-all">ACCEPT</button>
-                                    <button onClick={() => rejectApplicant(app.id)} className="bg-red-900/20 hover:bg-red-900 text-red-500 hover:text-white font-bold px-6 py-3 rounded-xl transition-all border border-red-900">REJECT</button>
-                                </div>
-                            </div>
-                        ))}
-                    </div>
-                )}
-            </div>
-        </Card>
-    );
+    useEffect(() => { const unsub = onSnapshot(collection(db, 'applications'), (snap) => { const apps = []; snap.forEach(doc => apps.push({ id: doc.id, ...doc.data() })); setApplications(apps); }); return () => unsub(); }, []);
+    const acceptApplicant = async (app) => { await setDoc(doc(db, 'roster', app.user), { rank: app.rank, role: 'Tryout', notes: `Tracker: ${app.tracker}\nWhy: ${app.why}`, joinedAt: new Date().toISOString() }); await deleteDoc(doc(db, 'applications', app.id)); addToast(`Accepted ${app.user}`); };
+    const rejectApplicant = async (id) => { await deleteDoc(doc(db, 'applications', id)); addToast('Applicant Rejected'); };
+    return (<Card><h2 className="text-3xl font-black text-white mb-6 flex items-center gap-3"><span className="text-red-600">ADMIN</span> DASHBOARD</h2><div className="space-y-6">{applications.length === 0 ? <p className="text-neutral-600 italic">No pending applications.</p> : (<div className="grid grid-cols-1 gap-4">{applications.map(app => (<div key={app.id} className="bg-black border border-neutral-800 p-6 rounded-2xl flex flex-col md:flex-row justify-between gap-6"><div className="space-y-2 flex-1"><div className="flex items-center gap-3"><h4 className="text-xl font-black text-white">{app.user}</h4><span className="bg-neutral-900 text-neutral-400 text-xs px-2 py-1 rounded font-bold uppercase border border-neutral-800">{app.rank}</span><span className="bg-neutral-900 text-neutral-400 text-xs px-2 py-1 rounded font-bold uppercase border border-neutral-800">{app.role}</span></div><p className="text-neutral-400 text-sm"><strong className="text-neutral-500">Experience:</strong> {app.exp}</p><p className="text-neutral-300 text-sm italic">"{app.why}"</p><a href={app.tracker} target="_blank" rel="noreferrer" className="text-red-500 text-xs font-bold hover:underline block mt-2">View Tracker Profile &rarr;</a></div><div className="flex flex-row md:flex-col gap-3 justify-center"><button onClick={() => acceptApplicant(app)} className="bg-green-900/20 hover:bg-green-600 border border-green-900 text-green-500 hover:text-white font-bold px-6 py-3 rounded-xl transition-all">ACCEPT</button><button onClick={() => rejectApplicant(app.id)} className="bg-red-900/20 hover:bg-red-900 text-red-500 hover:text-white font-bold px-6 py-3 rounded-xl transition-all border border-red-900">REJECT</button></div></div>))}</div>)}</div></Card>);
 }
 
 function PartnerDirectory() {
@@ -1860,6 +1823,7 @@ function SyrixDashboard({ onBack }) {
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [modalContent, setModalContent] = useState({ title: '', children: null });
     const [isMember, setIsMember] = useState(false);
+    const [dashboardName, setDashboardName] = useState(''); // New state
     const addToast = useToast();
 
     useEffect(() => { return onAuthStateChanged(auth, user => { setCurrentUser(user); setAuthLoading(false); }); }, []);
@@ -1870,7 +1834,6 @@ function SyrixDashboard({ onBack }) {
         if (!currentUser) return;
 
         // 1. Check if Admin
-        // Note: Anonymous users are now blocked from dashboard, so removed isAnonymous check here
         if (ADMIN_UIDS.includes(currentUser.uid)) {
             setIsMember(true);
         }
@@ -1878,7 +1841,10 @@ function SyrixDashboard({ onBack }) {
         // 2. Check Roster by UID (Reliable method for new applicants)
         const q = query(collection(db, 'roster'), where('uid', '==', currentUser.uid));
         const unsubUid = onSnapshot(q, (snap) => {
-            if (!snap.empty) setIsMember(true);
+            if (!snap.empty) {
+                setIsMember(true);
+                setDashboardName(snap.docs[0].id); // Get username from doc ID
+            }
         });
 
         // 3. Check Roster by Document ID (Fallback for legacy users/Discord name matches)
@@ -1957,7 +1923,7 @@ function SyrixDashboard({ onBack }) {
             <Background />
 
             <header className="flex-none flex flex-col gap-4 px-6 py-4 border-b border-white/10 bg-black/40 backdrop-blur-md z-40">
-                <div className="w-full max-w-[1920px] mx-auto"> {/* ADDED CENTERED CONTAINER FOR HEADER */}
+                <div className="w-full max-w-[1920px] mx-auto">
                     <div className="flex justify-between items-center mb-4">
                         <div className="flex items-center gap-4">
                             <button onClick={onBack} className="text-neutral-500 hover:text-white transition">
@@ -1966,7 +1932,7 @@ function SyrixDashboard({ onBack }) {
                             <h1 className="text-3xl font-black tracking-tighter text-white drop-shadow-lg italic">SYRIX <span className="text-red-600">HUB</span></h1>
                         </div>
                         <div className="flex items-center gap-4">
-                            <div className="text-right hidden md:block"><div className="text-sm font-bold text-white">{currentUser.displayName || 'Guest'}</div><button onClick={handleSignOut} className="text-[10px] text-red-500 font-bold uppercase">Log Out</button></div>
+                            <div className="text-right hidden md:block"><div className="text-sm font-bold text-white">{dashboardName || currentUser.displayName || 'Agent'}</div><button onClick={handleSignOut} className="text-[10px] text-red-500 font-bold uppercase">Log Out</button></div>
                             <select value={userTimezone} onChange={e => { setUserTimezone(e.target.value); }} className="bg-black/50 border border-neutral-800 text-xs rounded p-2 text-neutral-400 backdrop-blur-sm">{timezones.map(t => <option key={t} value={t}>{t}</option>)}</select>
                         </div>
                     </div>
@@ -1986,8 +1952,8 @@ function SyrixDashboard({ onBack }) {
                 </div>
             </header>
 
-            <main className="flex-1 overflow-y-auto p-6 scrollbar-thin scrollbar-thumb-red-900/50 scrollbar-track-black/20 relative z-10 w-full"> {/* ADDED W-FULL */}
-                <div className="max-w-[1920px] mx-auto min-h-screen flex flex-col w-full"> {/* ADDED W-FULL */}
+            <main className="flex-1 overflow-y-auto p-6 scrollbar-thin scrollbar-thumb-red-900/50 scrollbar-track-black/20 relative z-10 w-full">
+                <div className="max-w-[1920px] mx-auto min-h-screen flex flex-col w-full">
                     {activeTab === 'dashboard' && <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 animate-fade-in">
                         <div className="lg:col-span-4 space-y-8">
                             <CaptainsMessage />
