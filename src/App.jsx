@@ -1,7 +1,7 @@
 ﻿import React, { useState, useEffect, useMemo, useRef, createContext, useContext } from 'react';
 import { initializeApp } from 'firebase/app';
 import { getFirestore, collection, onSnapshot, doc, setDoc, deleteDoc, addDoc, updateDoc, query, where, getDoc } from 'firebase/firestore';
-import { getAuth, onAuthStateChanged, signInWithPopup, signOut, OAuthProvider, signInWithCustomToken } from 'firebase/auth';
+import { getAuth, onAuthStateChanged, signInWithPopup, signOut, OAuthProvider, signInAnonymously, signInWithCustomToken } from 'firebase/auth';
 
 // --- Firebase Configuration ---
 const firebaseConfig = {
@@ -88,19 +88,11 @@ const sortRosterByRole = (rosterList, lookupData = null) => {
     });
 };
 
+// --- GLOBAL STYLES & ASSETS ---
 const GlobalStyles = () => (
     <style>{`
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap');
         
-        /* Root Reset - FIXED: Removed fixed height to allow scrolling */
-        html, body, #root { 
-            width: 100%; 
-            margin: 0; 
-            padding: 0; 
-            overflow-x: hidden; /* Prevents side-to-side scrolling */
-            /* Removed 'height: 100%' so the page can grow and scroll */
-        }
-
         /* Shared & Hub Styles */
         .glass-panel { background: rgba(15, 15, 15, 0.85); backdrop-filter: blur(12px); border: 1px solid rgba(255,255,255,0.08); box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5); }
         .card-shine:hover { border-color: rgba(220, 38, 38, 0.3); background: rgba(20, 20, 20, 0.95); box-shadow: 0 8px 32px rgba(220, 38, 38, 0.1); }
@@ -119,22 +111,11 @@ const GlobalStyles = () => (
         .accent-text { color: var(--primary-red); }
         .accent-bg { background-color: var(--primary-red); transition: background-color 0.3s; }
         .accent-bg:hover { background-color: #e02c2c; }
-        
         .hero-section {
-            min-height: 100vh; /* Ensures it covers at least the full screen */
-            width: 100%;
-            display: flex;
-            align-items: center;
-            justify-content: center;
+            background-size: cover; background-position: center; min-height: 85vh; background-attachment: fixed;
             position: relative;
-            /* background-attachment removed from here to prevent scroll glitches on some mobile browsers */
         }
-        
-        /* Move background attachment here for desktop only */
-        @media only screen and (min-width: 769px) { 
-            .hero-section { background-attachment: fixed; } 
-        }
-
+        @media only screen and (max-width: 768px) { .hero-section { background-attachment: scroll; } }
         @keyframes pulse-red { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
         .live-indicator { animation: pulse-red 2s cubic-bezier(0.4, 0, 0.6, 1) infinite; }
         .player-card { perspective: 1000px; min-height: 350px; }
@@ -142,31 +123,7 @@ const GlobalStyles = () => (
         .player-card:hover .card-inner { transform: rotateY(180deg); }
         .card-front, .card-back { position: absolute; width: 100%; height: 100%; backface-visibility: hidden; border-radius: 0.75rem; }
         .card-back { background-color: var(--card-bg); color: white; transform: rotateY(180deg); display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 1.5rem; text-align: center; }
-        /* Scroll Mouse Animation */
-        .scroll-mouse {
-            width: 26px;
-            height: 42px;
-            border: 2px solid rgba(255, 255, 255, 0.5);
-            border-radius: 20px;
-            position: relative;
-        }
-        .scroll-wheel {
-            width: 2px;
-            height: 6px;
-            background: #ef4444;
-            border-radius: 2px;
-            position: absolute;
-            top: 8px;
-            left: 50%;
-            transform: translateX(-50%);
-            animation: scroll-bounce 2s infinite;
-        }
-        @keyframes scroll-bounce {
-            0% { transform: translate(-50%, 0); opacity: 1; }
-            50% { transform: translate(-50%, 8px); opacity: 0; }
-            100% { transform: translate(-50%, 0); opacity: 1; }
-        }    `
-    }</style>
+    `}</style>
 );
 
 // --- SHARED COMPONENTS ---
@@ -262,10 +219,27 @@ const LandingPage = ({ onEnterHub }) => {
     const [newsData, setNewsData] = useState([]);
     const [intelData, setIntelData] = useState([]);
     const [merchData, setMerchData] = useState([]);
-    const [achievements, setAchievements] = useState([]);
+    const [user, setUser] = useState(null); // Track auth state for public read access
 
-    // Load real data from Firestore
+    // 1. Handle Anonymous Auth for Public Read Access
     useEffect(() => {
+        const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
+            if (currentUser) {
+                setUser(currentUser);
+            } else {
+                // If not logged in, sign in anonymously to allow reading public data
+                signInAnonymously(auth).catch((error) => {
+                    console.error("Failed to sign in anonymously for public access:", error);
+                });
+            }
+        });
+        return () => unsubscribe();
+    }, []);
+
+    // 2. Load real data from Firestore (Only after Auth is ready)
+    useEffect(() => {
+        if (!user) return; // Wait for authentication before querying to prevent permission errors
+
         const unsubRoster = onSnapshot(collection(db, 'roster'), (snap) => {
             const r = [];
             snap.forEach(doc => r.push({ id: doc.id, ...doc.data() }));
@@ -301,18 +275,8 @@ const LandingPage = ({ onEnterHub }) => {
             setMerchData(m);
         });
 
-        // NEW: Achievements Listener for Landing Page
-        const unsubAchieve = onSnapshot(collection(db, 'achievements'), (snap) => {
-            const a = [];
-            snap.forEach(doc => a.push({ id: doc.id, ...doc.data() }));
-                // Sort by created date (newest first) or any other logic
-            setAchievements(a.sort((x, y) => new Date(y.createdAt) - new Date(x.createdAt)));
-        });
-
-        return () => {
-            unsubRoster(); unsubEvents(); unsubNews(); unsubIntel(); unsubMerch(); unsubAchieve();
-        };
-    }, []);
+        return () => { unsubRoster(); unsubEvents(); unsubNews(); unsubIntel(); unsubMerch(); };
+    }, [user]); // Add user as dependency
 
     const sortedRoster = useMemo(() => sortRosterByRole(roster), [roster]);
 
@@ -350,29 +314,10 @@ const LandingPage = ({ onEnterHub }) => {
     const featuredNews = newsData.find(n => n.isFeatured) || newsData[0];
     const otherNews = newsData.filter(n => n.id !== featuredNews?.id).slice(0, 3);
 
-    // Dynamic Script Loading for AOS
-    useEffect(() => {
-        const link = document.createElement('link');
-        link.rel = 'stylesheet';
-        link.href = 'https://unpkg.com/aos@2.3.1/dist/aos.css';
-        document.head.appendChild(link);
-
-        const script = document.createElement('script');
-        script.src = 'https://unpkg.com/aos@2.3.1/dist/aos.js';
-        script.onload = () => { if (window.AOS) window.AOS.init({ duration: 800, once: true, offset: 50 }); };
-        document.body.appendChild(script);
-
-        return () => {
-            document.head.removeChild(link);
-            document.body.removeChild(script);
-        };
-    }, []);
-
     const PlayerCard = ({ player, delay }) => {
         return (
-            <div className="player-card group w-full sm:w-72" data-aos="fade-up" data-aos-delay={delay}>
+            <div className="player-card group w-full sm:w-72">
                 <div className="card-inner">
-                    {/* Front of Card */}
                     <div className={`card-front glass-panel rounded-xl overflow-hidden shadow-2xl border-b-4 border-red-600 relative`}>
                         <div className="w-full h-48 bg-gradient-to-b from-neutral-800 to-black flex items-center justify-center overflow-hidden">
                             {player.pfp ? (
@@ -392,11 +337,10 @@ const LandingPage = ({ onEnterHub }) => {
                             <div className="mt-2 text-xs text-neutral-500 font-mono bg-black/50 py-1 px-2 rounded inline-block">Rank: {player.rank || 'N/A'}</div>
                         </div>
                     </div>
-
-                    {/* Back of Card (Updated to remove Gamer Tag) */}
                     <div className="card-back glass-panel border border-red-900/30">
                         <h5 className="text-xl font-bold text-red-500 mb-2">{player.id}</h5>
                         <p className="text-neutral-300 text-sm italic">"{player.notes || 'No bio available.'}"</p>
+                        {player.gameId && <div className="mt-4 text-xs font-mono bg-black/50 p-2 rounded text-neutral-400">Riot ID: {player.gameId}</div>}
                     </div>
                 </div>
             </div>
@@ -407,7 +351,7 @@ const LandingPage = ({ onEnterHub }) => {
         <div className="min-h-screen w-full font-sans text-white flex flex-col relative overflow-x-hidden bg-black">
             <Background />
 
-            <header className="fixed top-0 w-full z-50 bg-black/40 backdrop-blur-md shadow-2xl border-b border-white/10 flex justify-center">
+            <header className="sticky top-0 z-50 bg-black/40 backdrop-blur-md shadow-2xl border-b border-white/10 flex justify-center w-full">
                 <nav className="max-w-7xl w-full px-6 py-4 flex justify-between items-center">
                     <a href="#home" className="flex items-center space-x-2 text-white hover:text-red-500 transition-colors"><span className="text-3xl font-black text-red-600 italic">/</span><h1 className="text-xl font-black uppercase tracking-tighter italic">Syrix</h1></a>
                     <button onClick={() => setMobileMenuOpen(!mobileMenuOpen)} className="md:hidden text-2xl z-50 p-2 focus:outline-none text-white">☰</button>
@@ -438,7 +382,7 @@ const LandingPage = ({ onEnterHub }) => {
             <main className="flex-1 relative z-10 flex flex-col items-center w-full">
                 <section id="home" className="w-full hero-section flex items-center justify-center text-center p-6 relative overflow-hidden">
                     <div className="absolute inset-0 bg-gradient-to-b from-black/30 via-black/60 to-black pointer-events-none"></div>
-                    <div className="relative z-10 max-w-5xl mx-auto" data-aos="zoom-in">
+                    <div className="relative z-10 max-w-5xl mx-auto">
                         <div className="flex justify-center mb-6">
                             <div className="h-1 w-24 bg-red-600 rounded-full shadow-[0_0_15px_red]"></div>
                         </div>
@@ -459,7 +403,7 @@ const LandingPage = ({ onEnterHub }) => {
                 {/* --- NEW TEAM STATS SECTION --- */}
                 <section className="w-full py-12 bg-black border-b border-white/10 flex justify-center relative z-20">
                     <div className="max-w-7xl w-full px-6 grid grid-cols-1 md:grid-cols-3 gap-6">
-                        <div className="glass-panel p-6 rounded-2xl flex items-center justify-between border border-red-900/30" data-aos="fade-up" data-aos-delay="0">
+                        <div className="glass-panel p-6 rounded-2xl flex items-center justify-between border border-red-900/30">
                             <div>
                                 <div className="text-xs text-neutral-500 font-bold uppercase tracking-widest mb-1">Season Win Rate</div>
                                 <div className="text-5xl font-black text-white italic tracking-tighter">{teamStats.winRate}%</div>
@@ -468,7 +412,7 @@ const LandingPage = ({ onEnterHub }) => {
                                 <span className="text-2xl">🔥</span>
                             </div>
                         </div>
-                        <div className="glass-panel p-6 rounded-2xl flex items-center justify-between border border-white/10" data-aos="fade-up" data-aos-delay="100">
+                        <div className="glass-panel p-6 rounded-2xl flex items-center justify-between border border-white/10">
                             <div>
                                 <div className="text-xs text-neutral-500 font-bold uppercase tracking-widest mb-1">Current Record</div>
                                 <div className="text-5xl font-black text-white italic tracking-tighter flex gap-3">
@@ -478,7 +422,7 @@ const LandingPage = ({ onEnterHub }) => {
                                 </div>
                             </div>
                         </div>
-                        <div className="glass-panel p-6 rounded-2xl flex items-center justify-between border border-white/10 relative overflow-hidden" data-aos="fade-up" data-aos-delay="200">
+                        <div className="glass-panel p-6 rounded-2xl flex items-center justify-between border border-white/10 relative overflow-hidden">
                             <div className="relative z-10">
                                 <div className="text-xs text-neutral-500 font-bold uppercase tracking-widest mb-1">Performance Trend</div>
                                 <div className="text-sm text-neutral-300 font-mono">Last 10 Matches</div>
@@ -496,7 +440,7 @@ const LandingPage = ({ onEnterHub }) => {
 
                 <section id="about" className="w-full py-24 relative flex justify-center">
                     <div className="max-w-7xl w-full px-6 grid grid-cols-1 lg:grid-cols-2 gap-16 items-center">
-                        <div data-aos="fade-right">
+                        <div>
                             <h3 className="text-4xl font-black text-white italic tracking-tighter mb-6">OUR <span className="text-red-600">MISSION</span></h3>
                             <p className="text-neutral-400 text-lg leading-relaxed mb-6">
                                 Syrix was founded on the principle that uncompromising skill and unified strategy conquer all. We are a disciplined organization dedicated to achieving excellence in every major competitive title.
@@ -507,38 +451,16 @@ const LandingPage = ({ onEnterHub }) => {
                                 <li className="flex items-center gap-3 text-neutral-300"><span className="text-red-600 font-bold">03.</span> Unrivaled Professionalism</li>
                             </ul>
                         </div>
-                        <div className="relative h-96 glass-panel rounded-3xl border-white/10 overflow-hidden" data-aos="fade-left">
+                        <div className="relative h-96 glass-panel rounded-3xl border-white/10 overflow-hidden">
                             <div className="absolute inset-0 bg-gradient-to-tr from-red-900/20 to-transparent"></div>
                             <div className="absolute inset-0 flex items-center justify-center text-neutral-700 font-black text-9xl opacity-20 italic tracking-tighter">SYRIX</div>
                         </div>
                     </div>
                 </section>
 
-                {/* --- TROPHY CASE SECTION (DYNAMIC) --- */}
-                <section className="w-full py-12 border-y border-white/5 bg-neutral-900/30 flex justify-center relative overflow-hidden">
-                    <div className="absolute top-0 left-0 w-full h-px bg-gradient-to-r from-transparent via-red-600/50 to-transparent"></div>
-
-                    <div className="max-w-7xl w-full px-6 flex flex-wrap justify-center gap-8 md:gap-24 text-center">
-                        {achievements.length > 0 ? (
-                            achievements.map((item, index) => (
-                                <div key={item.id} className="group" data-aos="fade-up" data-aos-delay={index * 100}>
-                                    <div className="text-4xl mb-2 group-hover:-translate-y-2 transition-transform duration-300">{item.icon}</div>
-                                    <div className="text-2xl font-black text-white italic tracking-tighter uppercase">
-                                        {item.highlight ? <span className="text-red-600">{item.title}</span> : item.title}
-                                    </div>
-                                    <div className="text-xs text-neutral-500 font-bold uppercase tracking-widest">{item.subtitle}</div>
-                                </div>
-                            ))
-                        ) : (
-                            // Placeholder if no trophies yet
-                            <div className="text-neutral-600 italic text-sm">Achievements loading or empty...</div>
-                        )}
-                    </div>
-                </section>
-
                 <section id="roster" className="w-full py-24 relative flex justify-center">
                     <div className="max-w-7xl w-full px-6">
-                        <div className="text-center mb-16" data-aos="fade-up">
+                        <div className="text-center mb-16">
                             <h3 className="text-4xl md:text-5xl font-black text-white italic tracking-tighter mb-4"><span className="text-red-600">/</span> ACTIVE ROSTER</h3>
                             <p className="text-neutral-500 uppercase tracking-widest font-bold text-sm">The Squad</p>
                         </div>
@@ -550,11 +472,11 @@ const LandingPage = ({ onEnterHub }) => {
 
                 <section id="schedule" className="w-full py-24 bg-gradient-to-b from-transparent to-neutral-900/20 border-y border-white/5 relative flex justify-center">
                     <div className="max-w-5xl w-full px-6">
-                        <div className="text-center mb-16" data-aos="fade-up">
+                        <div className="text-center mb-16">
                             <h3 className="text-4xl md:text-5xl font-black text-white italic tracking-tighter mb-4"><span className="text-red-600">/</span> UPCOMING OPS</h3>
                             <p className="text-neutral-500 uppercase tracking-widest font-bold text-sm">Mission Log</p>
                         </div>
-                        <div className="space-y-4" data-aos="fade-up">
+                        <div className="space-y-4">
                             {matches.length > 0 ? matches.map((match, i) => (
                                 <div key={i} className="glass-panel p-6 rounded-2xl flex flex-col md:flex-row justify-between items-center gap-6 hover:border-red-600/50 transition-all group">
                                     <div className="flex items-center gap-6">
@@ -582,13 +504,13 @@ const LandingPage = ({ onEnterHub }) => {
 
                 <section id="vods" className="w-full py-24 relative flex justify-center">
                     <div className="max-w-7xl w-full px-6">
-                        <div className="text-center mb-16" data-aos="fade-up">
+                        <div className="text-center mb-16">
                             <h3 className="text-4xl md:text-5xl font-black text-white italic tracking-tighter mb-4"><span className="text-red-600">/</span> RECENT INTEL</h3>
                             <p className="text-neutral-500 uppercase tracking-widest font-bold text-sm">VODs & Highlights</p>
                         </div>
                         <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
                             {intelData.length > 0 ? intelData.map((item, i) => (
-                                <a key={item.id} href={item.url} target="_blank" rel="noopener noreferrer" className="glass-panel rounded-xl overflow-hidden group cursor-pointer block" data-aos="fade-up" data-aos-delay={i * 100}>
+                                <a key={item.id} href={item.url} target="_blank" rel="noopener noreferrer" className="glass-panel rounded-xl overflow-hidden group cursor-pointer block">
                                     <div className="aspect-video bg-neutral-900 relative">
                                         <img
                                             src={`https://img.youtube.com/vi/${item.url.split('v=')[1]?.split('&')[0] || item.url.split('/').pop()}/maxresdefault.jpg`}
@@ -613,7 +535,7 @@ const LandingPage = ({ onEnterHub }) => {
 
                 <section id="news" className="w-full py-24 relative flex justify-center bg-black/50">
                     <div className="max-w-7xl w-full px-6">
-                        <div className="text-center mb-16" data-aos="fade-up">
+                        <div className="text-center mb-16">
                             <h3 className="text-4xl md:text-5xl font-black text-white italic tracking-tighter mb-4"><span className="text-red-600">/</span> SITREP</h3>
                             <p className="text-neutral-500 uppercase tracking-widest font-bold text-sm">News & Updates</p>
                         </div>
@@ -622,7 +544,7 @@ const LandingPage = ({ onEnterHub }) => {
                             <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
                                 {/* Featured Article */}
                                 {featuredNews && (
-                                    <div className="glass-panel p-8 rounded-3xl border border-red-900/30 flex flex-col justify-center" data-aos="fade-right">
+                                    <div className="glass-panel p-8 rounded-3xl border border-red-900/30 flex flex-col justify-center">
                                         <span className="text-red-500 text-xs font-bold uppercase tracking-widest mb-2 block">Featured • {featuredNews.date}</span>
                                         <h4 className="text-3xl font-black text-white mb-4 uppercase leading-none">{featuredNews.title}</h4>
                                         <p className="text-neutral-400 mb-6 line-clamp-4">{featuredNews.body}</p>
@@ -631,7 +553,7 @@ const LandingPage = ({ onEnterHub }) => {
                                 )}
 
                                 {/* Other News List */}
-                                <div className="space-y-4" data-aos="fade-left">
+                                <div className="space-y-4">
                                     {otherNews.map(item => (
                                         <div key={item.id} className="glass-panel p-6 rounded-2xl flex gap-4 items-center group hover:border-red-600/30 transition-all">
                                             <div className="w-16 h-16 bg-neutral-800 rounded-lg flex-shrink-0 flex items-center justify-center text-2xl font-black text-neutral-700">
@@ -655,13 +577,13 @@ const LandingPage = ({ onEnterHub }) => {
 
                 <section id="merch" className="w-full py-24 relative flex justify-center">
                     <div className="max-w-7xl w-full px-6">
-                        <div className="text-center mb-16" data-aos="fade-up">
+                        <div className="text-center mb-16">
                             <h3 className="text-4xl md:text-5xl font-black text-white italic tracking-tighter mb-4"><span className="text-red-600">/</span> ARMORY</h3>
                             <p className="text-neutral-500 uppercase tracking-widest font-bold text-sm">Official Gear</p>
                         </div>
                         <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
                             {merchData.length > 0 ? merchData.map((item, i) => (
-                                <div key={item.id} className="glass-panel rounded-2xl overflow-hidden group cursor-pointer" data-aos="fade-up" data-aos-delay={i * 100}>
+                                <div key={item.id} className="glass-panel rounded-2xl overflow-hidden group cursor-pointer">
                                     <div className="h-64 bg-neutral-800 flex items-center justify-center group-hover:bg-neutral-700 transition-colors relative">
                                         <span className="text-neutral-500 font-black uppercase tracking-widest z-10">{item.name}</span>
                                         {/* Placeholder gradient background if no image provided */}
@@ -688,7 +610,7 @@ const LandingPage = ({ onEnterHub }) => {
                     <div className="max-w-7xl w-full px-6">
                         <p className="text-center text-neutral-600 text-xs font-bold uppercase tracking-[0.3em] mb-8">Trusted By</p>
                         <div className="flex flex-wrap justify-center gap-12 md:gap-24 opacity-50 grayscale hover:grayscale-0 transition-all duration-500">
-                            {['RougeEnergy','Logitech'].map((p) => (
+                            {['QUANTUM', 'HYPERENERGY', 'AURA', 'OMEGANET'].map((p) => (
                                 <div key={p} className="text-2xl font-black text-white italic tracking-tighter">{p}</div>
                             ))}
                         </div>
@@ -697,7 +619,7 @@ const LandingPage = ({ onEnterHub }) => {
 
                 <section id="community" className="w-full py-24 relative flex justify-center">
                     <div className="max-w-4xl w-full px-6">
-                        <div className="glass-panel rounded-[3rem] p-12 text-center border border-red-600/30 relative overflow-hidden" data-aos="zoom-in">
+                        <div className="glass-panel rounded-[3rem] p-12 text-center border border-red-600/30 relative overflow-hidden">
                             <div className="absolute top-0 right-0 w-64 h-64 bg-red-600/20 rounded-full blur-[100px] pointer-events-none"></div>
                             <div className="relative z-10">
                                 <h3 className="text-4xl md:text-6xl font-black text-white italic tracking-tighter mb-6">JOIN THE <span className="text-red-600">SYNDICATE</span></h3>
@@ -764,11 +686,9 @@ function LoginScreen({ signIn, onBack }) {
             <div className="relative z-10 bg-neutral-900/80 backdrop-blur-xl border border-white/10 p-12 rounded-[3rem] shadow-2xl shadow-red-900/40 flex flex-col items-center text-center max-w-md w-full mx-4">
                 <h1 className="text-7xl font-black text-white tracking-tighter drop-shadow-[0_0_30px_rgba(255,255,255,0.5)]">SYRIX</h1>
                 <div className="h-1.5 w-32 bg-red-600 rounded-full shadow-[0_0_15px_rgba(220,38,38,1)] my-6"></div>
-
                 <button onClick={signIn} className="w-full bg-[#5865F2] hover:bg-[#4752C4] text-white py-4 rounded-2xl font-bold shadow-lg transition-transform hover:scale-105 flex items-center justify-center gap-3 text-lg uppercase tracking-wider mb-8">
                     Login with Discord
                 </button>
-
                 <button onClick={onBack} className="text-neutral-500 hover:text-white text-sm uppercase font-bold tracking-widest">
                     &larr; Back to Home
                 </button>
@@ -813,41 +733,23 @@ function LeaveLogger({ members }) {
 
 function ScrimScheduler({ onSchedule, userTimezone }) {
     const [form, setForm] = useState({ type: 'Scrim', date: '', time: '', opponent: '', map: MAPS[0] });
-
-    const submit = async () => {
-        if (!form.date || !form.time) return; // Basic validation
-        await onSchedule({ ...form, timezone: userTimezone });
-        setForm({ ...form, opponent: '' });
-    };
-
+    const submit = async () => { await onSchedule({ ...form, timezone: userTimezone }); setForm({ ...form, opponent: '' }); };
     return (
         <div className="space-y-4">
             <div className="grid grid-cols-2 gap-4">
                 <div>
-                    <label className="text-xs font-bold text-red-500 block mb-1">EVENT TYPE</label>
-                    <Select value={form.type} onChange={e => setForm({ ...form, type: e.target.value })}>
-                        <option>Scrim</option>
-                        <option>Premier</option>
-                        <option>Tournament</option>
-                        <option>Competitive</option>
-                        <option>VOD Review</option>
-                        <option>Strategy Session</option>
-                    </Select>
+                    <label className="text-xs font-bold text-red-500 block mb-1">TYPE</label>
+                    <Select value={form.type} onChange={e => setForm({ ...form, type: e.target.value })}><option>Scrim</option><option>Tournament</option></Select>
                 </div>
                 <div>
-                    <label className="text-xs font-bold text-red-500 block mb-1">OPPONENT / NOTES</label>
-                    <Input
-                        value={form.opponent}
-                        onChange={e => setForm({ ...form, opponent: e.target.value })}
-                        placeholder={form.type === 'VOD Review' ? "e.g. Reviewing Ascent Scrim" : "e.g. Team Liquid"}
-                    />
+                    <label className="text-xs font-bold text-red-500 block mb-1">OPPONENT</label>
+                    <Input value={form.opponent} onChange={e => setForm({ ...form, opponent: e.target.value })} />
                 </div>
             </div>
             <div className="grid grid-cols-2 gap-4">
                 <div>
                     <label className="text-xs font-bold text-red-500 block mb-1">MAP</label>
                     <Select value={form.map} onChange={e => setForm({ ...form, map: e.target.value })}>
-                        <option value="General">General / None</option>
                         {MAPS.map(m => <option key={m} value={m}>{m}</option>)}
                     </Select>
                 </div>
@@ -874,11 +776,72 @@ function AvailabilityHeatmap({ availabilities, members }) {
 }
 
 function ApplicationForm({ currentUser }) {
-    const [form, setForm] = useState({ tracker: '', rank: 'Unranked', role: 'Flex', exp: '', why: '' });
+    // Added 'name' field initialized with displayName or empty string
+    const [form, setForm] = useState({
+        name: currentUser?.displayName || '',
+        tracker: '',
+        rank: 'Unranked',
+        role: 'Flex',
+        exp: '',
+        why: ''
+    });
     const [status, setStatus] = useState('idle');
-    const submitApp = async () => { if (!form.tracker || !form.why) return; setStatus('saving'); const appData = { ...form, user: currentUser.displayName, uid: currentUser.uid, submittedAt: new Date().toISOString() }; await addDoc(collection(db, 'applications'), appData); const content = { embeds: [{ title: `New App: ${currentUser.displayName}`, color: 16776960, fields: [{ name: 'Rank', value: form.rank }, { name: 'Role', value: form.role }, { name: 'Tracker', value: form.tracker }] }] }; try { await fetch(discordWebhookUrl, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(content) }); } catch (e) { } setStatus('success'); };
+
+    const submitApp = async () => {
+        if (!form.name || !form.tracker || !form.why) return; // Check for name
+        setStatus('saving');
+
+        const appData = {
+            ...form,
+            user: form.name, // Use the form name specifically
+            uid: currentUser.uid,
+            submittedAt: new Date().toISOString()
+        };
+
+        await addDoc(collection(db, 'applications'), appData);
+
+        const content = { embeds: [{ title: `New App: ${form.name}`, color: 16776960, fields: [{ name: 'Rank', value: form.rank }, { name: 'Role', value: form.role }, { name: 'Tracker', value: form.tracker }] }] };
+        try { await fetch(discordWebhookUrl, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(content) }); } catch (e) { }
+        setStatus('success');
+    };
+
     if (status === 'success') return <div className="h-full flex items-center justify-center text-white font-black text-2xl">Application Sent.</div>;
-    return (<div className="bg-neutral-900 p-8 rounded-3xl border border-white/10 max-w-3xl mx-auto"><h2 className="text-3xl font-black text-white mb-4">Apply</h2><div className="space-y-4"><Input value={form.tracker} onChange={e => setForm({ ...form, tracker: e.target.value })} placeholder="Tracker URL" /><Select value={form.rank} onChange={e => setForm({ ...form, rank: e.target.value })}>{RANKS.map(r => <option key={r} value={r}>{r}</option>)}</Select><Select value={form.role} onChange={e => setForm({ ...form, role: e.target.value })}>{ROLES.map(r => <option key={r} value={r}>{r}</option>)}</Select><textarea className="w-full bg-black border border-neutral-800 rounded-xl p-3 text-white" value={form.why} onChange={e => setForm({ ...form, why: e.target.value })} placeholder="Why join?" /><ButtonPrimary onClick={submitApp} disabled={status !== 'idle'}>Submit</ButtonPrimary></div></div>);
+
+    return (
+        <div className="bg-neutral-900 p-8 rounded-3xl border border-white/10 max-w-3xl mx-auto">
+            <h2 className="text-3xl font-black text-white mb-4">Apply</h2>
+            <div className="space-y-4">
+                {/* Added Name Input */}
+                <div className="space-y-1">
+                    <label className="text-xs font-bold text-neutral-500 uppercase">Agent Name / IGN</label>
+                    <Input
+                        value={form.name}
+                        onChange={e => setForm({ ...form, name: e.target.value })}
+                        placeholder="Your In-Game Name"
+                    />
+                </div>
+                <div className="space-y-1">
+                    <label className="text-xs font-bold text-neutral-500 uppercase">Tracker.gg URL</label>
+                    <Input value={form.tracker} onChange={e => setForm({ ...form, tracker: e.target.value })} placeholder="https://tracker.gg/valorant/..." />
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-1">
+                        <label className="text-xs font-bold text-neutral-500 uppercase">Current Rank</label>
+                        <Select value={form.rank} onChange={e => setForm({ ...form, rank: e.target.value })}>{RANKS.map(r => <option key={r} value={r}>{r}</option>)}</Select>
+                    </div>
+                    <div className="space-y-1">
+                        <label className="text-xs font-bold text-neutral-500 uppercase">Preferred Role</label>
+                        <Select value={form.role} onChange={e => setForm({ ...form, role: e.target.value })}>{ROLES.map(r => <option key={r} value={r}>{r}</option>)}</Select>
+                    </div>
+                </div>
+                <div className="space-y-1">
+                    <label className="text-xs font-bold text-neutral-500 uppercase">Why do you want to join?</label>
+                    <textarea className="w-full bg-black border border-neutral-800 rounded-xl p-3 text-white" value={form.why} onChange={e => setForm({ ...form, why: e.target.value })} placeholder="Tell us about your experience..." rows={4} />
+                </div>
+                <ButtonPrimary onClick={submitApp} disabled={status !== 'idle'}>Submit Application</ButtonPrimary>
+            </div>
+        </div>
+    );
 }
 
 function PerformanceWidget({ events }) {
@@ -1473,89 +1436,19 @@ function LineupLibrary() {
 }
 
 function MatchHistory({ currentUser, members }) {
-    const [history, setHistory] = useState([]);
-    const [pending, setPending] = useState([]);
-    const [isAdding, setIsAdding] = useState(false);
-    const [expandedId, setExpandedId] = useState(null);
-
-    // State for Editing/Finalizing
-    const [editingId, setEditingId] = useState(null);
-    const [editForm, setEditForm] = useState({});
-
-    // State for New Manual Logs - UPDATED WITH ANALYTICS FIELDS
-    const [newMatch, setNewMatch] = useState({
-        opponent: '', date: '', myScore: '', enemyScore: '',
-        atkScore: '', defScore: '', map: 'Ascent', vod: '',
-        pistols: '', ecos: '', fb: ''
-    });
-
+    const [matches, setMatches] = useState([]); const [isAdding, setIsAdding] = useState(false); const [expandedId, setExpandedId] = useState(null); const [editingId, setEditingId] = useState(null); const [editForm, setEditForm] = useState({}); const [newMatch, setNewMatch] = useState({ opponent: '', date: '', myScore: '', enemyScore: '', atkScore: '', defScore: '', map: MAPS[0], vod: '' });
     const addToast = useToast();
-
-    // Load Events
-    useEffect(() => {
-        const unsub = onSnapshot(collection(db, 'events'), (snap) => {
-            const evs = [];
-            snap.forEach(doc => evs.push({ id: doc.id, ...doc.data() }));
-            setHistory(evs.filter(e => e.result).sort((a, b) => new Date(b.date) - new Date(a.date)));
-            setPending(evs.filter(e => !e.result).sort((a, b) => new Date(a.date) - new Date(b.date)));
-        });
-        return () => unsub();
-    }, []);
-
-    const handleManualAdd = async () => {
-        if (!newMatch.opponent || !newMatch.myScore) return addToast("Opponent & Score required", "error");
-
-        await addDoc(collection(db, 'events'), {
-            type: 'Scrim',
-            opponent: newMatch.opponent,
-            date: newMatch.date || new Date().toISOString().split('T')[0],
-            result: { ...newMatch }
-        });
-        setIsAdding(false);
-        setNewMatch({ opponent: '', date: '', myScore: '', enemyScore: '', atkScore: '', defScore: '', map: 'Ascent', vod: '', pistols: '', ecos: '', fb: '' });
-        addToast('Match Analysis Logged');
-    };
-
-    const openEditor = (match, isFinalizing = false) => {
-        setEditingId(match.id);
-        setEditForm({
-            opponent: match.opponent,
-            date: match.date,
-            map: match.map || (match.result ? match.result.map : 'Ascent'),
-            vod: match.result?.vod || '',
-            myScore: match.result?.myScore || '',
-            enemyScore: match.result?.enemyScore || '',
-            atkScore: match.result?.atkScore || '',
-            defScore: match.result?.defScore || '',
-            // Load new stats if they exist, otherwise empty
-            pistols: match.result?.pistols || '',
-            ecos: match.result?.ecos || '',
-            fb: match.result?.fb || '',
-            isFinalizing: isFinalizing
-        });
-    };
-
-    const saveEdit = async () => {
-        const { opponent, date, isFinalizing, ...resultData } = editForm;
-        await updateDoc(doc(db, 'events', editingId), {
-            opponent,
-            date,
-            result: resultData
-        });
-        setEditingId(null);
-        addToast('Match Stats Updated');
-    };
-
-    const deleteEvent = async (id) => {
-        if (window.confirm("Delete this match record?")) {
-            await deleteDoc(doc(db, 'events', id));
-            addToast("Record Deleted");
-        }
-    }
+    useEffect(() => { const unsub = onSnapshot(collection(db, 'events'), (snap) => { const evs = []; snap.forEach(doc => evs.push({ id: doc.id, ...doc.data() })); setMatches(evs.filter(e => e.result).sort((a, b) => new Date(b.date) - new Date(a.date))); }); return () => unsub(); }, []);
+    const handleAdd = async () => { await addDoc(collection(db, 'events'), { type: 'Scrim', opponent: newMatch.opponent, date: newMatch.date, result: { ...newMatch } }); setIsAdding(false); setNewMatch({ opponent: '', date: '', myScore: '', enemyScore: '', atkScore: '', defScore: '', map: MAPS[0], vod: '' }); addToast('Match Logged'); };
+    const startEdit = (m) => { setEditingId(m.id); setEditForm({ opponent: m.opponent, date: m.date, ...m.result }); };
+    const saveEdit = async () => { const { opponent, date, ...resultData } = editForm; await updateDoc(doc(db, 'events', editingId), { opponent, date, result: resultData }); setEditingId(null); addToast('Match Updated'); };
+    const getResultColor = (my, enemy) => { const m = parseInt(my); const e = parseInt(enemy); if (m > e) return 'border-l-4 border-l-green-500'; if (m < e) return 'border-l-4 border-l-red-600'; return 'border-l-4 border-l-neutral-500'; };
 
     const castVote = async (matchId, player) => {
         await setDoc(doc(db, 'events', matchId), {
-            mvpVotes: { [currentUser.uid]: player }
+            mvpVotes: {
+                [currentUser.uid]: player
+            }
         }, { merge: true });
         addToast(`Voted for ${player}`);
     };
@@ -1564,240 +1457,38 @@ function MatchHistory({ currentUser, members }) {
         if (!votes) return null;
         const tally = {};
         Object.values(votes).forEach(v => tally[v] = (tally[v] || 0) + 1);
-        let max = 0; let leader = null;
+        let max = 0;
+        let leader = null;
         Object.entries(tally).forEach(([p, c]) => { if (c > max) { max = c; leader = p; } });
         return { leader, count: max };
     };
 
-    const getResultColor = (my, enemy) => {
-        const m = parseInt(my); const e = parseInt(enemy);
-        if (m > e) return 'border-l-4 border-l-green-500';
-        if (m < e) return 'border-l-4 border-l-red-600';
-        return 'border-l-4 border-l-neutral-500';
-    };
-
     return (
-        <Card className="min-h-full">
-            <div className="flex justify-between items-center mb-6">
-                <h3 className="text-2xl font-black text-white flex items-center gap-3"><span className="text-red-600">MATCH</span> HISTORY</h3>
-                <ButtonSecondary onClick={() => setIsAdding(!isAdding)} className="text-xs">
-                    {isAdding ? 'Cancel' : '+ Log Analysis'}
-                </ButtonSecondary>
-            </div>
-
-            {/* --- MANUAL ADD FORM --- */}
-            {isAdding && (
-                <div className="mb-8 bg-black/50 p-6 rounded-2xl border border-white/10 space-y-4 animate-fade-in relative overflow-hidden">
-                    <div className="absolute top-0 left-0 w-1 h-full bg-red-600"></div>
-                    <h4 className="text-white font-bold uppercase text-sm">Log Unscheduled Match</h4>
-                    <div className="grid grid-cols-2 gap-3">
-                        <Input placeholder="Opponent Name" value={newMatch.opponent} onChange={e => setNewMatch({ ...newMatch, opponent: e.target.value })} />
-                        <Input type="date" value={newMatch.date} onChange={e => setNewMatch({ ...newMatch, date: e.target.value })} className="[color-scheme:dark]" />
-                    </div>
-                    <div className="grid grid-cols-2 gap-3">
-                        <Select value={newMatch.map} onChange={e => setNewMatch({ ...newMatch, map: e.target.value })}>
-                            {MAPS.map(m => <option key={m} value={m}>{m}</option>)}
-                        </Select>
-                        <Input placeholder="VOD Link (Optional)" value={newMatch.vod} onChange={e => setNewMatch({ ...newMatch, vod: e.target.value })} />
-                    </div>
-
-                    {/* Scores */}
-                    <div className="grid grid-cols-4 gap-2">
-                        <div className="col-span-2 flex gap-2">
-                            <Input placeholder="My Score" value={newMatch.myScore} onChange={e => setNewMatch({ ...newMatch, myScore: e.target.value })} type="number" />
-                            <Input placeholder="Enemy Score" value={newMatch.enemyScore} onChange={e => setNewMatch({ ...newMatch, enemyScore: e.target.value })} type="number" />
-                        </div>
-                        <Input placeholder="Atk Wins" value={newMatch.atkScore} onChange={e => setNewMatch({ ...newMatch, atkScore: e.target.value })} type="number" />
-                        <Input placeholder="Def Wins" value={newMatch.defScore} onChange={e => setNewMatch({ ...newMatch, defScore: e.target.value })} type="number" />
-                    </div>
-
-                    {/* NEW: ADVANCED ANALYTICS ROW */}
-                    <div className="grid grid-cols-3 gap-3 p-3 bg-neutral-900/50 rounded-lg border border-white/5">
-                        <div>
-                            <label className="text-[10px] text-neutral-500 font-bold uppercase block mb-1">Pistols (0-2)</label>
-                            <Input placeholder="#" value={newMatch.pistols} onChange={e => setNewMatch({ ...newMatch, pistols: e.target.value })} type="number" />
-                        </div>
-                        <div>
-                            <label className="text-[10px] text-neutral-500 font-bold uppercase block mb-1">Eco Wins</label>
-                            <Input placeholder="#" value={newMatch.ecos} onChange={e => setNewMatch({ ...newMatch, ecos: e.target.value })} type="number" />
-                        </div>
-                        <div>
-                            <label className="text-[10px] text-neutral-500 font-bold uppercase block mb-1">First Blood %</label>
-                            <Input placeholder="%" value={newMatch.fb} onChange={e => setNewMatch({ ...newMatch, fb: e.target.value })} type="number" />
-                        </div>
-                    </div>
-
-                    <ButtonPrimary onClick={handleManualAdd} className="w-full py-3 text-xs">Save to History</ButtonPrimary>
-                </div>
-            )}
-
-            {/* --- PENDING REPORTS SECTION --- */}
-            {pending.length > 0 && (
-                <div className="mb-8">
-                    <h4 className="text-xs font-black text-neutral-500 uppercase tracking-widest mb-3 flex items-center gap-2">
-                        <span className="w-2 h-2 rounded-full bg-yellow-500 animate-pulse"></span> Pending Reports
-                    </h4>
-                    <div className="grid grid-cols-1 gap-3">
-                        {pending.map(p => (
-                            <div key={p.id} className="bg-neutral-900/50 border border-yellow-500/20 p-4 rounded-xl flex flex-col md:flex-row justify-between items-center gap-4">
-                                <div>
-                                    <div className="font-bold text-white text-lg">{p.opponent}</div>
-                                    <div className="text-xs text-neutral-400">{p.date} • {p.time} • <span className="text-red-400">{p.map}</span></div>
-                                </div>
-                                {editingId === p.id ? (
-                                    <div className="flex-1 w-full bg-black p-4 rounded-lg border border-neutral-700 animate-fade-in">
-                                        <div className="text-xs text-yellow-500 font-bold mb-2 uppercase">Input Stats</div>
-                                        <div className="grid grid-cols-4 gap-2 mb-2">
-                                            <Input placeholder="Us" value={editForm.myScore} onChange={e => setEditForm({ ...editForm, myScore: e.target.value })} type="number" />
-                                            <Input placeholder="Them" value={editForm.enemyScore} onChange={e => setEditForm({ ...editForm, enemyScore: e.target.value })} type="number" />
-                                            <Input placeholder="Atk" value={editForm.atkScore} onChange={e => setEditForm({ ...editForm, atkScore: e.target.value })} type="number" />
-                                            <Input placeholder="Def" value={editForm.defScore} onChange={e => setEditForm({ ...editForm, defScore: e.target.value })} type="number" />
-                                        </div>
-                                        {/* NEW: ANALYTICS FOR PENDING */}
-                                        <div className="grid grid-cols-3 gap-2 mb-2">
-                                            <Input placeholder="Pistols" value={editForm.pistols} onChange={e => setEditForm({ ...editForm, pistols: e.target.value })} type="number" />
-                                            <Input placeholder="Ecos" value={editForm.ecos} onChange={e => setEditForm({ ...editForm, ecos: e.target.value })} type="number" />
-                                            <Input placeholder="FB %" value={editForm.fb} onChange={e => setEditForm({ ...editForm, fb: e.target.value })} type="number" />
-                                        </div>
-                                        <div className="flex gap-2">
-                                            <ButtonPrimary onClick={saveEdit} className="text-xs py-2 flex-1">Confirm</ButtonPrimary>
-                                            <ButtonSecondary onClick={() => setEditingId(null)} className="text-xs py-2">Cancel</ButtonSecondary>
-                                        </div>
-                                    </div>
-                                ) : (
-                                    <button onClick={() => openEditor(p, true)} className="bg-yellow-600/20 hover:bg-yellow-600 text-yellow-500 hover:text-white border border-yellow-600/50 px-6 py-2 rounded-lg font-bold text-xs uppercase transition-all shadow-lg">
-                                        ✅ Report Score
-                                    </button>
-                                )}
-                            </div>
-                        ))}
-                    </div>
-                </div>
-            )}
-
-            {/* --- MATCH HISTORY LIST --- */}
-            <h4 className="text-xs font-black text-neutral-500 uppercase tracking-widest mb-3">Completed Operations</h4>
+        <Card>
+            <div className="flex justify-between items-center mb-6"><h3 className="text-2xl font-black text-white flex items-center gap-3"><span className="text-red-600">MATCH</span> HISTORY</h3><ButtonSecondary onClick={() => setIsAdding(!isAdding)} className="text-xs">{isAdding ? 'Cancel' : '+ Log Match'}</ButtonSecondary></div>
+            {isAdding && (<div className="mb-6 bg-black/50 p-4 rounded-xl border border-white/10 space-y-2 animate-fade-in"><div className="grid grid-cols-2 gap-2"><Input placeholder="Opponent" value={newMatch.opponent} onChange={e => setNewMatch({ ...newMatch, opponent: e.target.value })} /><Input type="date" value={newMatch.date} onChange={e => setNewMatch({ ...newMatch, date: e.target.value })} className="[color-scheme:dark]" /></div><div className="grid grid-cols-2 gap-2"><Select value={newMatch.map} onChange={e => setNewMatch({ ...newMatch, map: e.target.value })}>{MAPS.map(m => <option key={m}>{m}</option>)}</Select><Input placeholder="VOD Link" value={newMatch.vod} onChange={e => setNewMatch({ ...newMatch, vod: e.target.value })} /></div><div className="grid grid-cols-4 gap-2"><Input placeholder="Us" value={newMatch.myScore} onChange={e => setNewMatch({ ...newMatch, myScore: e.target.value })} /><Input placeholder="Them" value={newMatch.enemyScore} onChange={e => setNewMatch({ ...newMatch, enemyScore: e.target.value })} /><Input placeholder="Atk" value={newMatch.atkScore} onChange={e => setNewMatch({ ...newMatch, atkScore: e.target.value })} /><Input placeholder="Def" value={newMatch.defScore} onChange={e => setNewMatch({ ...newMatch, defScore: e.target.value })} /></div><ButtonPrimary onClick={handleAdd} className="w-full py-2 text-xs">Save Result</ButtonPrimary></div>)}
             <div className="space-y-4">
-                {history.length === 0 && <div className="text-neutral-600 italic text-center py-8">No match history recorded.</div>}
-
-                {history.map(m => {
-                    // --- EDIT MODE FOR EXISTING HISTORY ---
-                    if (editingId === m.id) return (
-                        <div key={m.id} className="bg-neutral-900 border border-red-600 p-4 rounded-xl space-y-3 animate-fade-in">
-                            <div className="flex justify-between items-center border-b border-red-900/30 pb-2">
-                                <span className="text-red-500 font-bold text-xs uppercase">Editing Record</span>
-                                <button onClick={() => setEditingId(null)} className="text-neutral-500 hover:text-white text-xs">Cancel</button>
-                            </div>
-                            <div className="grid grid-cols-2 gap-3">
-                                <Input value={editForm.opponent} onChange={e => setEditForm({ ...editForm, opponent: e.target.value })} />
-                                <Input type="date" value={editForm.date} onChange={e => setEditForm({ ...editForm, date: e.target.value })} className="[color-scheme:dark]" />
-                            </div>
-                            <div className="grid grid-cols-2 gap-3">
-                                <Select value={editForm.map} onChange={e => setEditForm({ ...editForm, map: e.target.value })}>
-                                    {MAPS.map(map => <option key={map} value={map}>{map}</option>)}
-                                </Select>
-                                <Input placeholder="VOD Link" value={editForm.vod} onChange={e => setEditForm({ ...editForm, vod: e.target.value })} />
-                            </div>
-                            <div className="grid grid-cols-4 gap-2">
-                                <div className="col-span-2 flex gap-2">
-                                    <Input placeholder="Us" value={editForm.myScore} onChange={e => setEditForm({ ...editForm, myScore: e.target.value })} />
-                                    <Input placeholder="Them" value={editForm.enemyScore} onChange={e => setEditForm({ ...editForm, enemyScore: e.target.value })} />
-                                </div>
-                                <Input placeholder="Atk" value={editForm.atkScore} onChange={e => setEditForm({ ...editForm, atkScore: e.target.value })} />
-                                <Input placeholder="Def" value={editForm.defScore} onChange={e => setEditForm({ ...editForm, defScore: e.target.value })} />
-                            </div>
-                            {/* NEW: ANALYTICS EDITING */}
-                            <div className="grid grid-cols-3 gap-2">
-                                <Input placeholder="Pistols" value={editForm.pistols} onChange={e => setEditForm({ ...editForm, pistols: e.target.value })} />
-                                <Input placeholder="Ecos" value={editForm.ecos} onChange={e => setEditForm({ ...editForm, ecos: e.target.value })} />
-                                <Input placeholder="FB %" value={editForm.fb} onChange={e => setEditForm({ ...editForm, fb: e.target.value })} />
-                            </div>
-                            <ButtonPrimary onClick={saveEdit} className="w-full py-2 text-xs">Update Record</ButtonPrimary>
-                        </div>
-                    );
-
-                    // --- VIEW MODE ---
+                {matches.map(m => {
+                    if (editingId === m.id) return (<div key={m.id} className="bg-neutral-900 border border-red-600 p-4 rounded-xl space-y-2"><div className="flex justify-between mb-2"><span className="text-red-500 font-bold text-xs uppercase">Editing Match</span><button onClick={() => setEditingId(null)} className="text-neutral-500 hover:text-white">Cancel</button></div><div className="grid grid-cols-2 gap-2"><Input value={editForm.opponent} onChange={e => setEditForm({ ...editForm, opponent: e.target.value })} /><Input type="date" value={editForm.date} onChange={e => setEditForm({ ...editForm, date: e.target.value })} className="[color-scheme:dark]" /></div><div className="grid grid-cols-2 gap-2"><Select value={editForm.map} onChange={e => setEditForm({ ...editForm, map: e.target.value })}>{MAPS.map(map => <option key={map}>{map}</option>)}</Select><Input placeholder="VOD Link" value={editForm.vod} onChange={e => setEditForm({ ...editForm, vod: e.target.value })} /></div><div className="grid grid-cols-4 gap-2"><Input placeholder="Us" value={editForm.myScore} onChange={e => setEditForm({ ...editForm, myScore: e.target.value })} /><Input placeholder="Them" value={editForm.enemyScore} onChange={e => setEditForm({ ...editForm, enemyScore: e.target.value })} /><Input placeholder="Atk" value={editForm.atkScore} onChange={e => setEditForm({ ...editForm, atkScore: e.target.value })} /><Input placeholder="Def" value={editForm.defScore} onChange={e => setEditForm({ ...editForm, defScore: e.target.value })} /></div><ButtonPrimary onClick={saveEdit} className="w-full py-2 text-xs">Save Changes</ButtonPrimary></div>);
                     const voteData = getVoteLeader(m.mvpVotes);
-                    const isWin = parseInt(m.result.myScore) > parseInt(m.result.enemyScore);
-
-                    return (
-                        <div key={m.id} onClick={() => setExpandedId(expandedId === m.id ? null : m.id)} className={`bg-black/40 border border-neutral-800 p-4 rounded-xl relative overflow-hidden cursor-pointer hover:bg-neutral-900 transition-all ${getResultColor(m.result.myScore, m.result.enemyScore)}`}>
-                            {expandedId === m.id && (isWin ? <VictoryStamp /> : <DefeatStamp />)}
-                            <div className="flex justify-between items-center relative z-10">
-                                <div>
-                                    <div className="text-sm font-bold text-white flex items-center gap-2">
-                                        {m.opponent}
-                                        {m.result.vod && (
-                                            <a href={m.result.vod} target="_blank" rel="noreferrer" onClick={e => e.stopPropagation()} className="text-[9px] bg-red-600 text-white px-2 py-0.5 rounded hover:bg-red-500 font-black uppercase flex items-center gap-1"><span>▶</span> VOD</a>
-                                        )}
-                                    </div>
-                                    <div className="text-xs text-neutral-500 font-mono mt-0.5">{m.date} • {m.result.map}</div>
-                                </div>
-                                <div className="flex items-center gap-4">
-                                    <div className={`text-2xl font-black ${isWin ? 'text-green-500' : 'text-red-500'}`}>{m.result.myScore} - {m.result.enemyScore}</div>
-                                    <div className="flex gap-2">
-                                        <button onClick={(e) => { e.stopPropagation(); openEditor(m); }} className="text-neutral-600 hover:text-white p-1" title="Edit">✏️</button>
-                                        <button onClick={(e) => { e.stopPropagation(); deleteEvent(m.id); }} className="text-neutral-600 hover:text-red-500 p-1" title="Delete">🗑️</button>
-                                    </div>
-                                </div>
+                    return (<div key={m.id} onClick={() => setExpandedId(expandedId === m.id ? null : m.id)} className={`bg-black/40 border border-neutral-800 p-4 rounded-xl relative overflow-hidden cursor-pointer hover:bg-neutral-900 transition-all ${m.result ? getResultColor(m.result.myScore, m.result.enemyScore) : ''}`}>{expandedId === m.id && (parseInt(m.result.myScore) > parseInt(m.result.enemyScore) ? <VictoryStamp /> : <DefeatStamp />)}<div className="flex justify-between items-center relative z-10"><div><div className="text-sm font-bold text-white flex items-center gap-2">{m.opponent} {m.result.vod && <a href={m.result.vod} target="_blank" rel="noreferrer" onClick={e => e.stopPropagation()} className="text-[9px] bg-red-600 text-white px-2 py-0.5 rounded hover:bg-red-500">▶ WATCH VOD</a>}</div><div className="text-xs text-neutral-500">{m.date} • {m.result.map}</div></div><div className="flex items-center gap-4"><div className={`text-2xl font-black ${parseInt(m.result.myScore) > parseInt(m.result.enemyScore) ? 'text-green-500' : 'text-red-500'}`}>{m.result.myScore} - {m.result.enemyScore}</div><button onClick={(e) => { e.stopPropagation(); startEdit(m); }} className="text-neutral-600 hover:text-white p-1">✏️</button></div></div>{expandedId === m.id && (<div className="mt-4 pt-4 border-t border-neutral-800"><div className="grid grid-cols-2 gap-4 text-center mb-4"><div className="bg-neutral-900 p-2 rounded"><div className="text-[10px] text-neutral-500 uppercase font-bold">Attack</div><div className="text-white font-bold">{m.result.atkScore || '-'}</div></div><div className="bg-neutral-900 p-2 rounded"><div className="text-[10px] text-neutral-500 uppercase font-bold">Defense</div><div className="text-white font-bold">{m.result.defScore || '-'}</div></div></div>
+                        <div className="bg-neutral-900/50 p-3 rounded-lg border border-white/5 flex items-center justify-between" onClick={e => e.stopPropagation()}>
+                            <div className="text-xs font-bold text-neutral-400">TEAM MVP VOTE: {voteData ? <span className="text-yellow-500">{voteData.leader} ({voteData.count})</span> : 'None'}</div>
+                            <div className="flex items-center gap-2">
+                                <span className="text-[10px] text-neutral-500 uppercase mr-2">Voted: {m.mvpVotes?.[currentUser.uid] || 'No'}</span>
+                                <select onChange={(e) => castVote(m.id, e.target.value)} className="bg-black text-white text-xs p-1 rounded border border-neutral-700 outline-none" defaultValue="">
+                                    <option value="" disabled>Vote...</option>
+                                    {members.map(mem => <option key={mem} value={mem}>{mem}</option>)}
+                                </select>
                             </div>
-
-                            {/* Details Drawer */}
-                            {expandedId === m.id && (
-                                <div className="mt-4 pt-4 border-t border-neutral-800 animate-slide-in">
-                                    {/* SCORES ROW */}
-                                    <div className="grid grid-cols-2 gap-4 text-center mb-4">
-                                        <div className="bg-neutral-900 p-2 rounded border border-neutral-800">
-                                            <div className="text-[10px] text-neutral-500 uppercase font-bold">Attack Wins</div>
-                                            <div className="text-white font-bold text-lg">{m.result.atkScore || '-'}</div>
-                                        </div>
-                                        <div className="bg-neutral-900 p-2 rounded border border-neutral-800">
-                                            <div className="text-[10px] text-neutral-500 uppercase font-bold">Defense Wins</div>
-                                            <div className="text-white font-bold text-lg">{m.result.defScore || '-'}</div>
-                                        </div>
-                                    </div>
-
-                                    {/* NEW: ANALYTICS ROW */}
-                                    <div className="grid grid-cols-3 gap-2 text-center mb-4">
-                                        <div className="bg-neutral-900/50 p-2 rounded border border-white/5">
-                                            <div className="text-[9px] text-neutral-400 uppercase font-bold">Pistols Won</div>
-                                            <div className={`text-sm font-black ${m.result.pistols >= 1 ? 'text-green-500' : 'text-neutral-500'}`}>{m.result.pistols || '0'}/2</div>
-                                        </div>
-                                        <div className="bg-neutral-900/50 p-2 rounded border border-white/5">
-                                            <div className="text-[9px] text-neutral-400 uppercase font-bold">Eco Wins</div>
-                                            <div className="text-sm font-black text-white">{m.result.ecos || '0'}</div>
-                                        </div>
-                                        <div className="bg-neutral-900/50 p-2 rounded border border-white/5">
-                                            <div className="text-[9px] text-neutral-400 uppercase font-bold">FB %</div>
-                                            <div className="text-sm font-black text-white">{m.result.fb || '0'}%</div>
-                                        </div>
-                                    </div>
-
-                                    <div className="bg-neutral-900/50 p-3 rounded-lg border border-white/5 flex flex-wrap gap-4 items-center justify-between" onClick={e => e.stopPropagation()}>
-                                        <div className="text-xs font-bold text-neutral-400 flex items-center gap-2">
-                                            <span>⭐ MVP VOTE:</span>
-                                            {voteData ? <span className="text-yellow-500 text-sm">{voteData.leader} ({voteData.count})</span> : <span className="text-neutral-600">No votes</span>}
-                                        </div>
-                                        <div className="flex items-center gap-2">
-                                            {m.mvpVotes?.[currentUser.uid] ? (
-                                                <span className="text-[10px] bg-green-900/30 text-green-500 px-2 py-1 rounded border border-green-900/50">Voted for {m.mvpVotes[currentUser.uid]}</span>
-                                            ) : (
-                                                <select onChange={(e) => castVote(m.id, e.target.value)} className="bg-black text-white text-xs p-1.5 rounded border border-neutral-700 outline-none focus:border-red-500 cursor-pointer" defaultValue="">
-                                                    <option value="" disabled>Select MVP...</option>
-                                                    {members.map(mem => <option key={mem} value={mem}>{mem}</option>)}
-                                                </select>
-                                            )}
-                                        </div>
-                                    </div>
-                                </div>
-                            )}
                         </div>
-                    );
+                    </div>)}</div>);
                 })}
             </div>
         </Card>
     );
 }
+
 function RosterManager({ members, events }) {
     const [rosterData, setRosterData] = useState({});
     const [mode, setMode] = useState('edit');
@@ -1911,10 +1602,75 @@ function RosterManager({ members, events }) {
 function AdminPanel() {
     const [applications, setApplications] = useState([]);
     const addToast = useToast();
-    useEffect(() => { const unsub = onSnapshot(collection(db, 'applications'), (snap) => { const apps = []; snap.forEach(doc => apps.push({ id: doc.id, ...doc.data() })); setApplications(apps); }); return () => unsub(); }, []);
-    const acceptApplicant = async (app) => { await setDoc(doc(db, 'roster', app.user), { rank: app.rank, role: 'Tryout', notes: `Tracker: ${app.tracker}\nWhy: ${app.why}`, joinedAt: new Date().toISOString() }); await deleteDoc(doc(db, 'applications', app.id)); addToast(`Accepted ${app.user}`); };
-    const rejectApplicant = async (id) => { await deleteDoc(doc(db, 'applications', id)); addToast('Applicant Rejected'); };
-    return (<Card><h2 className="text-3xl font-black text-white mb-6 flex items-center gap-3"><span className="text-red-600">ADMIN</span> DASHBOARD</h2><div className="space-y-6">{applications.length === 0 ? <p className="text-neutral-600 italic">No pending applications.</p> : (<div className="grid grid-cols-1 gap-4">{applications.map(app => (<div key={app.id} className="bg-black border border-neutral-800 p-6 rounded-2xl flex flex-col md:flex-row justify-between gap-6"><div className="space-y-2 flex-1"><div className="flex items-center gap-3"><h4 className="text-xl font-black text-white">{app.user}</h4><span className="bg-neutral-900 text-neutral-400 text-xs px-2 py-1 rounded font-bold uppercase border border-neutral-800">{app.rank}</span><span className="bg-neutral-900 text-neutral-400 text-xs px-2 py-1 rounded font-bold uppercase border border-neutral-800">{app.role}</span></div><p className="text-neutral-400 text-sm"><strong className="text-neutral-500">Experience:</strong> {app.exp}</p><p className="text-neutral-300 text-sm italic">"{app.why}"</p><a href={app.tracker} target="_blank" rel="noreferrer" className="text-red-500 text-xs font-bold hover:underline block mt-2">View Tracker Profile &rarr;</a></div><div className="flex flex-row md:flex-col gap-3 justify-center"><button onClick={() => acceptApplicant(app)} className="bg-green-900/20 hover:bg-green-600 border border-green-900 text-green-500 hover:text-white font-bold px-6 py-3 rounded-xl transition-all">ACCEPT</button><button onClick={() => rejectApplicant(app.id)} className="bg-red-900/20 hover:bg-red-900 text-red-500 hover:text-white font-bold px-6 py-3 rounded-xl transition-all border border-red-900">REJECT</button></div></div>))}</div>)}</div></Card>);
+
+    useEffect(() => {
+        const unsub = onSnapshot(collection(db, 'applications'), (snap) => {
+            const apps = [];
+            snap.forEach(doc => apps.push({ id: doc.id, ...doc.data() }));
+            setApplications(apps);
+        });
+        return () => unsub();
+    }, []);
+
+    const acceptApplicant = async (app) => {
+        try {
+            // Check for valid username or generate fallback to prevent crash
+            const safeUsername = app.user || `Agent-${app.uid ? app.uid.slice(0, 5) : Math.random().toString(36).substr(2, 5)}`;
+
+            await setDoc(doc(db, 'roster', safeUsername), {
+                rank: app.rank || 'Unranked',
+                role: 'Tryout',
+                notes: `Tracker: ${app.tracker || 'N/A'}\nWhy: ${app.why || 'N/A'}\nExp: ${app.exp || 'N/A'}`,
+                joinedAt: new Date().toISOString(),
+                uid: app.uid || null
+            });
+
+            await deleteDoc(doc(db, 'applications', app.id));
+            addToast(`Accepted ${safeUsername}`);
+        } catch (e) {
+            console.error("Accept Error:", e);
+            addToast(`Failed: ${e.message}`, 'error');
+        }
+    };
+
+    const rejectApplicant = async (id) => {
+        try {
+            await deleteDoc(doc(db, 'applications', id));
+            addToast('Applicant Rejected');
+        } catch (e) {
+            addToast('Error rejecting', 'error');
+        }
+    };
+
+    return (
+        <Card>
+            <h2 className="text-3xl font-black text-white mb-6 flex items-center gap-3"><span className="text-red-600">ADMIN</span> DASHBOARD</h2>
+            <div className="space-y-6">
+                {applications.length === 0 ? <p className="text-neutral-600 italic">No pending applications.</p> : (
+                    <div className="grid grid-cols-1 gap-4">
+                        {applications.map(app => (
+                            <div key={app.id} className="bg-black border border-neutral-800 p-6 rounded-2xl flex flex-col md:flex-row justify-between gap-6">
+                                <div className="space-y-2 flex-1">
+                                    <div className="flex items-center gap-3">
+                                        <h4 className="text-xl font-black text-white">{app.user || 'Unknown User'}</h4>
+                                        <span className="bg-neutral-900 text-neutral-400 text-xs px-2 py-1 rounded font-bold uppercase border border-neutral-800">{app.rank}</span>
+                                        <span className="bg-neutral-900 text-neutral-400 text-xs px-2 py-1 rounded font-bold uppercase border border-neutral-800">{app.role}</span>
+                                    </div>
+                                    <p className="text-neutral-400 text-sm"><strong className="text-neutral-500">Experience:</strong> {app.exp || 'N/A'}</p>
+                                    <p className="text-neutral-300 text-sm italic">"{app.why}"</p>
+                                    <a href={app.tracker} target="_blank" rel="noreferrer" className="text-red-500 text-xs font-bold hover:underline block mt-2">View Tracker Profile &rarr;</a>
+                                </div>
+                                <div className="flex flex-row md:flex-col gap-3 justify-center">
+                                    <button onClick={() => acceptApplicant(app)} className="bg-green-900/20 hover:bg-green-600 border border-green-900 text-green-500 hover:text-white font-bold px-6 py-3 rounded-xl transition-all">ACCEPT</button>
+                                    <button onClick={() => rejectApplicant(app.id)} className="bg-red-900/20 hover:bg-red-900 text-red-500 hover:text-white font-bold px-6 py-3 rounded-xl transition-all border border-red-900">REJECT</button>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                )}
+            </div>
+        </Card>
+    );
 }
 
 function PartnerDirectory() {
@@ -1934,18 +1690,12 @@ function MapVeto() {
 }
 
 function ContentManager() {
-    // Existing State
     const [news, setNews] = useState([]);
     const [intel, setIntel] = useState([]);
     const [merch, setMerch] = useState([]);
     const [newNews, setNewNews] = useState({ title: '', body: '', date: new Date().toISOString().split('T')[0], type: 'Update', isFeatured: false });
     const [newIntel, setNewIntel] = useState({ title: '', subtitle: '', url: '', date: new Date().toISOString().split('T')[0] });
     const [newMerch, setNewMerch] = useState({ name: '', price: '', link: '' });
-
-    // Achievements State
-    const [achievements, setAchievements] = useState([]);
-    const [newAchievement, setNewAchievement] = useState({ title: '', subtitle: '', icon: '🏆', highlight: false });
-
     const addToast = useToast();
 
     // Fetch Data
@@ -1962,12 +1712,7 @@ function ContentManager() {
             const m = []; snap.forEach(doc => m.push({ id: doc.id, ...doc.data() }));
             setMerch(m);
         });
-        const unsubAchieve = onSnapshot(collection(db, 'achievements'), (snap) => {
-            const a = []; snap.forEach(doc => a.push({ id: doc.id, ...doc.data() }));
-            setAchievements(a);
-        });
-
-        return () => { unsubNews(); unsubIntel(); unsubMerch(); unsubAchieve(); };
+        return () => { unsubNews(); unsubIntel(); unsubMerch(); };
     }, []);
 
     // Handlers
@@ -1989,17 +1734,7 @@ function ContentManager() {
         if (!newMerch.name || !newMerch.price) return addToast('Name and Price required', 'error');
         await addDoc(collection(db, 'merch'), newMerch);
         setNewMerch({ name: '', price: '', link: '' });
-        addToast('Item Added');
-    };
-
-    const addAchievement = async () => {
-        if (!newAchievement.title || !newAchievement.subtitle) return addToast('Details required', 'error');
-        await addDoc(collection(db, 'achievements'), {
-            ...newAchievement,
-            createdAt: new Date().toISOString()
-        });
-        setNewAchievement({ title: '', subtitle: '', icon: '🏆', highlight: false });
-        addToast('Trophy Added');
+        addToast('Item Added to Armory');
     };
 
     const deleteItem = async (collectionName, id) => {
@@ -2008,76 +1743,100 @@ function ContentManager() {
     };
 
     return (
-        // UPDATED GRID CLASS HERE: grid-cols-1 md:grid-cols-2 (Creates 2x2 layout)
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-8 h-full">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 h-full">
+            {/* NEWS MANAGER */}
+            <Card className="h-full flex flex-col">
+                <h3 className="text-2xl font-black text-white mb-6 flex items-center gap-2"><span className="text-red-600">/</span> MANAGE SITREP (NEWS)</h3>
 
-            {/* 1. NEWS MANAGER */}
-            <Card className="h-full flex flex-col min-h-[400px]">
-                <h3 className="text-xl font-black text-white mb-4 flex items-center gap-2"><span className="text-red-600">/</span> SITREP</h3>
-                <div className="bg-neutral-900/50 p-4 rounded-xl border border-white/10 space-y-3 mb-4">
-                    <div className="flex justify-between items-center mb-1">
-                        <span className="text-[10px] font-bold text-neutral-500 uppercase">Post News</span>
-                        <label className="flex items-center gap-2 cursor-pointer"><input type="checkbox" checked={newNews.isFeatured} onChange={e => setNewNews({ ...newNews, isFeatured: e.target.checked })} className="accent-red-600 w-3 h-3" /><span className="text-[10px] font-bold text-red-500 uppercase">Featured</span></label>
+                <div className="bg-neutral-900/50 p-4 rounded-xl border border-white/10 space-y-3 mb-6">
+                    <div className="flex justify-between items-center mb-2">
+                        <span className="text-xs font-bold text-neutral-500 uppercase">New Entry</span>
+                        <label className="flex items-center gap-2 cursor-pointer">
+                            <input type="checkbox" checked={newNews.isFeatured} onChange={e => setNewNews({ ...newNews, isFeatured: e.target.checked })} className="accent-red-600 w-4 h-4" />
+                            <span className="text-xs font-bold text-red-500 uppercase">Make Featured</span>
+                        </label>
                     </div>
                     <Input placeholder="Headline" value={newNews.title} onChange={e => setNewNews({ ...newNews, title: e.target.value })} />
-                    <textarea className="w-full bg-black/40 border border-neutral-800 rounded-xl p-3 text-white text-xs" rows={2} placeholder="Body..." value={newNews.body} onChange={e => setNewNews({ ...newNews, body: e.target.value })} />
-                    <ButtonPrimary onClick={addNews} className="w-full py-2 text-xs">Post</ButtonPrimary>
-                </div>
-                <div className="flex-1 overflow-y-auto custom-scrollbar space-y-2">{news.map(n => (<div key={n.id} className="p-3 bg-black/40 rounded border border-neutral-800 flex justify-between items-start"><div className="w-full"><div className="font-bold text-white text-xs truncate">{n.title}</div></div><button onClick={() => deleteItem('news', n.id)} className="text-neutral-500 hover:text-red-500 ml-2">×</button></div>))}</div>
-            </Card>
-
-            {/* 2. INTEL MANAGER */}
-            <Card className="h-full flex flex-col min-h-[400px]">
-                <h3 className="text-xl font-black text-white mb-4 flex items-center gap-2"><span className="text-red-600">/</span> INTEL</h3>
-                <div className="bg-neutral-900/50 p-4 rounded-xl border border-white/10 space-y-3 mb-4">
-                    <span className="text-[10px] font-bold text-neutral-500 uppercase">Add VOD</span>
-                    <Input placeholder="Title" value={newIntel.title} onChange={e => setNewIntel({ ...newIntel, title: e.target.value })} />
-                    <Input placeholder="URL" value={newIntel.url} onChange={e => setNewIntel({ ...newIntel, url: e.target.value })} />
-                    <ButtonPrimary onClick={addIntel} className="w-full py-2 text-xs">Add</ButtonPrimary>
-                </div>
-                <div className="flex-1 overflow-y-auto custom-scrollbar space-y-2">{intel.map(i => (<div key={i.id} className="p-3 bg-black/40 rounded border border-neutral-800 flex justify-between items-center"><div className="truncate text-xs text-white font-bold">{i.title}</div><button onClick={() => deleteItem('intel', i.id)} className="text-neutral-500 hover:text-red-500">×</button></div>))}</div>
-            </Card>
-
-            {/* 3. ARMORY MANAGER */}
-            <Card className="h-full flex flex-col min-h-[400px]">
-                <h3 className="text-xl font-black text-white mb-4 flex items-center gap-2"><span className="text-red-600">/</span> ARMORY</h3>
-                <div className="bg-neutral-900/50 p-4 rounded-xl border border-white/10 space-y-3 mb-4">
-                    <span className="text-[10px] font-bold text-neutral-500 uppercase">New Item</span>
-                    <Input placeholder="Name" value={newMerch.name} onChange={e => setNewMerch({ ...newMerch, name: e.target.value })} />
-                    <Input placeholder="Price" value={newMerch.price} onChange={e => setNewMerch({ ...newMerch, price: e.target.value })} />
-                    <ButtonPrimary onClick={addMerch} className="w-full py-2 text-xs">Add</ButtonPrimary>
-                </div>
-                <div className="flex-1 overflow-y-auto custom-scrollbar space-y-2">{merch.map(m => (<div key={m.id} className="p-3 bg-black/40 rounded border border-neutral-800 flex justify-between items-center"><div className="truncate text-xs text-white font-bold">{m.name}</div><button onClick={() => deleteItem('merch', m.id)} className="text-neutral-500 hover:text-red-500">×</button></div>))}</div>
-            </Card>
-
-            {/* 4. TROPHY MANAGER */}
-            <Card className="h-full flex flex-col min-h-[400px]">
-                <h3 className="text-xl font-black text-white mb-4 flex items-center gap-2"><span className="text-red-600">/</span> TROPHIES</h3>
-                <div className="bg-neutral-900/50 p-4 rounded-xl border border-white/10 space-y-3 mb-4">
-                    <div className="flex justify-between items-center mb-1">
-                        <span className="text-[10px] font-bold text-neutral-500 uppercase">New Achievement</span>
-                        <label className="flex items-center gap-2 cursor-pointer"><input type="checkbox" checked={newAchievement.highlight} onChange={e => setNewAchievement({ ...newAchievement, highlight: e.target.checked })} className="accent-red-600 w-3 h-3" /><span className="text-[10px] font-bold text-red-500 uppercase">Red Text</span></label>
+                    <textarea className="w-full bg-black/40 border border-neutral-800 rounded-xl p-3 text-white text-sm" rows={3} placeholder="Content body..." value={newNews.body} onChange={e => setNewNews({ ...newNews, body: e.target.value })} />
+                    <div className="grid grid-cols-2 gap-2">
+                        <Input type="date" value={newNews.date} onChange={e => setNewNews({ ...newNews, date: e.target.value })} className="[color-scheme:dark]" />
+                        <Input placeholder="Type (e.g. Analysis, Shop)" value={newNews.type} onChange={e => setNewNews({ ...newNews, type: e.target.value })} />
                     </div>
-                    <div className="flex gap-2">
-                        <Select value={newAchievement.icon} onChange={e => setNewAchievement({ ...newAchievement, icon: e.target.value })} className="w-16 text-center text-xl">
-                            {['🏆', '🥇', '🥈', '🥉', '🎖️', '⭐', '🔥', '👑'].map(icon => <option key={icon}>{icon}</option>)}
-                        </Select>
-                        <Input placeholder="Title (e.g. PREMIER)" value={newAchievement.title} onChange={e => setNewAchievement({ ...newAchievement, title: e.target.value })} />
-                    </div>
-                    <Input placeholder="Subtitle (e.g. Winner 2024)" value={newAchievement.subtitle} onChange={e => setNewAchievement({ ...newAchievement, subtitle: e.target.value })} />
-                    <ButtonPrimary onClick={addAchievement} className="w-full py-2 text-xs">Add Trophy</ButtonPrimary>
+                    <ButtonPrimary onClick={addNews} className="w-full py-2 text-xs">Post News</ButtonPrimary>
                 </div>
+
                 <div className="flex-1 overflow-y-auto custom-scrollbar space-y-2">
-                    {achievements.map(a => (
-                        <div key={a.id} className="p-3 bg-black/40 rounded border border-neutral-800 flex justify-between items-center group">
-                            <div className="flex items-center gap-3">
-                                <span className="text-xl">{a.icon}</span>
-                                <div>
-                                    <div className={`text-xs font-black uppercase ${a.highlight ? 'text-red-500' : 'text-white'}`}>{a.title}</div>
-                                    <div className="text-[10px] text-neutral-500 font-bold uppercase">{a.subtitle}</div>
+                    {news.map(n => (
+                        <div key={n.id} className={`p-4 rounded-xl border flex justify-between items-start ${n.isFeatured ? 'bg-red-900/10 border-red-900/50' : 'bg-black/40 border-neutral-800'}`}>
+                            <div>
+                                <div className="flex items-center gap-2 mb-1">
+                                    {n.isFeatured && <span className="bg-red-600 text-white text-[9px] font-black px-1.5 py-0.5 rounded uppercase">Featured</span>}
+                                    <span className="text-neutral-500 text-[10px] font-mono uppercase">{n.date} • {n.type}</span>
                                 </div>
+                                <h4 className="font-bold text-white leading-tight">{n.title}</h4>
+                                <p className="text-neutral-400 text-xs mt-1 line-clamp-2">{n.body}</p>
                             </div>
-                            <button onClick={() => deleteItem('achievements', a.id)} className="text-neutral-600 hover:text-red-500 px-2">×</button>
+                            <button onClick={() => deleteItem('news', n.id)} className="text-neutral-600 hover:text-red-500 p-1">×</button>
+                        </div>
+                    ))}
+                </div>
+            </Card>
+
+            {/* INTEL (VODS) MANAGER */}
+            <Card className="h-full flex flex-col">
+                <h3 className="text-2xl font-black text-white mb-6 flex items-center gap-2"><span className="text-red-600">/</span> MANAGE INTEL (VODS)</h3>
+
+                <div className="bg-neutral-900/50 p-4 rounded-xl border border-white/10 space-y-3 mb-6">
+                    <span className="text-xs font-bold text-neutral-500 uppercase">New Video Link</span>
+                    <Input placeholder="Video Title (e.g. Finals Map 1)" value={newIntel.title} onChange={e => setNewIntel({ ...newIntel, title: e.target.value })} />
+                    <Input placeholder="Subtitle (e.g. Highlight Reel)" value={newIntel.subtitle} onChange={e => setNewIntel({ ...newIntel, subtitle: e.target.value })} />
+                    <Input placeholder="YouTube URL" value={newIntel.url} onChange={e => setNewIntel({ ...newIntel, url: e.target.value })} />
+                    <ButtonPrimary onClick={addIntel} className="w-full py-2 text-xs">Add Video</ButtonPrimary>
+                </div>
+
+                <div className="flex-1 overflow-y-auto custom-scrollbar space-y-2">
+                    {intel.map(i => (
+                        <div key={i.id} className="p-3 bg-black/40 border border-neutral-800 rounded-xl flex gap-3 items-center group">
+                            <div className="w-16 h-12 bg-neutral-900 rounded overflow-hidden flex-shrink-0 relative">
+                                {/* Simple Youtube Thumb Logic */}
+                                <img
+                                    src={`https://img.youtube.com/vi/${i.url.split('v=')[1]?.split('&')[0] || i.url.split('/').pop()}/mqdefault.jpg`}
+                                    className="w-full h-full object-cover opacity-50"
+                                    alt="thumb"
+                                    onError={(e) => e.target.style.display = 'none'}
+                                />
+                                <div className="absolute inset-0 flex items-center justify-center text-white">▶</div>
+                            </div>
+                            <div className="flex-1 min-w-0">
+                                <h4 className="font-bold text-white text-sm truncate">{i.title}</h4>
+                                <p className="text-neutral-500 text-xs truncate">{i.subtitle}</p>
+                            </div>
+                            <button onClick={() => deleteItem('intel', i.id)} className="text-neutral-600 hover:text-red-500 px-2">×</button>
+                        </div>
+                    ))}
+                </div>
+            </Card>
+
+            {/* ARMORY (MERCH) MANAGER */}
+            <Card className="h-full flex flex-col">
+                <h3 className="text-2xl font-black text-white mb-6 flex items-center gap-2"><span className="text-red-600">/</span> MANAGE ARMORY</h3>
+
+                <div className="bg-neutral-900/50 p-4 rounded-xl border border-white/10 space-y-3 mb-6">
+                    <span className="text-xs font-bold text-neutral-500 uppercase">New Product</span>
+                    <Input placeholder="Item Name (e.g. Jersey)" value={newMerch.name} onChange={e => setNewMerch({ ...newMerch, name: e.target.value })} />
+                    <Input placeholder="Price (e.g. $60.00 USD)" value={newMerch.price} onChange={e => setNewMerch({ ...newMerch, price: e.target.value })} />
+                    <Input placeholder="Store Link (Optional)" value={newMerch.link} onChange={e => setNewMerch({ ...newMerch, link: e.target.value })} />
+                    <ButtonPrimary onClick={addMerch} className="w-full py-2 text-xs">Add Product</ButtonPrimary>
+                </div>
+
+                <div className="flex-1 overflow-y-auto custom-scrollbar space-y-2">
+                    {merch.map(item => (
+                        <div key={item.id} className="p-3 bg-black/40 border border-neutral-800 rounded-xl flex justify-between items-center group">
+                            <div>
+                                <h4 className="font-bold text-white text-sm truncate">{item.name}</h4>
+                                <p className="text-red-500 text-xs font-bold">{item.price}</p>
+                            </div>
+                            <button onClick={() => deleteItem('merch', item.id)} className="text-neutral-600 hover:text-red-500 px-2">×</button>
                         </div>
                     ))}
                 </div>
@@ -2085,6 +1844,7 @@ function ContentManager() {
         </div>
     );
 }
+
 function SyrixDashboard({ onBack }) {
     const [currentUser, setCurrentUser] = useState(null);
     const [activeTab, setActiveTab] = useState('dashboard');
@@ -2156,11 +1916,14 @@ function SyrixDashboard({ onBack }) {
 
     // If logged in but not a member, show Application
     if (!isMember) return (
-        <div className="fixed inset-0 bg-black p-8 overflow-y-auto">
-            <div className="absolute top-4 left-4 z-50">
-                <button onClick={onBack} className="text-white font-bold uppercase hover:text-red-500 transition">&larr; Home</button>
+        <div className="fixed inset-0 bg-black w-full h-full flex flex-col items-center justify-center p-4 relative overflow-hidden">
+            <Background />
+            <div className="absolute top-6 left-6 z-50">
+                <button onClick={onBack} className="text-white font-bold uppercase hover:text-red-500 transition bg-black/50 px-4 py-2 rounded-full border border-white/10 backdrop-blur-md">&larr; Home</button>
             </div>
-            <div className="relative z-10 pt-12"><ApplicationForm currentUser={currentUser} /></div>
+            <div className="relative z-10 w-full max-w-3xl animate-fade-in">
+                <ApplicationForm currentUser={currentUser} />
+            </div>
         </div>
     );
 
@@ -2173,35 +1936,37 @@ function SyrixDashboard({ onBack }) {
             <Background />
 
             <header className="flex-none flex flex-col gap-4 px-6 py-4 border-b border-white/10 bg-black/40 backdrop-blur-md z-40">
-                <div className="flex justify-between items-center">
-                    <div className="flex items-center gap-4">
-                        <button onClick={onBack} className="text-neutral-500 hover:text-white transition">
-                            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"></path></svg>
-                        </button>
-                        <h1 className="text-3xl font-black tracking-tighter text-white drop-shadow-lg italic">SYRIX <span className="text-red-600">HUB</span></h1>
+                <div className="w-full max-w-[1920px] mx-auto"> {/* ADDED CENTERED CONTAINER FOR HEADER */}
+                    <div className="flex justify-between items-center mb-4">
+                        <div className="flex items-center gap-4">
+                            <button onClick={onBack} className="text-neutral-500 hover:text-white transition">
+                                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"></path></svg>
+                            </button>
+                            <h1 className="text-3xl font-black tracking-tighter text-white drop-shadow-lg italic">SYRIX <span className="text-red-600">HUB</span></h1>
+                        </div>
+                        <div className="flex items-center gap-4">
+                            <div className="text-right hidden md:block"><div className="text-sm font-bold text-white">{currentUser.displayName || 'Guest'}</div><button onClick={handleSignOut} className="text-[10px] text-red-500 font-bold uppercase">Log Out</button></div>
+                            <select value={userTimezone} onChange={e => { setUserTimezone(e.target.value); }} className="bg-black/50 border border-neutral-800 text-xs rounded p-2 text-neutral-400 backdrop-blur-sm">{timezones.map(t => <option key={t} value={t}>{t}</option>)}</select>
+                        </div>
                     </div>
-                    <div className="flex items-center gap-4">
-                        <div className="text-right hidden md:block"><div className="text-sm font-bold text-white">{currentUser.displayName || 'Guest'}</div><button onClick={handleSignOut} className="text-[10px] text-red-500 font-bold uppercase">Log Out</button></div>
-                        <select value={userTimezone} onChange={e => { setUserTimezone(e.target.value); }} className="bg-black/50 border border-neutral-800 text-xs rounded p-2 text-neutral-400 backdrop-blur-sm">{timezones.map(t => <option key={t} value={t}>{t}</option>)}</select>
+                    <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-hide mask-fade">
+                        <NavBtn id="dashboard" label="Dashboard" />
+                        <NavBtn id="playbook" label="Playbook" />
+                        <NavBtn id="comps" label="Comps" />
+                        <NavBtn id="matches" label="Matches" />
+                        <NavBtn id="strats" label="Stratbook" />
+                        <NavBtn id="lineups" label="Lineups" />
+                        <NavBtn id="roster" label="Roster" />
+                        {isAdmin && <NavBtn id="partners" label="Partners" />}
+                        {isAdmin && <NavBtn id="content" label="Content Mgr" />}
+                        <NavBtn id="mapveto" label="Map Veto" />
+                        {isAdmin && <NavBtn id="admin" label="Admin" />}
                     </div>
-                </div>
-                <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-hide mask-fade">
-                    <NavBtn id="dashboard" label="Dashboard" />
-                    <NavBtn id="playbook" label="Playbook" />
-                    <NavBtn id="comps" label="Comps" />
-                    <NavBtn id="matches" label="Matches" />
-                    <NavBtn id="strats" label="Stratbook" />
-                    <NavBtn id="lineups" label="Lineups" />
-                    <NavBtn id="roster" label="Roster" />
-                    {isAdmin && <NavBtn id="partners" label="Partners" />}
-                    {isAdmin && <NavBtn id="content" label="Content Mgr" />}
-                    <NavBtn id="mapveto" label="Map Veto" />
-                    {isAdmin && <NavBtn id="admin" label="Admin" />}
                 </div>
             </header>
 
-            <main className="flex-1 overflow-y-auto p-6 scrollbar-thin scrollbar-thumb-red-900/50 scrollbar-track-black/20 relative z-10">
-                <div className="max-w-[1920px] mx-auto min-h-screen flex flex-col">
+            <main className="flex-1 overflow-y-auto p-6 scrollbar-thin scrollbar-thumb-red-900/50 scrollbar-track-black/20 relative z-10 w-full"> {/* ADDED W-FULL */}
+                <div className="max-w-[1920px] mx-auto min-h-screen flex flex-col w-full"> {/* ADDED W-FULL */}
                     {activeTab === 'dashboard' && <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 animate-fade-in">
                         <div className="lg:col-span-4 space-y-8">
                             <CaptainsMessage />
