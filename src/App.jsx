@@ -1868,10 +1868,29 @@ function SyrixDashboard({ onBack }) {
 
     useEffect(() => {
         if (!currentUser) return;
-        const unsub1 = onSnapshot(doc(db, 'roster', currentUser.displayName || 'Guest'), (s) => setIsMember((s.exists() && s.data().role) || ADMIN_UIDS.includes(currentUser.uid) || currentUser.isAnonymous));
+
+        // 1. Check if Admin or Anonymous (Guest)
+        if (ADMIN_UIDS.includes(currentUser.uid) || currentUser.isAnonymous) {
+            setIsMember(true);
+        }
+
+        // 2. Check Roster by UID (Reliable method for new applicants)
+        const q = query(collection(db, 'roster'), where('uid', '==', currentUser.uid));
+        const unsubUid = onSnapshot(q, (snap) => {
+            if (!snap.empty) setIsMember(true);
+        });
+
+        // 3. Check Roster by Document ID (Fallback for legacy users/Discord name matches)
+        const docRef = doc(db, 'roster', currentUser.displayName || 'Guest');
+        const unsubName = onSnapshot(docRef, (docSnap) => {
+            if (docSnap.exists()) setIsMember(true);
+        });
+
+        // 4. Data Listeners (Always run these to populate dashboard)
         const unsub2 = onSnapshot(collection(db, 'availabilities'), (s) => { const d = {}; s.forEach(doc => d[doc.id] = doc.data().slots || []); setAvailabilities(d); });
         const unsub3 = onSnapshot(collection(db, 'events'), (s) => { const e = []; s.forEach(d => e.push({ id: d.id, ...d.data() })); setEvents(e.sort((a, b) => new Date(a.date + 'T' + a.time) - new Date(b.date + 'T' + b.time))); });
-        return () => { unsub1(); unsub2(); unsub3(); };
+
+        return () => { unsubUid(); unsubName(); unsub2(); unsub3(); };
     }, [currentUser]);
 
     const dynamicMembers = useMemo(() => [...new Set(Object.keys(availabilities))].sort(), [availabilities]);
