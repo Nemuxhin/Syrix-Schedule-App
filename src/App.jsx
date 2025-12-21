@@ -1869,8 +1869,9 @@ function SyrixDashboard({ onBack }) {
     useEffect(() => {
         if (!currentUser) return;
 
-        // 1. Check if Admin or Anonymous (Guest)
-        if (ADMIN_UIDS.includes(currentUser.uid) || currentUser.isAnonymous) {
+        // 1. Check if Admin
+        // Note: Anonymous users are now blocked from dashboard, so removed isAnonymous check here
+        if (ADMIN_UIDS.includes(currentUser.uid)) {
             setIsMember(true);
         }
 
@@ -1930,8 +1931,9 @@ function SyrixDashboard({ onBack }) {
 
     if (authLoading) return <div className="fixed inset-0 bg-black flex items-center justify-center"><div className="w-8 h-8 border-4 border-red-600 border-t-transparent rounded-full animate-spin"></div></div>;
 
-    // If not logged in, show Login Screen
-    if (!currentUser) return <LoginScreen signIn={signIn} onBack={onBack} />;
+    // If not logged in OR is anonymous (from landing page), show Login Screen
+    // This forces the user to sign in with Discord to access the Hub
+    if (!currentUser || currentUser.isAnonymous) return <LoginScreen signIn={signIn} onBack={onBack} />;
 
     // If logged in but not a member, show Application
     if (!isMember) return (
