@@ -2302,6 +2302,7 @@ function ContentManager() {
 }
 function SyrixDashboard({ onBack }) {
     const [currentUser, setCurrentUser] = useState(null);
+    const [rosterName, setRosterName] = useState(null);
     const [activeTab, setActiveTab] = useState('dashboard');
     const [availabilities, setAvailabilities] = useState({});
     const [events, setEvents] = useState([]);
@@ -2324,19 +2325,21 @@ function SyrixDashboard({ onBack }) {
     useEffect(() => {
         if (!currentUser) return;
 
-        // --- THE FIX STARTS HERE ---
-        // Instead of looking for a file named "DiscordUser", we ask:
-        // "Find me the roster file that belongs to this User ID"
+        // Query roster by UID to find the correct file
         const memberQuery = query(collection(db, 'roster'), where("uid", "==", currentUser.uid));
 
         const unsub1 = onSnapshot(memberQuery, (snapshot) => {
-            // If the snapshot is NOT empty, it means we found your file!
-            const isRosterMember = !snapshot.empty;
-
-            // Allow access if you are in roster OR you are an Admin
-            setIsMember(isRosterMember || ADMIN_UIDS.includes(currentUser.uid));
+            if (!snapshot.empty) {
+                // FOUND IT!
+                const userDoc = snapshot.docs[0];
+                setRosterName(userDoc.id); // Save the file name (Riot ID)
+                setIsMember(true);
+            } else {
+                // Not in roster, check if Admin
+                setIsMember(ADMIN_UIDS.includes(currentUser.uid));
+                setRosterName(currentUser.displayName); // Fallback to Discord name
+            }
         });
-        // --- THE FIX ENDS HERE ---
 
         const unsub2 = onSnapshot(collection(db, 'availabilities'), (s) => {
             const d = {};
@@ -2351,8 +2354,7 @@ function SyrixDashboard({ onBack }) {
         });
 
         return () => { unsub1(); unsub2(); unsub3(); };
-    }, [currentUser]);
-    const dynamicMembers = useMemo(() => [...new Set(Object.keys(availabilities))].sort(), [availabilities]);
+    }, [currentUser]);    const dynamicMembers = useMemo(() => [...new Set(Object.keys(availabilities))].sort(), [availabilities]);
 
     // Process Availability for display
     const displayAvail = useMemo(() => {
@@ -2376,14 +2378,28 @@ function SyrixDashboard({ onBack }) {
     const openModal = (t, c, f) => { setModalContent({ title: t, children: c, onConfirm: f }); setIsModalOpen(true); };
 
     const saveAvail = async () => {
+        // Use rosterName if valid, otherwise fallback to "Guest"
+        const finalName = rosterName || currentUser.displayName || 'Guest';
+
         if (timeToMinutes(end) <= timeToMinutes(start)) return addToast('End time must be after start time', 'error');
-        setSaveStatus('saving'); const gs = convertToGMT(day, start); const ge = convertToGMT(day, end); const old = availabilities[currentUser.displayName || 'Guest'] || []; const others = old.filter(s => convertFromGMT(s.day, s.start, userTimezone).day !== day);
-        await setDoc(doc(db, 'availabilities', currentUser.displayName || 'Guest'), { slots: [...others, { day: gs.day, start: gs.time, end: ge.time, role }] });
+        setSaveStatus('saving');
+        const gs = convertToGMT(day, start);
+        const ge = convertToGMT(day, end);
+        const old = availabilities[finalName] || []; // Use finalName
+        const others = old.filter(s => convertFromGMT(s.day, s.start, userTimezone).day !== day);
+
+        // Save to the correct document
+        await setDoc(doc(db, 'availabilities', finalName), { slots: [...others, { day: gs.day, start: gs.time, end: ge.time, role }] });
         setSaveStatus('idle');
         addToast('Availability Slot Saved');
     };
-
-    const clearDay = async () => { const old = availabilities[currentUser.displayName || 'Guest'] || []; await setDoc(doc(db, 'availabilities', currentUser.displayName || 'Guest'), { slots: old.filter(s => convertFromGMT(s.day, s.start, userTimezone).day !== day) }); setIsModalOpen(false); addToast(`Cleared ${day}`); };
+    const clearDay = async () => {
+        const finalName = rosterName || currentUser.displayName || 'Guest';
+        const old = availabilities[finalName] || [];
+        await setDoc(doc(db, 'availabilities', finalName), { slots: old.filter(s => convertFromGMT(s.day, s.start, userTimezone).day !== day) });
+        setIsModalOpen(false);
+        addToast(`Cleared ${day}`);
+    };
     const schedEvent = async (d) => { await addDoc(collection(db, 'events'), d); addToast('Event Scheduled'); };
     const deleteEvent = async (id) => { await deleteDoc(doc(db, 'events', id)); setIsModalOpen(false); addToast('Event Deleted'); };
 
@@ -2419,8 +2435,12 @@ function SyrixDashboard({ onBack }) {
                         <h1 className="text-3xl font-black tracking-tighter text-white drop-shadow-lg italic">SYRIX <span className="text-red-600">HUB</span></h1>
                     </div>
                     <div className="flex items-center gap-4">
-                        <div className="text-right hidden md:block"><div className="text-sm font-bold text-white">{currentUser.displayName || 'Guest'}</div><button onClick={handleSignOut} className="text-[10px] text-red-500 font-bold uppercase">Log Out</button></div>
-                        <select value={userTimezone} onChange={e => { setUserTimezone(e.target.value); }} className="bg-black/50 border border-neutral-800 text-xs rounded p-2 text-neutral-400 backdrop-blur-sm">{timezones.map(t => <option key={t} value={t}>{t}</option>)}</select>
+                        <div className="text-right hidden md:block">
+                            <div className="text-sm font-bold text-white">
+                                {rosterName || currentUser.displayName || 'Guest'}
+                            </div>
+                            <button onClick={handleSignOut} className="text-[10px] text-red-500 font-bold uppercase">Log Out</button>
+                        </div>                        <select value={userTimezone} onChange={e => { setUserTimezone(e.target.value); }} className="bg-black/50 border border-neutral-800 text-xs rounded p-2 text-neutral-400 backdrop-blur-sm">{timezones.map(t => <option key={t} value={t}>{t}</option>)}</select>
                     </div>
                 </div>
                 <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-hide mask-fade">
