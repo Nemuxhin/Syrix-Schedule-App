@@ -1924,27 +1924,42 @@ function AdminPanel() {
 
     const acceptApplicant = async (app) => {
         setProcessing(app.id);
-        try {
-            // 1. Add to Roster
-            // We use the Display Name as ID to keep compatibility with your existing system,
-            // but we ALSO save the UID for security/future features.
-            await setDoc(doc(db, 'roster', app.user), {
-                rank: app.rank,
-                role: 'Tryout', // Default role upon acceptance
-                ingameRole: app.role, // Map their preferred role
-                notes: `Tracker: ${app.tracker}\nWhy: ${app.why}`,
-                joinedAt: new Date().toISOString(),
-                uid: app.uid, // Crucial: Save their Auth ID
-                pfp: "", // Placeholder
-                gameId: "" // Placeholder
-            });
+        console.log("Attempting to accept applicant:", app); // 1. Check Console for this
 
-            // 2. Delete the Application
+        try {
+            // Safety Check 1: Ensure User Name exists (needed for document ID)
+            if (!app.user) {
+                throw new Error("Application is missing a Username.");
+            }
+
+            // Safety Check 2: Handle missing UIDs (Legacy applications)
+            // If app.uid is undefined, we save "legacy_user" to prevent the crash.
+            const safeUid = app.uid || "legacy_id_missing";
+
+            // Safety Check 3: Ensure other fields are not undefined
+            const rosterData = {
+                rank: app.rank || "Unranked",
+                role: 'Tryout',
+                ingameRole: app.role || "Flex",
+                notes: `Tracker: ${app.tracker || "N/A"}\nWhy: ${app.why || "N/A"}`,
+                joinedAt: new Date().toISOString(),
+                uid: safeUid,
+                pfp: "",
+                gameId: ""
+            };
+
+            // Perform the write
+            await setDoc(doc(db, 'roster', app.user), rosterData);
+
+            // Delete the application
             await deleteDoc(doc(db, 'applications', app.id));
+
             addToast(`✅ Welcome ${app.user} to Syrix!`);
+
         } catch (error) {
-            console.error("Error accepting:", error);
-            addToast("Failed to accept applicant", "error");
+            // This will show the REAL error in your browser console (F12)
+            console.error("FAILED TO ACCEPT. ERROR DETAILS:", error);
+            addToast(`Error: ${error.message}`, "error");
         }
         setProcessing(null);
     };
