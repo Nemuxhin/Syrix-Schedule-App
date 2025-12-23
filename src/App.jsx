@@ -874,27 +874,36 @@ function AvailabilityHeatmap({ availabilities, members }) {
 }
 
 function ApplicationForm({ currentUser }) {
-    const [form, setForm] = useState({ tracker: '', rank: 'Unranked', role: 'Flex', exp: '', why: '' });
-    const [status, setStatus] = useState('idle'); // idle, checking, saving, success, error, already_applied
+    // added 'ign' (In-Game Name) to state
+    const [form, setForm] = useState({ ign: '', tracker: '', rank: 'Unranked', role: 'Flex', exp: '', why: '' });
+    const [status, setStatus] = useState('idle');
     const addToast = useToast();
 
-    // Check if user already applied on mount
+    // Check if user already applied
     useEffect(() => {
         const checkExisting = async () => {
+            if (!currentUser) return;
             const q = query(collection(db, 'applications'), where("uid", "==", currentUser.uid));
-            const snap = await getDocs(q); // Import getDocs from firebase/firestore
-            if (!snap.empty) setStatus('already_applied');
+            try {
+                const snap = await getDocs(q);
+                if (!snap.empty) setStatus('already_applied');
+            } catch (e) { console.error("Auth check error", e); }
         };
         checkExisting();
     }, [currentUser]);
 
     const submitApp = async () => {
-        if (!form.tracker || !form.why) return addToast("Please fill out all fields", "error");
+        // Validation: Ensure IGN is filled
+        if (!form.ign || !form.tracker || !form.why) return addToast("Please fill out all fields (IGN, Tracker, Why)", "error");
 
         setStatus('saving');
+
+        // Use the manually entered IGN as the 'user' field, fallback to Discord name if needed
+        const finalUsername = form.ign || currentUser.displayName || "Unknown_User";
+
         const appData = {
             ...form,
-            user: currentUser.displayName,
+            user: finalUsername, // This is now safe
             uid: currentUser.uid,
             submittedAt: new Date().toISOString()
         };
@@ -902,8 +911,8 @@ function ApplicationForm({ currentUser }) {
         try {
             await addDoc(collection(db, 'applications'), appData);
 
-            // Discord Webhook (Keep your existing logic)
-            const content = { embeds: [{ title: `New App: ${currentUser.displayName}`, color: 16776960, fields: [{ name: 'Rank', value: form.rank }, { name: 'Role', value: form.role }, { name: 'Tracker', value: form.tracker }] }] };
+            // Discord Webhook
+            const content = { embeds: [{ title: `New App: ${finalUsername}`, color: 16776960, fields: [{ name: 'Rank', value: form.rank }, { name: 'Role', value: form.role }, { name: 'Tracker', value: form.tracker }] }] };
             fetch(discordWebhookUrl, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(content) }).catch(console.error);
 
             setStatus('success');
@@ -915,72 +924,57 @@ function ApplicationForm({ currentUser }) {
         }
     };
 
-    if (status === 'success') return (
-        <div className="h-full flex flex-col gap-4 items-center justify-center text-white animate-fade-in">
-            <div className="text-6xl">✅</div>
-            <h2 className="text-3xl font-black italic">APPLICATION SENT</h2>
-            <p className="text-neutral-400">The captains will review your dossier shortly.</p>
-        </div>
-    );
-
-    if (status === 'already_applied') return (
-        <div className="h-full flex flex-col gap-4 items-center justify-center text-white animate-fade-in">
-            <div className="text-6xl">⏳</div>
-            <h2 className="text-3xl font-black italic">APPLICATION PENDING</h2>
-            <p className="text-neutral-400">You already have an active application.</p>
-        </div>
-    );
+    if (status === 'success') return <div className="h-full flex flex-col gap-4 items-center justify-center text-white text-2xl font-black">✅ APPLICATION SENT</div>;
+    if (status === 'already_applied') return <div className="h-full flex flex-col gap-4 items-center justify-center text-white text-2xl font-black">⏳ APPLICATION PENDING</div>;
 
     return (
-        <div className="bg-neutral-900/90 backdrop-blur-xl p-8 rounded-[2rem] border border-white/10 max-w-2xl mx-auto shadow-2xl relative overflow-hidden">
-            <div className="absolute top-0 left-0 w-full h-2 bg-gradient-to-r from-red-600 to-red-900"></div>
-            <h2 className="text-4xl font-black text-white mb-2 italic tracking-tighter">JOIN <span className="text-red-600">SYRIX</span></h2>
-            <p className="text-neutral-500 mb-8 font-bold uppercase tracking-widest text-xs">Official Recruitment Form</p>
+        <div className="bg-neutral-900/90 backdrop-blur-xl p-8 rounded-[2rem] border border-white/10 max-w-2xl mx-auto shadow-2xl">
+            <h2 className="text-4xl font-black text-white mb-6 italic tracking-tighter">JOIN <span className="text-red-600">SYRIX</span></h2>
 
-            <div className="space-y-6">
+            <div className="space-y-4">
+                {/* NEW INPUT: Riot ID */}
+                <div>
+                    <label className="text-xs font-bold text-red-500 uppercase mb-1 block">Riot ID (Game Name)</label>
+                    <Input
+                        value={form.ign}
+                        onChange={e => setForm({ ...form, ign: e.target.value })}
+                        placeholder="e.g. Syrix#NA1"
+                        className="border-red-500/50" // Highlight this input
+                    />
+                </div>
+
                 <div className="grid grid-cols-2 gap-4">
                     <div>
-                        <label className="text-xs font-bold text-red-500 uppercase mb-1 block">Current Rank</label>
+                        <label className="text-xs font-bold text-neutral-500 uppercase mb-1 block">Current Rank</label>
                         <Select value={form.rank} onChange={e => setForm({ ...form, rank: e.target.value })}>
                             {RANKS.map(r => <option key={r} value={r}>{r}</option>)}
                         </Select>
                     </div>
                     <div>
-                        <label className="text-xs font-bold text-red-500 uppercase mb-1 block">Preferred Role</label>
+                        <label className="text-xs font-bold text-neutral-500 uppercase mb-1 block">Preferred Role</label>
                         <Select value={form.role} onChange={e => setForm({ ...form, role: e.target.value })}>
                             {ROLES.map(r => <option key={r} value={r}>{r}</option>)}
                         </Select>
                     </div>
                 </div>
 
-                <div>
-                    <label className="text-xs font-bold text-neutral-500 uppercase mb-1 block">Tracker.gg URL</label>
-                    <Input value={form.tracker} onChange={e => setForm({ ...form, tracker: e.target.value })} placeholder="https://tracker.gg/valorant/profile/..." />
-                </div>
+                <Input value={form.tracker} onChange={e => setForm({ ...form, tracker: e.target.value })} placeholder="Tracker.gg URL" />
+                <Input value={form.exp} onChange={e => setForm({ ...form, exp: e.target.value })} placeholder="Competitive Experience" />
 
-                <div>
-                    <label className="text-xs font-bold text-neutral-500 uppercase mb-1 block">Competitive Experience</label>
-                    <Input value={form.exp} onChange={e => setForm({ ...form, exp: e.target.value })} placeholder="Previous teams, tournament experience..." />
-                </div>
-
-                <div>
-                    <label className="text-xs font-bold text-neutral-500 uppercase mb-1 block">Why do you want to join?</label>
-                    <textarea
-                        className="w-full bg-black/50 border border-neutral-800 rounded-xl p-4 text-white placeholder-neutral-600 focus:border-red-600 outline-none transition-colors min-h-[120px]"
-                        value={form.why}
-                        onChange={e => setForm({ ...form, why: e.target.value })}
-                        placeholder="Tell us about your playstyle and goals..."
-                    />
-                </div>
+                <textarea
+                    className="w-full bg-black/50 border border-neutral-800 rounded-xl p-4 text-white min-h-[100px]"
+                    value={form.why}
+                    onChange={e => setForm({ ...form, why: e.target.value })}
+                    placeholder="Why do you want to join?"
+                />
 
                 <ButtonPrimary onClick={submitApp} disabled={status === 'saving'} className="w-full py-4 text-lg">
-                    {status === 'saving' ? 'TRANSMITTING...' : 'SUBMIT APPLICATION'}
+                    {status === 'saving' ? 'SENDING...' : 'SUBMIT APPLICATION'}
                 </ButtonPrimary>
             </div>
         </div>
     );
 }
-
 function PerformanceWidget({ events }) {
     const stats = useMemo(() => {
         let wins = 0, losses = 0; let atkWins = 0, atkPlayed = 0, defWins = 0, defPlayed = 0; const mapStats = {};
@@ -2024,19 +2018,24 @@ function AdminPanel() {
 
     const acceptApplicant = async (app) => {
         setProcessing(app.id);
-        console.log("Attempting to accept applicant:", app); // 1. Check Console for this
 
         try {
-            // Safety Check 1: Ensure User Name exists (needed for document ID)
-            if (!app.user) {
-                throw new Error("Application is missing a Username.");
-            }
+            // --- FIX FOR MISSING USERNAME ---
+            let rosterName = app.user;
 
-            // Safety Check 2: Handle missing UIDs (Legacy applications)
-            // If app.uid is undefined, we save "legacy_user" to prevent the crash.
+            // If the application has no username (null/undefined/empty), ask the Admin to type one.
+            if (!rosterName) {
+                const manualName = window.prompt("⚠️ This application is missing a username.\n\nPlease enter the player's Riot ID or Roster Name manually:");
+                if (!manualName) {
+                    setProcessing(null);
+                    return addToast("Action Cancelled: Name required", "error");
+                }
+                rosterName = manualName;
+            }
+            // --------------------------------
+
             const safeUid = app.uid || "legacy_id_missing";
 
-            // Safety Check 3: Ensure other fields are not undefined
             const rosterData = {
                 rank: app.rank || "Unranked",
                 role: 'Tryout',
@@ -2048,17 +2047,14 @@ function AdminPanel() {
                 gameId: ""
             };
 
-            // Perform the write
-            await setDoc(doc(db, 'roster', app.user), rosterData);
-
-            // Delete the application
+            // Use rosterName (which is guaranteed to exist now) as the document ID
+            await setDoc(doc(db, 'roster', rosterName), rosterData);
             await deleteDoc(doc(db, 'applications', app.id));
 
-            addToast(`✅ Welcome ${app.user} to Syrix!`);
+            addToast(`✅ Added ${rosterName} to Roster`);
 
         } catch (error) {
-            // This will show the REAL error in your browser console (F12)
-            console.error("FAILED TO ACCEPT. ERROR DETAILS:", error);
+            console.error("ACCEPT ERROR:", error);
             addToast(`Error: ${error.message}`, "error");
         }
         setProcessing(null);
