@@ -2323,12 +2323,35 @@ function SyrixDashboard({ onBack }) {
 
     useEffect(() => {
         if (!currentUser) return;
-        const unsub1 = onSnapshot(doc(db, 'roster', currentUser.displayName || 'Guest'), (s) => setIsMember((s.exists() && s.data().role) || ADMIN_UIDS.includes(currentUser.uid) || currentUser.isAnonymous));
-        const unsub2 = onSnapshot(collection(db, 'availabilities'), (s) => { const d = {}; s.forEach(doc => d[doc.id] = doc.data().slots || []); setAvailabilities(d); });
-        const unsub3 = onSnapshot(collection(db, 'events'), (s) => { const e = []; s.forEach(d => e.push({ id: d.id, ...d.data() })); setEvents(e.sort((a, b) => new Date(a.date + 'T' + a.time) - new Date(b.date + 'T' + b.time))); });
+
+        // --- THE FIX STARTS HERE ---
+        // Instead of looking for a file named "DiscordUser", we ask:
+        // "Find me the roster file that belongs to this User ID"
+        const memberQuery = query(collection(db, 'roster'), where("uid", "==", currentUser.uid));
+
+        const unsub1 = onSnapshot(memberQuery, (snapshot) => {
+            // If the snapshot is NOT empty, it means we found your file!
+            const isRosterMember = !snapshot.empty;
+
+            // Allow access if you are in roster OR you are an Admin
+            setIsMember(isRosterMember || ADMIN_UIDS.includes(currentUser.uid));
+        });
+        // --- THE FIX ENDS HERE ---
+
+        const unsub2 = onSnapshot(collection(db, 'availabilities'), (s) => {
+            const d = {};
+            s.forEach(doc => d[doc.id] = doc.data().slots || []);
+            setAvailabilities(d);
+        });
+
+        const unsub3 = onSnapshot(collection(db, 'events'), (s) => {
+            const e = [];
+            s.forEach(d => e.push({ id: d.id, ...d.data() }));
+            setEvents(e.sort((a, b) => new Date(a.date + 'T' + a.time) - new Date(b.date + 'T' + b.time)));
+        });
+
         return () => { unsub1(); unsub2(); unsub3(); };
     }, [currentUser]);
-
     const dynamicMembers = useMemo(() => [...new Set(Object.keys(availabilities))].sort(), [availabilities]);
 
     // Process Availability for display
