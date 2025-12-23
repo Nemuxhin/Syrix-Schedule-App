@@ -1910,13 +1910,117 @@ function RosterManager({ members, events }) {
 
 function AdminPanel() {
     const [applications, setApplications] = useState([]);
+    const [processing, setProcessing] = useState(null); // Track which ID is processing
     const addToast = useToast();
-    useEffect(() => { const unsub = onSnapshot(collection(db, 'applications'), (snap) => { const apps = []; snap.forEach(doc => apps.push({ id: doc.id, ...doc.data() })); setApplications(apps); }); return () => unsub(); }, []);
-    const acceptApplicant = async (app) => { await setDoc(doc(db, 'roster', app.user), { rank: app.rank, role: 'Tryout', notes: `Tracker: ${app.tracker}\nWhy: ${app.why}`, joinedAt: new Date().toISOString() }); await deleteDoc(doc(db, 'applications', app.id)); addToast(`Accepted ${app.user}`); };
-    const rejectApplicant = async (id) => { await deleteDoc(doc(db, 'applications', id)); addToast('Applicant Rejected'); };
-    return (<Card><h2 className="text-3xl font-black text-white mb-6 flex items-center gap-3"><span className="text-red-600">ADMIN</span> DASHBOARD</h2><div className="space-y-6">{applications.length === 0 ? <p className="text-neutral-600 italic">No pending applications.</p> : (<div className="grid grid-cols-1 gap-4">{applications.map(app => (<div key={app.id} className="bg-black border border-neutral-800 p-6 rounded-2xl flex flex-col md:flex-row justify-between gap-6"><div className="space-y-2 flex-1"><div className="flex items-center gap-3"><h4 className="text-xl font-black text-white">{app.user}</h4><span className="bg-neutral-900 text-neutral-400 text-xs px-2 py-1 rounded font-bold uppercase border border-neutral-800">{app.rank}</span><span className="bg-neutral-900 text-neutral-400 text-xs px-2 py-1 rounded font-bold uppercase border border-neutral-800">{app.role}</span></div><p className="text-neutral-400 text-sm"><strong className="text-neutral-500">Experience:</strong> {app.exp}</p><p className="text-neutral-300 text-sm italic">"{app.why}"</p><a href={app.tracker} target="_blank" rel="noreferrer" className="text-red-500 text-xs font-bold hover:underline block mt-2">View Tracker Profile &rarr;</a></div><div className="flex flex-row md:flex-col gap-3 justify-center"><button onClick={() => acceptApplicant(app)} className="bg-green-900/20 hover:bg-green-600 border border-green-900 text-green-500 hover:text-white font-bold px-6 py-3 rounded-xl transition-all">ACCEPT</button><button onClick={() => rejectApplicant(app.id)} className="bg-red-900/20 hover:bg-red-900 text-red-500 hover:text-white font-bold px-6 py-3 rounded-xl transition-all border border-red-900">REJECT</button></div></div>))}</div>)}</div></Card>);
-}
 
+    useEffect(() => {
+        const unsub = onSnapshot(collection(db, 'applications'), (snap) => {
+            const apps = [];
+            snap.forEach(doc => apps.push({ id: doc.id, ...doc.data() }));
+            setApplications(apps);
+        });
+        return () => unsub();
+    }, []);
+
+    const acceptApplicant = async (app) => {
+        setProcessing(app.id);
+        try {
+            // 1. Add to Roster
+            // We use the Display Name as ID to keep compatibility with your existing system,
+            // but we ALSO save the UID for security/future features.
+            await setDoc(doc(db, 'roster', app.user), {
+                rank: app.rank,
+                role: 'Tryout', // Default role upon acceptance
+                ingameRole: app.role, // Map their preferred role
+                notes: `Tracker: ${app.tracker}\nWhy: ${app.why}`,
+                joinedAt: new Date().toISOString(),
+                uid: app.uid, // Crucial: Save their Auth ID
+                pfp: "", // Placeholder
+                gameId: "" // Placeholder
+            });
+
+            // 2. Delete the Application
+            await deleteDoc(doc(db, 'applications', app.id));
+            addToast(`✅ Welcome ${app.user} to Syrix!`);
+        } catch (error) {
+            console.error("Error accepting:", error);
+            addToast("Failed to accept applicant", "error");
+        }
+        setProcessing(null);
+    };
+
+    const rejectApplicant = async (id) => {
+        if (!window.confirm("Are you sure you want to reject this applicant? This cannot be undone.")) return;
+        setProcessing(id);
+        try {
+            await deleteDoc(doc(db, 'applications', id));
+            addToast('Applicant Rejected');
+        } catch (error) {
+            addToast("Error rejecting", "error");
+        }
+        setProcessing(null);
+    };
+
+    return (
+        <Card className="h-full">
+            <h2 className="text-3xl font-black text-white mb-6 flex items-center gap-3">
+                <span className="text-red-600">ADMIN</span> DASHBOARD
+            </h2>
+            <div className="space-y-6">
+                {applications.length === 0 ? (
+                    <div className="text-center py-12 border border-dashed border-neutral-800 rounded-2xl">
+                        <p className="text-neutral-500 italic">No pending applications.</p>
+                    </div>
+                ) : (
+                    <div className="grid grid-cols-1 gap-4">
+                        {applications.map(app => (
+                            <div key={app.id} className="bg-black/80 border border-neutral-800 p-6 rounded-2xl flex flex-col md:flex-row justify-between gap-6 relative overflow-hidden group hover:border-red-600/30 transition-all">
+                                <div className="absolute top-0 left-0 w-1 h-full bg-yellow-500"></div>
+                                <div className="space-y-3 flex-1">
+                                    <div className="flex items-center gap-3">
+                                        <h4 className="text-2xl font-black text-white">{app.user}</h4>
+                                        <span className="bg-neutral-800 text-neutral-300 text-[10px] px-2 py-1 rounded font-bold uppercase tracking-wider">{app.rank}</span>
+                                        <span className="bg-red-900/30 text-red-400 text-[10px] px-2 py-1 rounded font-bold uppercase tracking-wider">{app.role}</span>
+                                    </div>
+
+                                    <div className="bg-neutral-900/50 p-3 rounded-lg border border-white/5">
+                                        <p className="text-neutral-500 text-xs font-bold uppercase mb-1">Application Statement</p>
+                                        <p className="text-neutral-300 text-sm italic">"{app.why}"</p>
+                                    </div>
+
+                                    <div className="flex items-center gap-4 text-xs">
+                                        <div className="text-neutral-500">Exp: <span className="text-white">{app.exp}</span></div>
+                                        <a href={app.tracker} target="_blank" rel="noreferrer" className="text-red-500 font-bold hover:underline flex items-center gap-1">
+                                            Tracker Profile ↗
+                                        </a>
+                                    </div>
+                                    <div className="text-[10px] text-neutral-600 font-mono">Applied: {new Date(app.submittedAt).toLocaleDateString()}</div>
+                                </div>
+
+                                <div className="flex flex-row md:flex-col gap-3 justify-center min-w-[150px]">
+                                    <button
+                                        onClick={() => acceptApplicant(app)}
+                                        disabled={processing === app.id}
+                                        className="bg-green-600 hover:bg-green-500 text-white font-black uppercase tracking-widest py-3 px-4 rounded-xl shadow-lg transition-all flex-1 text-xs disabled:opacity-50"
+                                    >
+                                        {processing === app.id ? 'Processing...' : 'Accept'}
+                                    </button>
+                                    <button
+                                        onClick={() => rejectApplicant(app.id)}
+                                        disabled={processing === app.id}
+                                        className="bg-black hover:bg-red-900/20 border border-neutral-700 hover:border-red-500 text-neutral-400 hover:text-white font-bold uppercase tracking-widest py-3 px-4 rounded-xl transition-all flex-1 text-xs disabled:opacity-50"
+                                    >
+                                        Reject
+                                    </button>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                )}
+            </div>
+        </Card>
+    );
+}
 function PartnerDirectory() {
     const [partners, setPartners] = useState([]); const [newPartner, setNewPartner] = useState({ name: '', contact: '', notes: '' });
     useEffect(() => { const unsub = onSnapshot(collection(db, 'partners'), (s) => { const p = []; s.forEach(d => p.push({ id: d.id, ...d.data() })); setPartners(p); }); return unsub; }, []);
