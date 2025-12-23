@@ -875,10 +875,110 @@ function AvailabilityHeatmap({ availabilities, members }) {
 
 function ApplicationForm({ currentUser }) {
     const [form, setForm] = useState({ tracker: '', rank: 'Unranked', role: 'Flex', exp: '', why: '' });
-    const [status, setStatus] = useState('idle');
-    const submitApp = async () => { if (!form.tracker || !form.why) return; setStatus('saving'); const appData = { ...form, user: currentUser.displayName, uid: currentUser.uid, submittedAt: new Date().toISOString() }; await addDoc(collection(db, 'applications'), appData); const content = { embeds: [{ title: `New App: ${currentUser.displayName}`, color: 16776960, fields: [{ name: 'Rank', value: form.rank }, { name: 'Role', value: form.role }, { name: 'Tracker', value: form.tracker }] }] }; try { await fetch(discordWebhookUrl, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(content) }); } catch (e) { } setStatus('success'); };
-    if (status === 'success') return <div className="h-full flex items-center justify-center text-white font-black text-2xl">Application Sent.</div>;
-    return (<div className="bg-neutral-900 p-8 rounded-3xl border border-white/10 max-w-3xl mx-auto"><h2 className="text-3xl font-black text-white mb-4">Apply</h2><div className="space-y-4"><Input value={form.tracker} onChange={e => setForm({ ...form, tracker: e.target.value })} placeholder="Tracker URL" /><Select value={form.rank} onChange={e => setForm({ ...form, rank: e.target.value })}>{RANKS.map(r => <option key={r} value={r}>{r}</option>)}</Select><Select value={form.role} onChange={e => setForm({ ...form, role: e.target.value })}>{ROLES.map(r => <option key={r} value={r}>{r}</option>)}</Select><textarea className="w-full bg-black border border-neutral-800 rounded-xl p-3 text-white" value={form.why} onChange={e => setForm({ ...form, why: e.target.value })} placeholder="Why join?" /><ButtonPrimary onClick={submitApp} disabled={status !== 'idle'}>Submit</ButtonPrimary></div></div>);
+    const [status, setStatus] = useState('idle'); // idle, checking, saving, success, error, already_applied
+    const addToast = useToast();
+
+    // Check if user already applied on mount
+    useEffect(() => {
+        const checkExisting = async () => {
+            const q = query(collection(db, 'applications'), where("uid", "==", currentUser.uid));
+            const snap = await getDocs(q); // Import getDocs from firebase/firestore
+            if (!snap.empty) setStatus('already_applied');
+        };
+        checkExisting();
+    }, [currentUser]);
+
+    const submitApp = async () => {
+        if (!form.tracker || !form.why) return addToast("Please fill out all fields", "error");
+
+        setStatus('saving');
+        const appData = {
+            ...form,
+            user: currentUser.displayName,
+            uid: currentUser.uid,
+            submittedAt: new Date().toISOString()
+        };
+
+        try {
+            await addDoc(collection(db, 'applications'), appData);
+
+            // Discord Webhook (Keep your existing logic)
+            const content = { embeds: [{ title: `New App: ${currentUser.displayName}`, color: 16776960, fields: [{ name: 'Rank', value: form.rank }, { name: 'Role', value: form.role }, { name: 'Tracker', value: form.tracker }] }] };
+            fetch(discordWebhookUrl, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(content) }).catch(console.error);
+
+            setStatus('success');
+            addToast("Application Submitted Successfully");
+        } catch (e) {
+            console.error(e);
+            setStatus('error');
+            addToast("Error submitting application", "error");
+        }
+    };
+
+    if (status === 'success') return (
+        <div className="h-full flex flex-col gap-4 items-center justify-center text-white animate-fade-in">
+            <div className="text-6xl">✅</div>
+            <h2 className="text-3xl font-black italic">APPLICATION SENT</h2>
+            <p className="text-neutral-400">The captains will review your dossier shortly.</p>
+        </div>
+    );
+
+    if (status === 'already_applied') return (
+        <div className="h-full flex flex-col gap-4 items-center justify-center text-white animate-fade-in">
+            <div className="text-6xl">⏳</div>
+            <h2 className="text-3xl font-black italic">APPLICATION PENDING</h2>
+            <p className="text-neutral-400">You already have an active application.</p>
+        </div>
+    );
+
+    return (
+        <div className="bg-neutral-900/90 backdrop-blur-xl p-8 rounded-[2rem] border border-white/10 max-w-2xl mx-auto shadow-2xl relative overflow-hidden">
+            <div className="absolute top-0 left-0 w-full h-2 bg-gradient-to-r from-red-600 to-red-900"></div>
+            <h2 className="text-4xl font-black text-white mb-2 italic tracking-tighter">JOIN <span className="text-red-600">SYRIX</span></h2>
+            <p className="text-neutral-500 mb-8 font-bold uppercase tracking-widest text-xs">Official Recruitment Form</p>
+
+            <div className="space-y-6">
+                <div className="grid grid-cols-2 gap-4">
+                    <div>
+                        <label className="text-xs font-bold text-red-500 uppercase mb-1 block">Current Rank</label>
+                        <Select value={form.rank} onChange={e => setForm({ ...form, rank: e.target.value })}>
+                            {RANKS.map(r => <option key={r} value={r}>{r}</option>)}
+                        </Select>
+                    </div>
+                    <div>
+                        <label className="text-xs font-bold text-red-500 uppercase mb-1 block">Preferred Role</label>
+                        <Select value={form.role} onChange={e => setForm({ ...form, role: e.target.value })}>
+                            {ROLES.map(r => <option key={r} value={r}>{r}</option>)}
+                        </Select>
+                    </div>
+                </div>
+
+                <div>
+                    <label className="text-xs font-bold text-neutral-500 uppercase mb-1 block">Tracker.gg URL</label>
+                    <Input value={form.tracker} onChange={e => setForm({ ...form, tracker: e.target.value })} placeholder="https://tracker.gg/valorant/profile/..." />
+                </div>
+
+                <div>
+                    <label className="text-xs font-bold text-neutral-500 uppercase mb-1 block">Competitive Experience</label>
+                    <Input value={form.exp} onChange={e => setForm({ ...form, exp: e.target.value })} placeholder="Previous teams, tournament experience..." />
+                </div>
+
+                <div>
+                    <label className="text-xs font-bold text-neutral-500 uppercase mb-1 block">Why do you want to join?</label>
+                    <textarea
+                        className="w-full bg-black/50 border border-neutral-800 rounded-xl p-4 text-white placeholder-neutral-600 focus:border-red-600 outline-none transition-colors min-h-[120px]"
+                        value={form.why}
+                        onChange={e => setForm({ ...form, why: e.target.value })}
+                        placeholder="Tell us about your playstyle and goals..."
+                    />
+                </div>
+
+                <ButtonPrimary onClick={submitApp} disabled={status === 'saving'} className="w-full py-4 text-lg">
+                    {status === 'saving' ? 'TRANSMITTING...' : 'SUBMIT APPLICATION'}
+                </ButtonPrimary>
+            </div>
+        </div>
+    );
 }
 
 function PerformanceWidget({ events }) {
