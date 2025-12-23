@@ -1,6 +1,6 @@
 ﻿import React, { useState, useEffect, useMemo, useRef, createContext, useContext } from 'react';
 import { initializeApp } from 'firebase/app';
-import { getFirestore, collection, onSnapshot, doc, setDoc, deleteDoc, addDoc, updateDoc, query, where, getDoc } from 'firebase/firestore';
+import { getFirestore, collection, onSnapshot, doc, setDoc, deleteDoc, addDoc, updateDoc, query, where, getDoc, getDocs } from 'firebase/firestore';
 import { getAuth, onAuthStateChanged, signInWithPopup, signOut, OAuthProvider, signInWithCustomToken } from 'firebase/auth';
 
 // --- Firebase Configuration ---
