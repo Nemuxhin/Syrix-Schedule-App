@@ -512,6 +512,8 @@ const LandingPage = ({ onEnterHub }) => {
 
                 {/* --- NEW TEAM STATS SECTION --- */}
                 <section className="w-full py-12 bg-black border-b border-white/10 flex justify-center relative z-20">
+                    {/* NEW: AMBIENT GLOW EFFECT */}
+                    <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[400px] bg-red-600/10 rounded-full blur-[100px] pointer-events-none"></div>
                     <div className="max-w-7xl w-full px-6 grid grid-cols-1 md:grid-cols-3 gap-6">
                         <div className="glass-panel p-6 rounded-2xl flex items-center justify-between border border-red-900/30" data-aos="fade-up" data-aos-delay="0">
                             <div>
