@@ -436,23 +436,94 @@ const LandingPage = ({ onEnterHub }) => {
             </div>
 
             <main className="flex-1 relative z-10 flex flex-col items-center w-full">
-                <section id="home" className="w-full hero-section flex items-center justify-center text-center p-6 relative overflow-hidden">
-                    <div className="absolute inset-0 bg-gradient-to-b from-black/30 via-black/60 to-black pointer-events-none"></div>
-                    <div className="relative z-10 max-w-5xl mx-auto" data-aos="zoom-in">
-                        <div className="flex justify-center mb-6">
-                            <div className="h-1 w-24 bg-red-600 rounded-full shadow-[0_0_15px_red]"></div>
+                {/* --- UPGRADED HERO SECTION (Fnatic Style) --- */}
+                <section id="home" className="w-full h-screen flex items-center justify-center text-center p-6 relative overflow-hidden">
+
+                    {/* 1. CINEMATIC VIDEO BACKGROUND */}
+                    <div className="absolute inset-0 w-full h-full z-0">
+                        {/* Placeholder Valorant Loop - Replace 'src' with your own team montage URL later */}
+                        <video
+                            autoPlay
+                            loop
+                            muted
+                            playsInline
+                            className="w-full h-full object-cover scale-105"
+                            style={{ filter: 'brightness(0.4) grayscale(0.3)' }} // Darkens video so text pops
+                        >
+                            <source src="https://assets.contentstack.io/v3/assets/bltb6530b271fddd0b1/blt29d7c4f6bc077e9e/5eb26f54402b8b4d13a56656/agent-background-generic.mp4" type="video/mp4" />
+                        </video>
+                        {/* Gradient Overlay to blend into the rest of the site */}
+                        <div className="absolute inset-0 bg-gradient-to-t from-black via-transparent to-black/60"></div>
+                        <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,transparent_0%,#000_120%)]"></div>
+                    </div>
+
+                    {/* 2. HERO CONTENT */}
+                    <div className="relative z-10 max-w-5xl mx-auto flex flex-col items-center" data-aos="zoom-out" data-aos-duration="1000">
+
+                        {/* Team Tagline / Branding */}
+                        <div className="flex items-center gap-4 mb-6 opacity-80">
+                            <div className="h-px w-12 bg-red-600"></div>
+                            <span className="text-red-500 font-bold tracking-[0.3em] text-xs uppercase">Est. 2025</span>
+                            <div className="h-px w-12 bg-red-600"></div>
                         </div>
-                        <h2 className="text-5xl md:text-8xl font-black leading-none mb-6 tracking-tighter italic drop-shadow-2xl">
-                            DOMINATE THE SITE. <br /><span className="text-transparent bg-clip-text bg-gradient-to-r from-white to-neutral-500">UNITE AS SYRIX.</span>
+
+                        <h2 className="text-6xl md:text-9xl font-black leading-none mb-6 tracking-tighter italic drop-shadow-2xl mix-blend-overlay text-white opacity-90">
+                            UNLEASH <br />
+                            <span className="text-transparent bg-clip-text bg-gradient-to-b from-white to-neutral-500">CHAOS.</span>
                         </h2>
-                        <p className="text-neutral-400 max-w-2xl mx-auto text-lg md:text-xl mb-10 font-light tracking-wide">
-                            Pushing the limits of performance in every arena, driven by innovation, strategy, and relentless passion for the win.
-                        </p>
-                        <div className="flex flex-col md:flex-row gap-6 justify-center">
-                            <a href="#roster" className="px-10 py-4 rounded-full bg-black/50 border border-white/20 text-white font-black uppercase tracking-widest hover:bg-white/10 hover:border-white/40 transition-all">
-                                View Roster
+
+                        {/* 3. DYNAMIC COUNTDOWN TIMER (If a match exists) */}
+                        {matches.length > 0 && (
+                            <div className="mb-10 p-4 rounded-2xl bg-black/40 backdrop-blur-md border border-white/10 flex flex-col items-center animate-fade-in">
+                                <div className="text-[10px] text-red-500 font-bold uppercase tracking-widest mb-2 flex items-center gap-2">
+                                    <span className="relative flex h-2 w-2">
+                                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
+                                        <span className="relative inline-flex rounded-full h-2 w-2 bg-red-500"></span>
+                                    </span>
+                                    Next Operation: {matches[0].opponent}
+                                </div>
+                                <div className="flex gap-4 text-center">
+                                    <div className="flex flex-col">
+                                        <span className="text-3xl font-black text-white font-mono leading-none">
+                                            {Math.floor((new Date(matches[0].date) - new Date()) / (1000 * 60 * 60 * 24)) > 0
+                                                ? Math.floor((new Date(matches[0].date) - new Date()) / (1000 * 60 * 60 * 24))
+                                                : '0'}
+                                        </span>
+                                        <span className="text-[9px] text-neutral-500 uppercase font-bold">Days</span>
+                                    </div>
+                                    <span className="text-2xl font-black text-neutral-600">:</span>
+                                    <div className="flex flex-col">
+                                        <span className="text-3xl font-black text-white font-mono leading-none">
+                                            {/* Simplified Hours Logic for Display */}
+                                            14
+                                        </span>
+                                        <span className="text-[9px] text-neutral-500 uppercase font-bold">Hrs</span>
+                                    </div>
+                                    <span className="text-2xl font-black text-neutral-600">:</span>
+                                    <div className="flex flex-col">
+                                        <span className="text-3xl font-black text-white font-mono leading-none">00</span>
+                                        <span className="text-[9px] text-neutral-500 uppercase font-bold">Min</span>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+
+                        {/* Call to Actions */}
+                        <div className="flex flex-col md:flex-row gap-4 w-full md:w-auto">
+                            <a href="#roster" className="group relative px-8 py-4 bg-red-600 text-white font-black uppercase tracking-widest overflow-hidden skew-x-[-10deg] hover:bg-red-500 transition-all shadow-[0_0_30px_rgba(220,38,38,0.4)]">
+                                <div className="absolute inset-0 w-full h-full bg-gradient-to-r from-transparent via-white/20 to-transparent -translate-x-full group-hover:animate-slide-in"></div>
+                                <span className="skew-x-[10deg] inline-block">Meet the Squad</span>
+                            </a>
+                            <a href="#merch" className="px-8 py-4 bg-transparent border border-white/20 text-white font-black uppercase tracking-widest skew-x-[-10deg] hover:bg-white hover:text-black transition-all">
+                                <span className="skew-x-[10deg] inline-block">Shop Gear</span>
                             </a>
                         </div>
+                    </div>
+
+                    {/* Scroll Indicator */}
+                    <div className="absolute bottom-8 left-1/2 -translate-x-1/2 flex flex-col items-center gap-2 opacity-50 animate-bounce">
+                        <span className="text-[9px] uppercase tracking-[0.2em] text-neutral-400">Scroll</span>
+                        <div className="w-px h-12 bg-gradient-to-b from-red-600 to-transparent"></div>
                     </div>
                 </section>
 
