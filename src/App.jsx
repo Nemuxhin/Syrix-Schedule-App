@@ -495,9 +495,9 @@ const LandingPage = ({ onEnterHub }) => {
                                 <div key={i} className="flex items-center gap-8">
                                     <span className="text-xs font-black uppercase tracking-[0.2em] text-red-500/80">VALORANT PREMIER</span>
                                     <span className="w-1 h-1 bg-red-500 rounded-full"></span>
-                                    <span className="text-xs font-black uppercase tracking-[0.2em] text-white/80">RECRUITING NOW</span>
+                                    <span className="text-xs font-black uppercase tracking-[0.2em] text-white/80">EU ESPORTS ORG</span>
                                     <span className="w-1 h-1 bg-red-500 rounded-full"></span>
-                                    <span className="text-xs font-black uppercase tracking-[0.2em] text-neutral-500">EST. 2025</span>
+                                    <span className="text-xs font-black uppercase tracking-[0.2em] text-neutral-500">EST. 2024</span>
                                     <span className="w-1 h-1 bg-red-500 rounded-full"></span>
                                 </div>
                             ))}
