@@ -2696,6 +2696,12 @@ export default function App() {
     // State to toggle between Landing Page ('landing') and Team Hub ('hub')
     const [currentView, setCurrentView] = useState('landing');
 
+    useEffect(() => {
+        document.title = currentView === 'landing'
+            ? "SYRIX | Official Team Portal"
+            : "SYRIX | Command Center";
+    }, [currentView]);
+
     return (
         <ToastProvider>
             <GlobalStyles />
