@@ -1179,7 +1179,14 @@ function StratBook() {
     const [color, setColor] = useState('#ef4444');
     const addToast = useToast();
 
+    // --- STATE ---
     const [mapIcons, setMapIcons] = useState([]);
+
+    // --- NEW: UNDO/REDO HISTORY STATE ---
+    const [history, setHistory] = useState([[]]); // History is an array of icon arrays
+    const [historyStep, setHistoryStep] = useState(0); // Current position in history
+    // ------------------------------------
+
     const [dragItem, setDragItem] = useState(null);
     const [movingIconIndex, setMovingIconIndex] = useState(null);
     const [selectedIconId, setSelectedIconId] = useState(null);
@@ -1187,11 +1194,41 @@ function StratBook() {
     const [savedStrats, setSavedStrats] = useState([]);
     const [viewingStrat, setViewingStrat] = useState(null);
 
+    // Fetch Saved Strats
     useEffect(() => {
         const qStrats = query(collection(db, 'strats'), where("map", "==", selectedMap));
-        const unsubStrats = onSnapshot(qStrats, (snap) => { const s = []; snap.forEach(doc => s.push({ id: doc.id, ...doc.data() })); s.sort((a, b) => new Date(b.date) - new Date(a.date)); setSavedStrats(s); });
+        const unsubStrats = onSnapshot(qStrats, (snap) => {
+            const s = [];
+            snap.forEach(doc => s.push({ id: doc.id, ...doc.data() }));
+            s.sort((a, b) => new Date(b.date) - new Date(a.date));
+            setSavedStrats(s);
+        });
         return () => { unsubStrats(); };
     }, [selectedMap]);
+
+    // --- NEW: HISTORY HELPERS ---
+    const updateHistory = (newIcons) => {
+        const newHistory = history.slice(0, historyStep + 1);
+        newHistory.push(newIcons);
+        setHistory(newHistory);
+        setHistoryStep(newHistory.length - 1);
+        setMapIcons(newIcons);
+    };
+
+    const handleUndo = () => {
+        if (historyStep === 0) return;
+        const prevStep = historyStep - 1;
+        setHistoryStep(prevStep);
+        setMapIcons(history[prevStep]);
+    };
+
+    const handleRedo = () => {
+        if (historyStep === history.length - 1) return;
+        const nextStep = historyStep + 1;
+        setHistoryStep(nextStep);
+        setMapIcons(history[nextStep]);
+    };
+    // ----------------------------
 
     const getPos = (e) => {
         if (!canvasRef.current) return { x: 0, y: 0 };
@@ -1201,6 +1238,8 @@ function StratBook() {
         return { x: (clientX - rect.left) * (canvasRef.current.width / rect.width), y: (clientY - rect.top) * (canvasRef.current.height / rect.height) };
     };
 
+    // Drawing Logic (Note: Drawing lines is separate from icons and currently not part of history stack for simplicity, 
+    // but clearing canvas clears everything)
     const startDraw = (e) => {
         if (movingIconIndex !== null || selectedIconId !== null) return;
         const ctx = canvasRef.current.getContext('2d');
@@ -1217,9 +1256,13 @@ function StratBook() {
     };
 
     const stopDraw = () => setIsDrawing(false);
+
     const clearCanvas = () => {
         const ctx = canvasRef.current.getContext('2d');
         ctx.clearRect(0, 0, canvasRef.current.width, canvasRef.current.height);
+        // Reset History
+        setHistory([[]]);
+        setHistoryStep(0);
         setMapIcons([]);
         setSelectedIconId(null);
         addToast('Canvas Cleared');
@@ -1233,23 +1276,28 @@ function StratBook() {
         const y = ((e.clientY - rect.top) / rect.height) * 100;
 
         if (dragItem) {
-            setMapIcons([...mapIcons, { id: Date.now(), ...dragItem, x, y, rotation: 0, scale: 1.0 }]);
+            // Add new item to history
+            const newIcons = [...mapIcons, { id: Date.now(), ...dragItem, x, y, rotation: 0, scale: 1.0 }];
+            updateHistory(newIcons);
             setDragItem(null);
         } else if (movingIconIndex !== null) {
+            // Move item and update history
             const updated = [...mapIcons];
             updated[movingIconIndex] = { ...updated[movingIconIndex], x, y };
-            setMapIcons(updated);
+            updateHistory(updated);
             setMovingIconIndex(null);
         }
     };
 
     const updateSelectedIcon = (prop, value) => {
         if (selectedIconId === null) return;
-        setMapIcons(prev => prev.map(icon => icon.id === selectedIconId ? { ...icon, [prop]: value } : icon));
+        const updated = mapIcons.map(icon => icon.id === selectedIconId ? { ...icon, [prop]: value } : icon);
+        setMapIcons(updated); // We update state directly for smooth sliding, commit to history on mouseUp if desired, but here just state.
     };
 
     const deleteSelectedIcon = () => {
-        setMapIcons(prev => prev.filter(icon => icon.id !== selectedIconId));
+        const newIcons = mapIcons.filter(icon => icon.id !== selectedIconId);
+        updateHistory(newIcons);
         setSelectedIconId(null);
     };
 
@@ -1258,6 +1306,7 @@ function StratBook() {
         tempCanvas.width = 1024; tempCanvas.height = 1024;
         const ctx = tempCanvas.getContext('2d');
 
+        // Draw Map Background
         if (mapImages[selectedMap]) {
             const img = new Image();
             img.src = mapImages[selectedMap];
@@ -1266,8 +1315,10 @@ function StratBook() {
             ctx.drawImage(img, 0, 0, 1024, 1024);
         }
 
+        // Draw Drawings (Lines)
         ctx.drawImage(canvasRef.current, 0, 0);
 
+        // Draw Icons
         for (const icon of mapIcons) {
             const px = (icon.x / 100) * 1024;
             const py = (icon.y / 100) * 1024;
@@ -1291,6 +1342,7 @@ function StratBook() {
                 ctx.font = "bold 60px Arial"; ctx.fillStyle = "rgba(255, 255, 255, 0.8)"; ctx.textAlign = "center"; ctx.textBaseline = "middle";
                 ctx.fillText(icon.label, 0, 0);
             } else {
+                // Render Shapes
                 ctx.beginPath();
                 if (icon.shape === 'ring') { ctx.arc(0, 0, 20, 0, Math.PI * 2); ctx.fillStyle = icon.color; ctx.fill(); ctx.lineWidth = 3; ctx.strokeStyle = icon.border; ctx.stroke(); }
                 else if (icon.shape === 'square') { ctx.fillStyle = icon.color; ctx.rect(-15, -15, 30, 30); ctx.fill(); ctx.lineWidth = 2; ctx.strokeStyle = icon.border; ctx.stroke(); }
@@ -1303,9 +1355,15 @@ function StratBook() {
             ctx.restore();
         }
 
-        const dataUrl = tempCanvas.toDataURL();
-        await addDoc(collection(db, 'strats'), { map: selectedMap, image: dataUrl, date: new Date().toISOString() });
-        addToast('Strat Saved!');
+        try {
+            // FIX: Compress image to avoid 1MB Firestore limit
+            const dataUrl = tempCanvas.toDataURL('image/jpeg', 0.7);
+            await addDoc(collection(db, 'strats'), { map: selectedMap, image: dataUrl, date: new Date().toISOString() });
+            addToast('Strat Saved!');
+        } catch (e) {
+            console.error(e);
+            addToast('Error saving (Too large?)', 'error');
+        }
     };
 
     const deleteStrat = async (id) => { if (viewingStrat) setViewingStrat(null); await deleteDoc(doc(db, 'strats', id)); addToast('Strategy Deleted'); };
@@ -1328,13 +1386,8 @@ function StratBook() {
                             <div className="grid grid-cols-4 gap-2">
                                 {UTILITY_TYPES.map(u => (
                                     <div key={u.id} draggable onDragStart={() => setDragItem({ type: 'util', ...u })} className="w-10 h-10 rounded border border-neutral-700 bg-black cursor-grab hover:border-white flex items-center justify-center" title={u.label}>
-                                        {u.shape === 'ring' && <div className="w-6 h-6 rounded-full border-2" style={{ backgroundColor: u.color, borderColor: u.border }}></div>}
-                                        {u.shape === 'square' && <div className="w-5 h-5 border-2" style={{ backgroundColor: u.color, borderColor: u.border }}></div>}
-                                        {u.shape === 'rect' && <div className="w-6 h-3 border-2" style={{ backgroundColor: u.color, borderColor: u.border }}></div>}
-                                        {u.shape === 'cross' && <div className="text-sm font-black" style={{ color: u.border }}>X</div>}
-                                        {u.shape === 'diamond' && <div className="w-4 h-4 transform rotate-45 border-2" style={{ backgroundColor: u.color, borderColor: u.border }}></div>}
-                                        {u.shape === 'triangle' && <div className="w-0 h-0 border-l-[5px] border-l-transparent border-r-[5px] border-r-transparent border-b-[10px]" style={{ borderBottomColor: u.border }}></div>}
-                                        {u.shape === 'star' && <div className="w-2 h-2 bg-yellow-500 rotate-45"></div>}
+                                        {/* Simplified visual representation for the sidebar icons */}
+                                        <div className="w-6 h-6" style={{ backgroundColor: u.color, border: `2px solid ${u.border}`, borderRadius: u.shape === 'ring' ? '50%' : '2px' }}></div>
                                     </div>
                                 ))}
                             </div>
@@ -1366,7 +1419,23 @@ function StratBook() {
                 <Card className="flex-1 flex flex-col relative items-center justify-center bg-black/80 !p-2">
                     <div className="w-full flex justify-between items-center mb-2 px-4 pt-2">
                         <h3 className="text-2xl font-black text-white">STRATBOOK {viewingStrat && <span className="text-red-500 text-sm ml-2">(VIEWING)</span>}</h3>
-                        <div className="flex gap-2">{!viewingStrat ? (<><button onClick={() => setColor('#ef4444')} className="w-6 h-6 rounded-full bg-red-500 border border-white"></button><button onClick={() => setColor('#3b82f6')} className="w-6 h-6 rounded-full bg-blue-500 border border-white"></button><button onClick={() => setColor('#ffffff')} className="w-6 h-6 rounded-full bg-white border border-white"></button><ButtonSecondary onClick={clearCanvas} className="text-xs py-1 px-3">Clear</ButtonSecondary><ButtonPrimary onClick={saveStrat} className="text-xs py-1 px-3">Save</ButtonPrimary></>) : <ButtonSecondary onClick={() => setViewingStrat(null)} className="text-xs bg-red-900/50 border-red-500 text-white">Close</ButtonSecondary>}</div>
+                        <div className="flex gap-2">
+                            {!viewingStrat ? (
+                                <>
+                                    {/* --- UNDO / REDO CONTROLS --- */}
+                                    <ButtonSecondary onClick={handleUndo} disabled={historyStep === 0} className="px-3" title="Undo">↩</ButtonSecondary>
+                                    <ButtonSecondary onClick={handleRedo} disabled={historyStep === history.length - 1} className="px-3" title="Redo">↪</ButtonSecondary>
+
+                                    <div className="w-px h-6 bg-white/20 mx-2"></div>
+
+                                    <button onClick={() => setColor('#ef4444')} className={`w-6 h-6 rounded-full bg-red-500 border ${color === '#ef4444' ? 'border-white' : 'border-transparent'}`}></button>
+                                    <button onClick={() => setColor('#3b82f6')} className={`w-6 h-6 rounded-full bg-blue-500 border ${color === '#3b82f6' ? 'border-white' : 'border-transparent'}`}></button>
+                                    <button onClick={() => setColor('#ffffff')} className={`w-6 h-6 rounded-full bg-white border ${color === '#ffffff' ? 'border-white' : 'border-transparent'}`}></button>
+                                    <ButtonSecondary onClick={clearCanvas} className="text-xs py-1 px-3">Clear</ButtonSecondary>
+                                    <ButtonPrimary onClick={saveStrat} className="text-xs py-1 px-3">Save</ButtonPrimary>
+                                </>
+                            ) : <ButtonSecondary onClick={() => setViewingStrat(null)} className="text-xs bg-red-900/50 border-red-500 text-white">Close</ButtonSecondary>}
+                        </div>
                     </div>
                     <div className="w-full flex overflow-x-auto gap-2 pb-4 mb-2 px-4 custom-scrollbar">{MAPS.map(m => <button key={m} onClick={() => { setSelectedMap(m); clearCanvas(); setViewingStrat(null); }} className={`px-3 py-1 rounded-full text-xs font-bold ${selectedMap === m ? 'bg-red-600 text-white' : 'bg-black text-neutral-500'}`}>{m}</button>)}</div>
 
@@ -2507,4 +2576,4 @@ export default function App() {
             )}
         </ToastProvider>
     );
-}-
+}
