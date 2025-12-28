@@ -436,40 +436,37 @@ const LandingPage = ({ onEnterHub }) => {
             </div>
 
             <main className="flex-1 relative z-10 flex flex-col items-center w-full">
-                {/* --- HERO SECTION: SYRIX ULTIMATE EDITION --- */}
+                {/* --- HERO SECTION: YOUTUBE NO-UPLOAD VERSION --- */}
                 <section id="home" className="w-full h-screen flex flex-col justify-center items-center text-center relative overflow-hidden bg-black">
 
-                    {/* 1. RELIABLE VIDEO BACKGROUND */}
-                    <div className="absolute inset-0 w-full h-full z-0">
-                        {/* Fallback gradient if video fails to load */}
-                        <div className="absolute inset-0 bg-gradient-to-br from-red-900/20 to-black z-[-1]"></div>
+                    {/* 1. YOUTUBE BACKGROUND LAYER */}
+                    <div className="absolute inset-0 w-full h-full z-0 pointer-events-none overflow-hidden">
+                        {/* THE TRICK: 
+           We make the video 300% larger (scale-[3.0]) to push the YouTube title 
+           and play buttons off the screen so no one sees them.
+        */}
+                        <iframe
+                            className="absolute top-1/2 left-1/2 w-full h-full min-w-[177vh] min-h-[56.25vw] -translate-x-1/2 -translate-y-1/2 scale-[3.0] opacity-60 mix-blend-overlay"
+                            src="https://www.youtube.com/embed/y9zweO_hU1U?autoplay=1&mute=1&controls=0&loop=1&playlist=y9zweO_hU1U&showinfo=0&rel=0&iv_load_policy=3&modestbranding=1&playsinline=1&enablejsapi=1&origin=http://localhost:3000"
+                            title="Hero Background"
+                            frameBorder="0"
+                            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                            allowFullScreen
+                        ></iframe>
 
-                        <video
-                            autoPlay
-                            loop
-                            muted
-                            playsInline
-                            className="w-full h-full object-cover opacity-60 mix-blend-overlay"
-                        >
-                            {/* Reliable Abstract Red Loop */}
-                            <source src="https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerMeltdowns.mp4" type="video/mp4" />
-                        </video>
-
-                        {/* Vignette & Scanlines for "Tactical" look */}
-                        <div className="absolute inset-0 bg-[linear-gradient(to_bottom,rgba(0,0,0,0)_50%,rgba(0,0,0,0.4)_100%)]"></div>
+                        {/* Gradient & Texture Overlays to make it look cinematic */}
+                        <div className="absolute inset-0 bg-gradient-to-t from-black via-transparent to-black/80"></div>
                         <div className="absolute inset-0 bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-20"></div>
                     </div>
 
                     {/* 2. HERO CONTENT */}
                     <div className="relative z-10 max-w-7xl mx-auto flex flex-col items-center px-4" data-aos="zoom-out" data-aos-duration="1000">
 
-                        {/* Top Badge */}
                         <div className="mb-6 flex items-center gap-3 bg-white/5 backdrop-blur-md border border-white/10 px-4 py-1.5 rounded-full">
                             <span className="w-2 h-2 rounded-full bg-red-600 animate-pulse"></span>
                             <span className="text-[10px] font-bold uppercase tracking-widest text-neutral-300">Official Team Portal</span>
                         </div>
 
-                        {/* MAIN TEXT: SYRIX */}
                         <h1 className="text-[15vw] md:text-[12rem] font-black leading-[0.85] tracking-tighter italic text-transparent bg-clip-text bg-gradient-to-b from-white via-neutral-200 to-neutral-600 drop-shadow-2xl">
                             SYRIX
                         </h1>
@@ -478,13 +475,11 @@ const LandingPage = ({ onEnterHub }) => {
                             PRECISION. STRATEGY. <span className="text-red-600 font-bold">DOMINANCE.</span>
                         </p>
 
-                        {/* CTA Buttons */}
                         <div className="flex flex-col md:flex-row gap-4 w-full md:w-auto">
                             <button onClick={() => document.getElementById('roster').scrollIntoView({ behavior: 'smooth' })} className="group relative px-10 py-4 bg-red-600 text-white font-black uppercase tracking-widest overflow-hidden hover:bg-red-700 transition-all shadow-[0_0_40px_rgba(220,38,38,0.5)] border border-red-500">
                                 <span className="relative z-10 flex items-center gap-2">
                                     View Roster <span className="group-hover:translate-x-1 transition-transform">→</span>
                                 </span>
-                                {/* Slanted Shine Effect */}
                                 <div className="absolute inset-0 bg-white/20 translate-x-[-100%] skew-x-[-15deg] group-hover:translate-x-[100%] transition-transform duration-700 ease-in-out"></div>
                             </button>
                             <button onClick={onEnterHub} className="px-10 py-4 bg-black/50 backdrop-blur-md border border-white/20 text-white font-black uppercase tracking-widest hover:bg-white hover:text-black transition-all">
@@ -493,10 +488,9 @@ const LandingPage = ({ onEnterHub }) => {
                         </div>
                     </div>
 
-                    {/* 3. SCROLLING TICKER (The "Something Else") */}
+                    {/* 3. SCROLLING TICKER */}
                     <div className="absolute bottom-0 w-full bg-red-600/10 border-t border-red-600/30 backdrop-blur-sm overflow-hidden py-3">
                         <div className="flex gap-8 animate-marquee whitespace-nowrap">
-                            {/* Repeated text for seamless loop */}
                             {[...Array(10)].map((_, i) => (
                                 <div key={i} className="flex items-center gap-8">
                                     <span className="text-xs font-black uppercase tracking-[0.2em] text-red-500/80">VALORANT PREMIER</span>
@@ -510,15 +504,9 @@ const LandingPage = ({ onEnterHub }) => {
                         </div>
                     </div>
 
-                    {/* Style for the ticker animation */}
                     <style>{`
-        @keyframes marquee {
-            0% { transform: translateX(0); }
-            100% { transform: translateX(-50%); }
-        }
-        .animate-marquee {
-            animation: marquee 20s linear infinite;
-        }
+        @keyframes marquee { 0% { transform: translateX(0); } 100% { transform: translateX(-50%); } }
+        .animate-marquee { animation: marquee 20s linear infinite; }
     `}</style>
                 </section>
 
