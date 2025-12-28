@@ -1174,16 +1174,22 @@ function StratBook() {
     const [selectedAgentForUtil, setSelectedAgentForUtil] = useState(AGENT_NAMES[0]);
     const canvasRef = useRef(null);
     const containerRef = useRef(null);
-    const [isDrawing, setIsDrawing] = useState(false);
     const { mapImages, agentData } = useValorantData();
     const [color, setColor] = useState('#ef4444');
     const addToast = useToast();
 
-    // --- 1. NEW: HISTORY STATE (The missing piece) ---
-    const [mapIcons, setMapIcons] = useState([]); // Current Icons
-    const [history, setHistory] = useState([[]]); // Array of past states
-    const [historyStep, setHistoryStep] = useState(0); // Where are we in history?
-    // ------------------------------------------------
+    // --- STATE TRACKING ---
+    const [mapIcons, setMapIcons] = useState([]);
+    const [drawLines, setDrawLines] = useState([]); // Store drawing paths
+
+    // --- HISTORY STACK (Stores snapshots of BOTH icons and lines) ---
+    // Initial state: empty icons, empty lines
+    const [history, setHistory] = useState([{ icons: [], lines: [] }]);
+    const [historyStep, setHistoryStep] = useState(0);
+    // ----------------------
+
+    const [isDrawing, setIsDrawing] = useState(false);
+    const [currentLine, setCurrentLine] = useState([]); // The line currently being drawn
 
     const [dragItem, setDragItem] = useState(null);
     const [movingIconIndex, setMovingIconIndex] = useState(null);
@@ -1192,6 +1198,7 @@ function StratBook() {
     const [savedStrats, setSavedStrats] = useState([]);
     const [viewingStrat, setViewingStrat] = useState(null);
 
+    // 1. Fetch Strats
     useEffect(() => {
         const qStrats = query(collection(db, 'strats'), where("map", "==", selectedMap));
         const unsubStrats = onSnapshot(qStrats, (snap) => {
@@ -1203,68 +1210,111 @@ function StratBook() {
         return () => { unsubStrats(); };
     }, [selectedMap]);
 
-    // --- 2. NEW: HISTORY FUNCTIONS ---
-    // Whenever you add/move/delete an icon, call THIS instead of setMapIcons
-    const pushToHistory = (newIconState) => {
-        const newHistory = history.slice(0, historyStep + 1); // Cut off "future" if we went back
-        newHistory.push(newIconState);
+    // 2. REDRAW CANVAS whenever Lines or Map changes
+    useEffect(() => {
+        const ctx = canvasRef.current?.getContext('2d');
+        if (!ctx) return;
+
+        // Clear and set dimensions
+        ctx.clearRect(0, 0, 1024, 1024);
+        ctx.lineCap = 'round';
+        ctx.lineJoin = 'round';
+
+        // Redraw all saved lines from history
+        drawLines.forEach(line => {
+            if (line.points.length < 2) return;
+            ctx.beginPath();
+            ctx.strokeStyle = line.color;
+            ctx.lineWidth = 3;
+            ctx.moveTo(line.points[0].x, line.points[0].y);
+            for (let i = 1; i < line.points.length; i++) {
+                ctx.lineTo(line.points[i].x, line.points[i].y);
+            }
+            ctx.stroke();
+        });
+
+        // Redraw the line currently being drawn (if any)
+        if (currentLine.length > 0) {
+            ctx.beginPath();
+            ctx.strokeStyle = color;
+            ctx.lineWidth = 3;
+            ctx.moveTo(currentLine[0].x, currentLine[0].y);
+            for (let i = 1; i < currentLine.length; i++) {
+                ctx.lineTo(currentLine[i].x, currentLine[i].y);
+            }
+            ctx.stroke();
+        }
+    }, [drawLines, currentLine, selectedMap]); // Trigger redraw when these change
+
+    // --- HISTORY LOGIC ---
+    const addToHistory = (newIcons, newLines) => {
+        // Cut off "future" if we undid, then add new state
+        const newHistory = history.slice(0, historyStep + 1);
+        newHistory.push({ icons: newIcons, lines: newLines });
+
         setHistory(newHistory);
         setHistoryStep(newHistory.length - 1);
-        setMapIcons(newIconState);
+
+        setMapIcons(newIcons);
+        setDrawLines(newLines);
     };
 
     const handleUndo = () => {
-        if (historyStep === 0) return; // Can't go back further
+        if (historyStep === 0) return;
         const prevStep = historyStep - 1;
         setHistoryStep(prevStep);
-        setMapIcons(history[prevStep]);
+        setMapIcons(history[prevStep].icons);
+        setDrawLines(history[prevStep].lines);
     };
 
     const handleRedo = () => {
-        if (historyStep === history.length - 1) return; // Can't go forward
+        if (historyStep === history.length - 1) return;
         const nextStep = historyStep + 1;
         setHistoryStep(nextStep);
-        setMapIcons(history[nextStep]);
+        setMapIcons(history[nextStep].icons);
+        setDrawLines(history[nextStep].lines);
     };
-    // ---------------------------------
 
+    // --- DRAWING HANDLERS ---
     const getPos = (e) => {
         if (!canvasRef.current) return { x: 0, y: 0 };
         const rect = canvasRef.current.getBoundingClientRect();
-        const clientX = e.nativeEvent ? e.nativeEvent.clientX : e.touches[0].clientX;
-        const clientY = e.nativeEvent ? e.nativeEvent.clientY : e.touches[0].clientY;
-        return { x: (clientX - rect.left) * (canvasRef.current.width / rect.width), y: (clientY - rect.top) * (canvasRef.current.height / rect.height) };
+        // Handle both Mouse and Touch events
+        const clientX = e.nativeEvent ? (e.nativeEvent.touches ? e.nativeEvent.touches[0].clientX : e.nativeEvent.clientX) : e.touches[0].clientX;
+        const clientY = e.nativeEvent ? (e.nativeEvent.touches ? e.nativeEvent.touches[0].clientY : e.nativeEvent.clientY) : e.touches[0].clientY;
+
+        // Scale to 1024x1024 canvas coordinate system
+        return {
+            x: (clientX - rect.left) * (1024 / rect.width),
+            y: (clientY - rect.top) * (1024 / rect.height)
+        };
     };
 
     const startDraw = (e) => {
         if (movingIconIndex !== null || selectedIconId !== null) return;
-        const ctx = canvasRef.current.getContext('2d');
+        setIsDrawing(true);
         const pos = getPos(e);
-        ctx.beginPath(); ctx.moveTo(pos.x, pos.y); setIsDrawing(true);
+        setCurrentLine([pos]); // Start a new line
     };
 
     const draw = (e) => {
         if (!isDrawing) return;
-        const ctx = canvasRef.current.getContext('2d');
         const pos = getPos(e);
-        ctx.strokeStyle = color; ctx.lineWidth = 3; ctx.lineCap = 'round';
-        ctx.lineTo(pos.x, pos.y); ctx.stroke();
+        setCurrentLine(prev => [...prev, pos]); // Add point to current line
     };
 
-    const stopDraw = () => setIsDrawing(false);
-
-    const clearCanvas = () => {
-        const ctx = canvasRef.current.getContext('2d');
-        ctx.clearRect(0, 0, canvasRef.current.width, canvasRef.current.height);
-
-        // Reset History on Clear
-        setHistory([[]]);
-        setHistoryStep(0);
-        setMapIcons([]);
-        setSelectedIconId(null);
-        addToast('Canvas Cleared');
+    const stopDraw = () => {
+        if (!isDrawing) return;
+        setIsDrawing(false);
+        if (currentLine.length > 1) {
+            // Save the finished line to state AND history
+            const newLines = [...drawLines, { color: color, points: currentLine }];
+            addToHistory(mapIcons, newLines);
+        }
+        setCurrentLine([]);
     };
 
+    // --- ICON HANDLERS ---
     const handleDrop = (e) => {
         e.preventDefault();
         if (!containerRef.current) return;
@@ -1273,38 +1323,47 @@ function StratBook() {
         const y = ((e.clientY - rect.top) / rect.height) * 100;
 
         if (dragItem) {
-            // NEW: Use pushToHistory
             const newIcons = [...mapIcons, { id: Date.now(), ...dragItem, x, y, rotation: 0, scale: 1.0 }];
-            pushToHistory(newIcons);
+            addToHistory(newIcons, drawLines); // Save to history
             setDragItem(null);
         } else if (movingIconIndex !== null) {
-            // NEW: Use pushToHistory
             const updated = [...mapIcons];
             updated[movingIconIndex] = { ...updated[movingIconIndex], x, y };
-            pushToHistory(updated);
+            addToHistory(updated, drawLines); // Save to history
             setMovingIconIndex(null);
         }
     };
 
     const updateSelectedIcon = (prop, value) => {
         if (selectedIconId === null) return;
-        // We update state directly for sliders (smoothness), 
-        // you could add onMouseUp to commit to history if you wanted strict undo for rotation
+        // Update state directly for smooth UI (sliders), don't spam history
         setMapIcons(prev => prev.map(icon => icon.id === selectedIconId ? { ...icon, [prop]: value } : icon));
     };
 
     const deleteSelectedIcon = () => {
-        // NEW: Use pushToHistory
         const newIcons = mapIcons.filter(icon => icon.id !== selectedIconId);
-        pushToHistory(newIcons);
+        addToHistory(newIcons, drawLines); // Save to history
         setSelectedIconId(null);
     };
 
+    const clearCanvas = () => {
+        // Reset everything
+        const empty = { icons: [], lines: [] };
+        setHistory([empty]);
+        setHistoryStep(0);
+        setMapIcons([]);
+        setDrawLines([]);
+        setSelectedIconId(null);
+        addToast('Canvas Cleared');
+    };
+
+    // --- SAVING ---
     const saveStrat = async () => {
         const tempCanvas = document.createElement('canvas');
         tempCanvas.width = 1024; tempCanvas.height = 1024;
         const ctx = tempCanvas.getContext('2d');
 
+        // 1. Draw Map Background
         if (mapImages[selectedMap]) {
             const img = new Image();
             img.src = mapImages[selectedMap];
@@ -1313,8 +1372,10 @@ function StratBook() {
             ctx.drawImage(img, 0, 0, 1024, 1024);
         }
 
+        // 2. Draw existing drawings from the displayed canvas
         ctx.drawImage(canvasRef.current, 0, 0);
 
+        // 3. Draw Icons
         for (const icon of mapIcons) {
             const px = (icon.x / 100) * 1024;
             const py = (icon.y / 100) * 1024;
@@ -1338,6 +1399,7 @@ function StratBook() {
                 ctx.font = "bold 60px Arial"; ctx.fillStyle = "rgba(255, 255, 255, 0.8)"; ctx.textAlign = "center"; ctx.textBaseline = "middle";
                 ctx.fillText(icon.label, 0, 0);
             } else {
+                // Shapes
                 ctx.beginPath();
                 if (icon.shape === 'ring') { ctx.arc(0, 0, 20, 0, Math.PI * 2); ctx.fillStyle = icon.color; ctx.fill(); ctx.lineWidth = 3; ctx.strokeStyle = icon.border; ctx.stroke(); }
                 else if (icon.shape === 'square') { ctx.fillStyle = icon.color; ctx.rect(-15, -15, 30, 30); ctx.fill(); ctx.lineWidth = 2; ctx.strokeStyle = icon.border; ctx.stroke(); }
@@ -1351,13 +1413,12 @@ function StratBook() {
         }
 
         try {
-            // FIX: Compress image to avoid crashing database
             const dataUrl = tempCanvas.toDataURL('image/jpeg', 0.7);
             await addDoc(collection(db, 'strats'), { map: selectedMap, image: dataUrl, date: new Date().toISOString() });
             addToast('Strat Saved!');
         } catch (e) {
             console.error(e);
-            addToast('Error saving strat (Too large?)', 'error');
+            addToast('Error saving (Image too large)', 'error');
         }
     };
 
@@ -1376,6 +1437,7 @@ function StratBook() {
                         </div>
                     </div>
                     <div className="flex-1 overflow-y-auto custom-scrollbar p-4 space-y-6">
+                        {/* UTILITIES PALETTE */}
                         <div>
                             <h4 className="text-xs font-black text-red-500 uppercase tracking-widest mb-2">2. Generic Util</h4>
                             <div className="grid grid-cols-4 gap-2">
@@ -1386,6 +1448,7 @@ function StratBook() {
                                 ))}
                             </div>
                         </div>
+                        {/* ABILITIES PALETTE */}
                         <div>
                             <h4 className="text-xs font-black text-red-500 uppercase tracking-widest mb-2">3. Abilities</h4>
                             <Select value={selectedAgentForUtil} onChange={e => setSelectedAgentForUtil(e.target.value)} className="mb-2">
@@ -1399,6 +1462,7 @@ function StratBook() {
                                 ))}
                             </div>
                         </div>
+                        {/* AGENTS PALETTE */}
                         <div>
                             <h4 className="text-xs font-black text-red-500 uppercase tracking-widest mb-2">4. Agents</h4>
                             <div className="grid grid-cols-4 gap-2">
@@ -1416,7 +1480,6 @@ function StratBook() {
                         <div className="flex gap-2">
                             {!viewingStrat ? (
                                 <>
-                                    {/* --- 3. NEW: UNDO/REDO BUTTONS --- */}
                                     <ButtonSecondary onClick={handleUndo} disabled={historyStep === 0} className="px-3" title="Undo">↩</ButtonSecondary>
                                     <ButtonSecondary onClick={handleRedo} disabled={historyStep === history.length - 1} className="px-3" title="Redo">↪</ButtonSecondary>
 
@@ -1436,6 +1499,22 @@ function StratBook() {
                     <div ref={containerRef} className="relative h-full aspect-square bg-neutral-900 rounded-xl overflow-hidden border border-neutral-800 shadow-2xl mx-auto" onDragOver={e => e.preventDefault()} onDrop={handleDrop} onClick={() => setSelectedIconId(null)}>
                         {mapImages[selectedMap] && <img src={mapImages[selectedMap]} alt="Map" className="absolute inset-0 w-full h-full object-cover pointer-events-none" />}
 
+                        {/* DRAWN LINES LAYER (Canvas) */}
+                        <canvas
+                            ref={canvasRef}
+                            width={1024}
+                            height={1024}
+                            className={`absolute inset-0 w-full h-full z-10 touch-none ${viewingStrat ? 'hidden' : 'cursor-crosshair'}`}
+                            onMouseDown={startDraw}
+                            onMouseMove={draw}
+                            onMouseUp={stopDraw}
+                            onMouseLeave={stopDraw}
+                            onTouchStart={startDraw} // Added touch support
+                            onTouchMove={draw}
+                            onTouchEnd={stopDraw}
+                        />
+
+                        {/* ICONS LAYER (DOM) */}
                         {!viewingStrat && mapIcons.map((icon, i) => (
                             <div
                                 key={icon.id}
@@ -1449,7 +1528,7 @@ function StratBook() {
                                 onDragStart={(e) => { e.stopPropagation(); setMovingIconIndex(i); }}
                                 onClick={(e) => { e.stopPropagation(); setSelectedIconId(icon.id); }}
                             >
-                                {/* Rendering logic remains exactly as before */}
+                                {/* Icon Rendering Logic */}
                                 {icon.type === 'agent' ? <img src={agentData[icon.name]?.icon} alt={icon.name} className={`w-10 h-10 rounded-full border-2 shadow-md pointer-events-none bg-black ${selectedIconId === icon.id ? 'border-green-500' : 'border-white'}`} /> :
                                     icon.type === 'ability' ? <img src={icon.icon} className={`w-8 h-8 drop-shadow-md ${selectedIconId === icon.id ? 'filter brightness-150' : ''}`} /> :
                                         icon.type === 'site_label' ? <div className="text-4xl font-black text-white drop-shadow-lg select-none" style={{ textShadow: '0 0 10px black' }}>{icon.label}</div> :
@@ -1463,7 +1542,6 @@ function StratBook() {
                             </div>
                         ))}
 
-                        <canvas ref={canvasRef} width={1024} height={1024} className={`absolute inset-0 w-full h-full z-10 touch-none ${viewingStrat ? 'hidden' : 'cursor-crosshair'}`} onMouseDown={startDraw} onMouseMove={draw} onMouseUp={stopDraw} onMouseLeave={stopDraw} />
                         {viewingStrat && <div className="absolute inset-0 z-30 bg-black flex items-center justify-center"><img src={viewingStrat} alt="Saved Strat" className="w-full h-full object-contain" /></div>}
 
                         {selectedIconId && (
