@@ -1179,13 +1179,11 @@ function StratBook() {
     const [color, setColor] = useState('#ef4444');
     const addToast = useToast();
 
-    // --- STATE ---
-    const [mapIcons, setMapIcons] = useState([]);
-
-    // --- NEW: UNDO/REDO HISTORY STATE ---
-    const [history, setHistory] = useState([[]]); // History is an array of icon arrays
-    const [historyStep, setHistoryStep] = useState(0); // Current position in history
-    // ------------------------------------
+    // --- 1. NEW: HISTORY STATE (The missing piece) ---
+    const [mapIcons, setMapIcons] = useState([]); // Current Icons
+    const [history, setHistory] = useState([[]]); // Array of past states
+    const [historyStep, setHistoryStep] = useState(0); // Where are we in history?
+    // ------------------------------------------------
 
     const [dragItem, setDragItem] = useState(null);
     const [movingIconIndex, setMovingIconIndex] = useState(null);
@@ -1194,7 +1192,6 @@ function StratBook() {
     const [savedStrats, setSavedStrats] = useState([]);
     const [viewingStrat, setViewingStrat] = useState(null);
 
-    // Fetch Saved Strats
     useEffect(() => {
         const qStrats = query(collection(db, 'strats'), where("map", "==", selectedMap));
         const unsubStrats = onSnapshot(qStrats, (snap) => {
@@ -1206,29 +1203,30 @@ function StratBook() {
         return () => { unsubStrats(); };
     }, [selectedMap]);
 
-    // --- NEW: HISTORY HELPERS ---
-    const updateHistory = (newIcons) => {
-        const newHistory = history.slice(0, historyStep + 1);
-        newHistory.push(newIcons);
+    // --- 2. NEW: HISTORY FUNCTIONS ---
+    // Whenever you add/move/delete an icon, call THIS instead of setMapIcons
+    const pushToHistory = (newIconState) => {
+        const newHistory = history.slice(0, historyStep + 1); // Cut off "future" if we went back
+        newHistory.push(newIconState);
         setHistory(newHistory);
         setHistoryStep(newHistory.length - 1);
-        setMapIcons(newIcons);
+        setMapIcons(newIconState);
     };
 
     const handleUndo = () => {
-        if (historyStep === 0) return;
+        if (historyStep === 0) return; // Can't go back further
         const prevStep = historyStep - 1;
         setHistoryStep(prevStep);
         setMapIcons(history[prevStep]);
     };
 
     const handleRedo = () => {
-        if (historyStep === history.length - 1) return;
+        if (historyStep === history.length - 1) return; // Can't go forward
         const nextStep = historyStep + 1;
         setHistoryStep(nextStep);
         setMapIcons(history[nextStep]);
     };
-    // ----------------------------
+    // ---------------------------------
 
     const getPos = (e) => {
         if (!canvasRef.current) return { x: 0, y: 0 };
@@ -1238,8 +1236,6 @@ function StratBook() {
         return { x: (clientX - rect.left) * (canvasRef.current.width / rect.width), y: (clientY - rect.top) * (canvasRef.current.height / rect.height) };
     };
 
-    // Drawing Logic (Note: Drawing lines is separate from icons and currently not part of history stack for simplicity, 
-    // but clearing canvas clears everything)
     const startDraw = (e) => {
         if (movingIconIndex !== null || selectedIconId !== null) return;
         const ctx = canvasRef.current.getContext('2d');
@@ -1260,7 +1256,8 @@ function StratBook() {
     const clearCanvas = () => {
         const ctx = canvasRef.current.getContext('2d');
         ctx.clearRect(0, 0, canvasRef.current.width, canvasRef.current.height);
-        // Reset History
+
+        // Reset History on Clear
         setHistory([[]]);
         setHistoryStep(0);
         setMapIcons([]);
@@ -1276,28 +1273,30 @@ function StratBook() {
         const y = ((e.clientY - rect.top) / rect.height) * 100;
 
         if (dragItem) {
-            // Add new item to history
+            // NEW: Use pushToHistory
             const newIcons = [...mapIcons, { id: Date.now(), ...dragItem, x, y, rotation: 0, scale: 1.0 }];
-            updateHistory(newIcons);
+            pushToHistory(newIcons);
             setDragItem(null);
         } else if (movingIconIndex !== null) {
-            // Move item and update history
+            // NEW: Use pushToHistory
             const updated = [...mapIcons];
             updated[movingIconIndex] = { ...updated[movingIconIndex], x, y };
-            updateHistory(updated);
+            pushToHistory(updated);
             setMovingIconIndex(null);
         }
     };
 
     const updateSelectedIcon = (prop, value) => {
         if (selectedIconId === null) return;
-        const updated = mapIcons.map(icon => icon.id === selectedIconId ? { ...icon, [prop]: value } : icon);
-        setMapIcons(updated); // We update state directly for smooth sliding, commit to history on mouseUp if desired, but here just state.
+        // We update state directly for sliders (smoothness), 
+        // you could add onMouseUp to commit to history if you wanted strict undo for rotation
+        setMapIcons(prev => prev.map(icon => icon.id === selectedIconId ? { ...icon, [prop]: value } : icon));
     };
 
     const deleteSelectedIcon = () => {
+        // NEW: Use pushToHistory
         const newIcons = mapIcons.filter(icon => icon.id !== selectedIconId);
-        updateHistory(newIcons);
+        pushToHistory(newIcons);
         setSelectedIconId(null);
     };
 
@@ -1306,7 +1305,6 @@ function StratBook() {
         tempCanvas.width = 1024; tempCanvas.height = 1024;
         const ctx = tempCanvas.getContext('2d');
 
-        // Draw Map Background
         if (mapImages[selectedMap]) {
             const img = new Image();
             img.src = mapImages[selectedMap];
@@ -1315,10 +1313,8 @@ function StratBook() {
             ctx.drawImage(img, 0, 0, 1024, 1024);
         }
 
-        // Draw Drawings (Lines)
         ctx.drawImage(canvasRef.current, 0, 0);
 
-        // Draw Icons
         for (const icon of mapIcons) {
             const px = (icon.x / 100) * 1024;
             const py = (icon.y / 100) * 1024;
@@ -1342,7 +1338,6 @@ function StratBook() {
                 ctx.font = "bold 60px Arial"; ctx.fillStyle = "rgba(255, 255, 255, 0.8)"; ctx.textAlign = "center"; ctx.textBaseline = "middle";
                 ctx.fillText(icon.label, 0, 0);
             } else {
-                // Render Shapes
                 ctx.beginPath();
                 if (icon.shape === 'ring') { ctx.arc(0, 0, 20, 0, Math.PI * 2); ctx.fillStyle = icon.color; ctx.fill(); ctx.lineWidth = 3; ctx.strokeStyle = icon.border; ctx.stroke(); }
                 else if (icon.shape === 'square') { ctx.fillStyle = icon.color; ctx.rect(-15, -15, 30, 30); ctx.fill(); ctx.lineWidth = 2; ctx.strokeStyle = icon.border; ctx.stroke(); }
@@ -1356,13 +1351,13 @@ function StratBook() {
         }
 
         try {
-            // FIX: Compress image to avoid 1MB Firestore limit
+            // FIX: Compress image to avoid crashing database
             const dataUrl = tempCanvas.toDataURL('image/jpeg', 0.7);
             await addDoc(collection(db, 'strats'), { map: selectedMap, image: dataUrl, date: new Date().toISOString() });
             addToast('Strat Saved!');
         } catch (e) {
             console.error(e);
-            addToast('Error saving (Too large?)', 'error');
+            addToast('Error saving strat (Too large?)', 'error');
         }
     };
 
@@ -1386,7 +1381,6 @@ function StratBook() {
                             <div className="grid grid-cols-4 gap-2">
                                 {UTILITY_TYPES.map(u => (
                                     <div key={u.id} draggable onDragStart={() => setDragItem({ type: 'util', ...u })} className="w-10 h-10 rounded border border-neutral-700 bg-black cursor-grab hover:border-white flex items-center justify-center" title={u.label}>
-                                        {/* Simplified visual representation for the sidebar icons */}
                                         <div className="w-6 h-6" style={{ backgroundColor: u.color, border: `2px solid ${u.border}`, borderRadius: u.shape === 'ring' ? '50%' : '2px' }}></div>
                                     </div>
                                 ))}
@@ -1422,7 +1416,7 @@ function StratBook() {
                         <div className="flex gap-2">
                             {!viewingStrat ? (
                                 <>
-                                    {/* --- UNDO / REDO CONTROLS --- */}
+                                    {/* --- 3. NEW: UNDO/REDO BUTTONS --- */}
                                     <ButtonSecondary onClick={handleUndo} disabled={historyStep === 0} className="px-3" title="Undo">↩</ButtonSecondary>
                                     <ButtonSecondary onClick={handleRedo} disabled={historyStep === history.length - 1} className="px-3" title="Redo">↪</ButtonSecondary>
 
@@ -1455,6 +1449,7 @@ function StratBook() {
                                 onDragStart={(e) => { e.stopPropagation(); setMovingIconIndex(i); }}
                                 onClick={(e) => { e.stopPropagation(); setSelectedIconId(icon.id); }}
                             >
+                                {/* Rendering logic remains exactly as before */}
                                 {icon.type === 'agent' ? <img src={agentData[icon.name]?.icon} alt={icon.name} className={`w-10 h-10 rounded-full border-2 shadow-md pointer-events-none bg-black ${selectedIconId === icon.id ? 'border-green-500' : 'border-white'}`} /> :
                                     icon.type === 'ability' ? <img src={icon.icon} className={`w-8 h-8 drop-shadow-md ${selectedIconId === icon.id ? 'filter brightness-150' : ''}`} /> :
                                         icon.type === 'site_label' ? <div className="text-4xl font-black text-white drop-shadow-lg select-none" style={{ textShadow: '0 0 10px black' }}>{icon.label}</div> :
