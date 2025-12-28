@@ -264,12 +264,6 @@ const LandingPage = ({ onEnterHub }) => {
     const [merchData, setMerchData] = useState([]);
     const [achievements, setAchievements] = useState([]);
 
-    useEffect(() => {
-        document.title = currentView === 'landing'
-            ? "SYRIX | Official Team Portal"
-            : "SYRIX | Command Center";
-    }, [currentView]);
-
     // Load real data from Firestore
     useEffect(() => {
         const unsubRoster = onSnapshot(collection(db, 'roster'), (snap) => {
