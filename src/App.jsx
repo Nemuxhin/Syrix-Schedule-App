@@ -436,96 +436,90 @@ const LandingPage = ({ onEnterHub }) => {
             </div>
 
             <main className="flex-1 relative z-10 flex flex-col items-center w-full">
-                {/* --- UPGRADED HERO SECTION (Fnatic Style - FIXED) --- */}
-                <section id="home" className="w-full h-screen flex items-center justify-center text-center p-6 relative overflow-hidden">
+                {/* --- HERO SECTION: SYRIX ULTIMATE EDITION --- */}
+                <section id="home" className="w-full h-screen flex flex-col justify-center items-center text-center relative overflow-hidden bg-black">
 
-                    {/* 1. CINEMATIC VIDEO BACKGROUND */}
+                    {/* 1. RELIABLE VIDEO BACKGROUND */}
                     <div className="absolute inset-0 w-full h-full z-0">
-                        {/* Updated Video Tag with React-Safe Attributes */}
+                        {/* Fallback gradient if video fails to load */}
+                        <div className="absolute inset-0 bg-gradient-to-br from-red-900/20 to-black z-[-1]"></div>
+
                         <video
                             autoPlay
                             loop
-                            muted={true} // Explicit true is required for React hydration
-                            playsInline // Required for iOS autoplay
-                            className="w-full h-full object-cover scale-105"
-                            style={{ filter: 'brightness(0.4) grayscale(0.3)' }}
-                            poster="https://images.contentstack.io/v3/assets/bltb6530b271fddd0b1/blt720970a058d9294f/64ad802c67622839934273a0/V_Ep_07_Act_01_Iso_KeyArt_1920x1080.jpg" // Fallback Image
+                            muted
+                            playsInline
+                            className="w-full h-full object-cover opacity-60 mix-blend-overlay"
                         >
-                            {/* New Reliable Red Abstract Background URL */}
-                            <source src="https://static.vecteezy.com/system/resources/previews/002/017/637/mp4/red-abstract-background-loop-free-video.mp4" type="video/mp4" />
+                            {/* Reliable Abstract Red Loop */}
+                            <source src="https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerMeltdowns.mp4" type="video/mp4" />
                         </video>
 
-                        {/* Gradient Overlay */}
-                        <div className="absolute inset-0 bg-gradient-to-t from-black via-transparent to-black/60"></div>
-                        <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,transparent_0%,#000_120%)]"></div>
+                        {/* Vignette & Scanlines for "Tactical" look */}
+                        <div className="absolute inset-0 bg-[linear-gradient(to_bottom,rgba(0,0,0,0)_50%,rgba(0,0,0,0.4)_100%)]"></div>
+                        <div className="absolute inset-0 bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-20"></div>
                     </div>
 
                     {/* 2. HERO CONTENT */}
-                    <div className="relative z-10 max-w-5xl mx-auto flex flex-col items-center" data-aos="zoom-out" data-aos-duration="1000">
+                    <div className="relative z-10 max-w-7xl mx-auto flex flex-col items-center px-4" data-aos="zoom-out" data-aos-duration="1000">
 
-                        {/* Team Tagline */}
-                        <div className="flex items-center gap-4 mb-6 opacity-80">
-                            <div className="h-px w-12 bg-red-600"></div>
-                            <span className="text-red-500 font-bold tracking-[0.3em] text-xs uppercase">Est. 2025</span>
-                            <div className="h-px w-12 bg-red-600"></div>
+                        {/* Top Badge */}
+                        <div className="mb-6 flex items-center gap-3 bg-white/5 backdrop-blur-md border border-white/10 px-4 py-1.5 rounded-full">
+                            <span className="w-2 h-2 rounded-full bg-red-600 animate-pulse"></span>
+                            <span className="text-[10px] font-bold uppercase tracking-widest text-neutral-300">Official Team Portal</span>
                         </div>
 
-                        <h2 className="text-6xl md:text-9xl font-black leading-none mb-6 tracking-tighter italic drop-shadow-2xl mix-blend-overlay text-white opacity-90">
-                            UNLEASH <br />
-                            <span className="text-transparent bg-clip-text bg-gradient-to-b from-white to-neutral-500">CHAOS.</span>
-                        </h2>
+                        {/* MAIN TEXT: SYRIX */}
+                        <h1 className="text-[15vw] md:text-[12rem] font-black leading-[0.85] tracking-tighter italic text-transparent bg-clip-text bg-gradient-to-b from-white via-neutral-200 to-neutral-600 drop-shadow-2xl">
+                            SYRIX
+                        </h1>
 
-                        {/* 3. DYNAMIC COUNTDOWN TIMER */}
-                        {matches.length > 0 && (
-                            <div className="mb-10 p-4 rounded-2xl bg-black/40 backdrop-blur-md border border-white/10 flex flex-col items-center animate-fade-in">
-                                <div className="text-[10px] text-red-500 font-bold uppercase tracking-widest mb-2 flex items-center gap-2">
-                                    <span className="relative flex h-2 w-2">
-                                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
-                                        <span className="relative inline-flex rounded-full h-2 w-2 bg-red-500"></span>
-                                    </span>
-                                    Next Operation: {matches[0].opponent}
-                                </div>
-                                <div className="flex gap-4 text-center">
-                                    <div className="flex flex-col">
-                                        <span className="text-3xl font-black text-white font-mono leading-none">
-                                            {Math.max(0, Math.floor((new Date(matches[0].date) - new Date()) / (1000 * 60 * 60 * 24)))}
-                                        </span>
-                                        <span className="text-[9px] text-neutral-500 uppercase font-bold">Days</span>
-                                    </div>
-                                    <span className="text-2xl font-black text-neutral-600">:</span>
-                                    <div className="flex flex-col">
-                                        <span className="text-3xl font-black text-white font-mono leading-none">
-                                            {/* Placeholder for hours logic - standardizing to 19:00 for simplicity or you can calculate real diff */}
-                                            19
-                                        </span>
-                                        <span className="text-[9px] text-neutral-500 uppercase font-bold">Hrs</span>
-                                    </div>
-                                    <span className="text-2xl font-black text-neutral-600">:</span>
-                                    <div className="flex flex-col">
-                                        <span className="text-3xl font-black text-white font-mono leading-none">00</span>
-                                        <span className="text-[9px] text-neutral-500 uppercase font-bold">Min</span>
-                                    </div>
-                                </div>
-                            </div>
-                        )}
+                        <p className="text-neutral-400 text-lg md:text-2xl font-medium tracking-wide mt-4 mb-10 max-w-2xl">
+                            PRECISION. STRATEGY. <span className="text-red-600 font-bold">DOMINANCE.</span>
+                        </p>
 
-                        {/* Call to Actions */}
+                        {/* CTA Buttons */}
                         <div className="flex flex-col md:flex-row gap-4 w-full md:w-auto">
-                            <a href="#roster" className="group relative px-8 py-4 bg-red-600 text-white font-black uppercase tracking-widest overflow-hidden skew-x-[-10deg] hover:bg-red-500 transition-all shadow-[0_0_30px_rgba(220,38,38,0.4)]">
-                                <div className="absolute inset-0 w-full h-full bg-gradient-to-r from-transparent via-white/20 to-transparent -translate-x-full group-hover:animate-slide-in"></div>
-                                <span className="skew-x-[10deg] inline-block">Meet the Squad</span>
-                            </a>
-                            <a href="#merch" className="px-8 py-4 bg-transparent border border-white/20 text-white font-black uppercase tracking-widest skew-x-[-10deg] hover:bg-white hover:text-black transition-all">
-                                <span className="skew-x-[10deg] inline-block">Shop Gear</span>
-                            </a>
+                            <button onClick={() => document.getElementById('roster').scrollIntoView({ behavior: 'smooth' })} className="group relative px-10 py-4 bg-red-600 text-white font-black uppercase tracking-widest overflow-hidden hover:bg-red-700 transition-all shadow-[0_0_40px_rgba(220,38,38,0.5)] border border-red-500">
+                                <span className="relative z-10 flex items-center gap-2">
+                                    View Roster <span className="group-hover:translate-x-1 transition-transform">→</span>
+                                </span>
+                                {/* Slanted Shine Effect */}
+                                <div className="absolute inset-0 bg-white/20 translate-x-[-100%] skew-x-[-15deg] group-hover:translate-x-[100%] transition-transform duration-700 ease-in-out"></div>
+                            </button>
+                            <button onClick={onEnterHub} className="px-10 py-4 bg-black/50 backdrop-blur-md border border-white/20 text-white font-black uppercase tracking-widest hover:bg-white hover:text-black transition-all">
+                                Team Hub
+                            </button>
                         </div>
                     </div>
 
-                    {/* Scroll Indicator */}
-                    <div className="absolute bottom-8 left-1/2 -translate-x-1/2 flex flex-col items-center gap-2 opacity-50 animate-bounce">
-                        <span className="text-[9px] uppercase tracking-[0.2em] text-neutral-400">Scroll</span>
-                        <div className="w-px h-12 bg-gradient-to-b from-red-600 to-transparent"></div>
+                    {/* 3. SCROLLING TICKER (The "Something Else") */}
+                    <div className="absolute bottom-0 w-full bg-red-600/10 border-t border-red-600/30 backdrop-blur-sm overflow-hidden py-3">
+                        <div className="flex gap-8 animate-marquee whitespace-nowrap">
+                            {/* Repeated text for seamless loop */}
+                            {[...Array(10)].map((_, i) => (
+                                <div key={i} className="flex items-center gap-8">
+                                    <span className="text-xs font-black uppercase tracking-[0.2em] text-red-500/80">VALORANT PREMIER</span>
+                                    <span className="w-1 h-1 bg-red-500 rounded-full"></span>
+                                    <span className="text-xs font-black uppercase tracking-[0.2em] text-white/80">RECRUITING NOW</span>
+                                    <span className="w-1 h-1 bg-red-500 rounded-full"></span>
+                                    <span className="text-xs font-black uppercase tracking-[0.2em] text-neutral-500">EST. 2025</span>
+                                    <span className="w-1 h-1 bg-red-500 rounded-full"></span>
+                                </div>
+                            ))}
+                        </div>
                     </div>
+
+                    {/* Style for the ticker animation */}
+                    <style>{`
+        @keyframes marquee {
+            0% { transform: translateX(0); }
+            100% { transform: translateX(-50%); }
+        }
+        .animate-marquee {
+            animation: marquee 20s linear infinite;
+        }
+    `}</style>
                 </section>
 
                 {/* --- NEW TEAM STATS SECTION --- */}
