@@ -24,10 +24,10 @@ const ADMIN_UIDS = ["M9FzRywhRIdUveh5JKUfQgJtlIB3", "SiPLxB20VzVGBZL3rTM42FsgEy5
 const DAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
 const SHORT_DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 const MAPS = ["Ascent", "Bind", "Breeze", "Fracture", "Haven", "Icebox", "Lotus", "Pearl", "Split", "Sunset", "Abyss", "Corrode"];
-const ROLES = ["Flex", "Duelist", "Initiator", "Controller", "Sentinel"];
+const ROLES = ["Flex", "Duelist", "Initiator", "Controller", "Sentinel", "Coach"];
 const RANKS = ["Unranked", "Iron", "Bronze", "Silver", "Gold", "Platinum", "Diamond", "Ascendant", "Immortal", "Radiant"];
 const AGENT_NAMES = ["Jett", "Raze", "Reyna", "Yoru", "Phoenix", "Neon", "Iso", "Vyse", "Waylay", "Omen", "Astra", "Brimstone", "Viper", "Harbor", "Clove", "Sova", "Fade", "Skye", "Breach", "KAY/O", "Gekko", "Killjoy", "Cypher", "Sage", "Chamber", "Deadlock", "Veto"];
-const ROLE_ABBREVIATIONS = { Flex: "FLX", Duelist: "DUEL", Initiator: "INIT", Controller: "CTRL", Sentinel: "SENT" };
+const ROLE_ABBREVIATIONS = { Flex: "FLX", Duelist: "DUEL", Initiator: "INIT", Controller: "CTRL", Sentinel: "SENT", Coach: "HC" };
 
 const UTILITY_TYPES = [
     { id: 'smoke', color: 'rgba(209, 213, 219, 0.3)', border: '#d1d5db', label: 'Smoke', shape: 'ring' },
@@ -80,7 +80,7 @@ const convertToGMT = (day, time) => {
 
 // --- HELPER: SORT ROSTER ---
 const sortRosterByRole = (rosterList, lookupData = null) => {
-    const priority = { 'Captain': 0, 'Main': 1, 'Sub': 2, 'Tryout': 3 };
+    const priority = { 'Head Coach': 0, 'Coach': 1, 'Captain': 2, 'Main': 3, 'Sub': 4, 'Tryout': 5 };
     return [...rosterList].sort((a, b) => {
         const roleA = (lookupData ? lookupData[a]?.role : a.role) || 'Tryout';
         const roleB = (lookupData ? lookupData[b]?.role : b.role) || 'Tryout';
@@ -314,7 +314,15 @@ const LandingPage = ({ onEnterHub }) => {
         };
     }, []);
 
-    const sortedRoster = useMemo(() => sortRosterByRole(roster), [roster]);
+    const { activePlayers, coachingStaff } = useMemo(() => {
+        const sorted = sortRosterByRole(roster);
+        const staffRoles = ["Head Coach", "Coach"]; // Make sure these match exactly what you put in the Admin dropdown
+
+        return {
+            coachingStaff: sorted.filter(p => staffRoles.includes(p.role)),
+            activePlayers: sorted.filter(p => !staffRoles.includes(p.role))
+        };
+    }, [roster]);
 
     // --- NEW STATS CALCULATION ---
     const teamStats = useMemo(() => {
@@ -593,15 +601,35 @@ const LandingPage = ({ onEnterHub }) => {
                     </div>
                 </section>
 
-                <section id="roster" className="w-full py-24 relative flex justify-center">
+                <section id="roster" className="w-full py-24 relative flex flex-col items-center">
                     <div className="max-w-7xl w-full px-6">
+                        {/* --- ACTIVE ROSTER --- */}
                         <div className="text-center mb-16" data-aos="fade-up">
                             <h3 className="text-4xl md:text-5xl font-black text-white italic tracking-tighter mb-4"><span className="text-red-600">/</span> ACTIVE ROSTER</h3>
                             <p className="text-neutral-500 uppercase tracking-widest font-bold text-sm">The Squad</p>
                         </div>
-                        <div className="flex flex-wrap justify-center gap-8">
-                            {sortedRoster.length > 0 ? sortedRoster.map((p, i) => <PlayerCard key={p.id} player={p} delay={i * 50} />) : <div className="w-full text-center text-neutral-500 py-12 border border-dashed border-neutral-800 rounded-xl">Loading Agents...</div>}
+                        <div className="flex flex-wrap justify-center gap-8 mb-24">
+                            {activePlayers.length > 0 ? activePlayers.map((p, i) => (
+                                <PlayerCard key={p.id} player={p} delay={i * 50} />
+                            )) : (
+                                <div className="w-full text-center text-neutral-500 py-12 border border-dashed border-neutral-800 rounded-xl">Loading Agents...</div>
+                            )}
                         </div>
+
+                        {/* --- COACHING STAFF (Only shows if coaches exist) --- */}
+                        {coachingStaff.length > 0 && (
+                            <>
+                                <div className="text-center mb-16 border-t border-white/5 pt-16" data-aos="fade-up">
+                                    <h3 className="text-3xl md:text-4xl font-black text-white italic tracking-tighter mb-4"><span className="text-red-600">/</span> COACHING STAFF</h3>
+                                    <p className="text-neutral-500 uppercase tracking-widest font-bold text-sm">Tactical Command</p>
+                                </div>
+                                <div className="flex flex-wrap justify-center gap-8">
+                                    {coachingStaff.map((p, i) => (
+                                        <PlayerCard key={p.id} player={p} delay={i * 50} />
+                                    ))}
+                                </div>
+                            </>
+                        )}
                     </div>
                 </section>
 
@@ -2165,7 +2193,10 @@ function RosterManager({ members, events }) {
                                 <div className="grid grid-cols-2 gap-4">
                                     <div>
                                         <label className="block text-xs font-bold text-neutral-500 mb-1">Team Role</label>
-                                        <Select value={role} onChange={e => setRole(e.target.value)}>{['Captain', 'Main', 'Sub', 'Tryout'].map(r => <option key={r}>{r}</option>)}</Select>
+                                        <Select value={role} onChange={e => setRole(e.target.value)}>
+                                            {/* UPDATED OPTIONS HERE */}
+                                            {['Head Coach', 'Coach', 'Captain', 'Main', 'Sub', 'Tryout'].map(r => <option key={r}>{r}</option>)}
+                                        </Select>
                                     </div>
                                     <div>
                                         <label className="block text-xs font-bold text-neutral-500 mb-1">Rank</label>
