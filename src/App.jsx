@@ -862,9 +862,6 @@ function LoginScreen({ signIn, onBack }) {
     );
 }
 
-// ... (Including condensed versions of the functional components from the React input)
-// ... (Due to length constraints, I'm integrating the essential logic of the Hub components below)
-
 function CaptainsMessage() {
     const [message, setMessage] = useState({ text: "Welcome", updatedBy: "System" }); const [isEditing, setIsEditing] = useState(false); const [draft, setDraft] = useState(""); const auth = getAuth();
     const addToast = useToast();
@@ -2547,6 +2544,7 @@ function SyrixDashboard({ onBack }) {
     const [modalContent, setModalContent] = useState({ title: '', children: null });
     const [isMember, setIsMember] = useState(false);
     const addToast = useToast();
+    const [allRosterNames, setAllRosterNames] = useState([]);
 
     useEffect(() => { return onAuthStateChanged(auth, user => { setCurrentUser(user); setAuthLoading(false); }); }, []);
     const signIn = async () => { try { await signInWithPopup(auth, new OAuthProvider('oidc.discord')); } catch (e) { console.error(e); } };
@@ -2555,36 +2553,49 @@ function SyrixDashboard({ onBack }) {
     useEffect(() => {
         if (!currentUser) return;
 
-        // Query roster by UID to find the correct file
+        // Listener 1: Get Current User's Profile (Existing logic)
         const memberQuery = query(collection(db, 'roster'), where("uid", "==", currentUser.uid));
-
         const unsub1 = onSnapshot(memberQuery, (snapshot) => {
             if (!snapshot.empty) {
-                // FOUND IT!
-                const userDoc = snapshot.docs[0];
-                setRosterName(userDoc.id); // Save the file name (Riot ID)
+                setRosterName(snapshot.docs[0].id);
                 setIsMember(true);
             } else {
-                // Not in roster, check if Admin
                 setIsMember(ADMIN_UIDS.includes(currentUser.uid));
-                setRosterName(currentUser.displayName); // Fallback to Discord name
+                setRosterName(currentUser.displayName);
             }
         });
 
+        // Listener 2: Get Availabilities (Existing logic)
         const unsub2 = onSnapshot(collection(db, 'availabilities'), (s) => {
             const d = {};
             s.forEach(doc => d[doc.id] = doc.data().slots || []);
             setAvailabilities(d);
         });
 
+        // Listener 3: Get Events (Existing logic)
         const unsub3 = onSnapshot(collection(db, 'events'), (s) => {
             const e = [];
             s.forEach(d => e.push({ id: d.id, ...d.data() }));
             setEvents(e.sort((a, b) => new Date(a.date + 'T' + a.time) - new Date(b.date + 'T' + b.time)));
         });
 
-        return () => { unsub1(); unsub2(); unsub3(); };
-    }, [currentUser]);    const dynamicMembers = useMemo(() => [...new Set(Object.keys(availabilities))].sort(), [availabilities]);
+        // --- NEW LISTENER 4: FETCH ALL ROSTER NAMES ---
+        // This ensures members show up even if they haven't set availability yet
+        const unsub4 = onSnapshot(collection(db, 'roster'), (s) => {
+            const names = [];
+            s.forEach(doc => names.push(doc.id));
+            setAllRosterNames(names);
+        });
+
+        return () => { unsub1(); unsub2(); unsub3(); unsub4(); };
+    }, [currentUser]);
+
+    // 3. UPDATE dynamicMembers TO USE THE ROSTER LIST
+    // Replace the old dynamicMembers line with this:
+    const dynamicMembers = useMemo(() => {
+        // Combine roster names AND availability names (just in case) and remove duplicates
+        return [...new Set([...allRosterNames, ...Object.keys(availabilities)])].sort();
+    }, [allRosterNames, availabilities]);
 
     // Process Availability for display
     const displayAvail = useMemo(() => {
