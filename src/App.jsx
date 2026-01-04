@@ -2122,27 +2122,101 @@ function RosterManager({ members, events }) {
     const [compare1, setCompare1] = useState('');
     const [compare2, setCompare2] = useState('');
     const [selectedMember, setSelectedMember] = useState(null);
+
+    // Editor State
     const [role, setRole] = useState('Tryout');
     const [rank, setRank] = useState('Unranked');
     const [gameId, setGameId] = useState('');
     const [pfp, setPfp] = useState('');
-    const [ingameRole, setIngameRole] = useState('Flex'); // New In-Game Role state
+    const [ingameRole, setIngameRole] = useState('Flex');
     const [notes, setNotes] = useState('');
 
-    const addToast = useToast();
-    useEffect(() => { const unsub = onSnapshot(collection(db, 'roster'), (snap) => { const data = {}; snap.forEach(doc => data[doc.id] = doc.data()); setRosterData(data); }); return () => unsub(); }, []);
+    // Rename State
+    const [renameInput, setRenameInput] = useState('');
 
+    const addToast = useToast();
+
+    // Fetch Roster Data
+    useEffect(() => {
+        const unsub = onSnapshot(collection(db, 'roster'), (snap) => {
+            const data = {};
+            snap.forEach(doc => data[doc.id] = doc.data());
+            setRosterData(data);
+        });
+        return () => unsub();
+    }, []);
+
+    // Save Changes Handler
     const handleSave = async () => {
         if (!selectedMember) return;
-        // Updated save to include ingameRole
-        await setDoc(doc(db, 'roster', selectedMember), { role, rank, notes, gameId, pfp, ingameRole }, { merge: true });
-        addToast('Player Updated');
+        try {
+            await setDoc(doc(db, 'roster', selectedMember), {
+                role,
+                rank,
+                notes,
+                gameId,
+                pfp,
+                ingameRole
+            }, { merge: true });
+            addToast('Player Updated Successfully');
+        } catch (error) {
+            console.error("Save failed:", error);
+            addToast("Error saving player", "error");
+        }
     };
 
+    // Rename User Handler
+    const handleRename = async () => {
+        if (!selectedMember || !renameInput) return addToast("Please enter a new name", "error");
+        if (renameInput === selectedMember) return addToast("Name is identical", "error");
+
+        const confirm = window.confirm(
+            `⚠️ CAUTION: Renaming '${selectedMember}' to '${renameInput}'.\n\n` +
+            `This will move their Roster profile AND Availability slots.\n` +
+            `Are you sure?`
+        );
+
+        if (!confirm) return;
+
+        try {
+            // 1. Fetch Old Data
+            const oldRosterRef = doc(db, 'roster', selectedMember);
+            const oldAvailRef = doc(db, 'availabilities', selectedMember);
+
+            const rosterSnap = await getDoc(oldRosterRef);
+            const availSnap = await getDoc(oldAvailRef);
+
+            // 2. Create NEW Roster Document
+            if (rosterSnap.exists()) {
+                await setDoc(doc(db, 'roster', renameInput), rosterSnap.data());
+                await deleteDoc(oldRosterRef); // Delete old
+            } else {
+                // If they don't have a roster doc yet, create a basic one
+                await setDoc(doc(db, 'roster', renameInput), { role: 'Tryout', rank: 'Unranked', notes: 'Renamed user' });
+            }
+
+            // 3. Create NEW Availability Document (if it exists)
+            if (availSnap.exists()) {
+                await setDoc(doc(db, 'availabilities', renameInput), availSnap.data());
+                await deleteDoc(oldAvailRef); // Delete old
+            }
+
+            addToast(`Successfully renamed to ${renameInput}`);
+            setSelectedMember(renameInput); // Switch selection to new name
+            setRenameInput(''); // Clear input
+
+        } catch (error) {
+            console.error("Rename failed:", error);
+            addToast("Error moving data", "error");
+        }
+    };
+
+    // Sorted Members for Sidebar
     const sortedMembers = useMemo(() => {
         return sortRosterByRole(members, rosterData);
     }, [members, rosterData]);
 
+    // MVP Calculations
     const mvpCounts = useMemo(() => {
         const counts = {};
         if (!events) return counts;
@@ -2158,9 +2232,15 @@ function RosterManager({ members, events }) {
     }, [events]);
 
     return (
-        <div className="h-full flex flex-col gap-6"><div className="flex gap-4 border-b border-white/10 pb-4"><button onClick={() => setMode('edit')} className={`text-sm font-bold uppercase ${mode === 'edit' ? 'text-red-500' : 'text-neutral-500'}`}>Edit Mode</button><button onClick={() => setMode('compare')} className={`text-sm font-bold uppercase ${mode === 'compare' ? 'text-red-500' : 'text-neutral-500'}`}>Compare Players</button></div>
+        <div className="h-full flex flex-col gap-6">
+            <div className="flex gap-4 border-b border-white/10 pb-4">
+                <button onClick={() => setMode('edit')} className={`text-sm font-bold uppercase ${mode === 'edit' ? 'text-red-500' : 'text-neutral-500'}`}>Edit Mode</button>
+                <button onClick={() => setMode('compare')} className={`text-sm font-bold uppercase ${mode === 'compare' ? 'text-red-500' : 'text-neutral-500'}`}>Compare Players</button>
+            </div>
+
             {mode === 'edit' ? (
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 h-full">
+                    {/* Sidebar List */}
                     <div className="lg:col-span-1 bg-neutral-900/80 p-6 rounded-3xl border border-white/5 flex flex-col">
                         <h3 className="text-white font-bold mb-4">Members</h3>
                         <div className="flex-1 space-y-2 overflow-y-auto custom-scrollbar">
@@ -2174,7 +2254,7 @@ function RosterManager({ members, events }) {
                                         setNotes(rosterData[m]?.notes || '');
                                         setGameId(rosterData[m]?.gameId || '');
                                         setPfp(rosterData[m]?.pfp || '');
-                                        setIngameRole(rosterData[m]?.ingameRole || 'Flex'); // Load ingame role
+                                        setIngameRole(rosterData[m]?.ingameRole || 'Flex');
                                     }} className={`p-3 rounded-xl cursor-pointer border transition-all flex justify-between items-center ${selectedMember === m ? 'bg-red-900/20 border-red-600' : 'bg-black border-neutral-800'}`}>
                                         <span className="text-white font-bold flex items-center gap-2">{m} {mvpCounts[m] > 0 && <span className="text-[9px] bg-yellow-500/20 text-yellow-500 px-1 rounded border border-yellow-500/20">🏆 x{mvpCounts[m]}</span>}</span>
                                         <span className="text-xs text-neutral-500 uppercase">{rosterData[m]?.role}</span>
@@ -2183,15 +2263,18 @@ function RosterManager({ members, events }) {
                             }
                         </div>
                     </div>
+
+                    {/* Edit Form */}
                     <Card className="lg:col-span-2">
                         {selectedMember ? (
                             <div className="space-y-6">
                                 <h3 className="text-2xl font-black text-white">Managing: <span className="text-red-500">{selectedMember}</span></h3>
+
                                 <div className="grid grid-cols-2 gap-4">
                                     <div>
                                         <label className="block text-xs font-bold text-neutral-500 mb-1">Team Role</label>
                                         <Select value={role} onChange={e => setRole(e.target.value)}>
-                                            {/* UPDATED OPTIONS HERE */}
+                                            {/* UPDATED: Added Coach Roles */}
                                             {['Head Coach', 'Coach', 'Captain', 'Main', 'Sub', 'Tryout'].map(r => <option key={r}>{r}</option>)}
                                         </Select>
                                     </div>
@@ -2200,11 +2283,12 @@ function RosterManager({ members, events }) {
                                         <Select value={rank} onChange={e => setRank(e.target.value)}>{RANKS.map(r => <option key={r}>{r}</option>)}</Select>
                                     </div>
                                 </div>
+
                                 <div className="grid grid-cols-2 gap-4">
                                     <div>
                                         <label className="block text-xs font-bold text-neutral-500 mb-1">Agent Role</label>
                                         <Select value={ingameRole} onChange={e => setIngameRole(e.target.value)}>
-                                            {ROLES.map(r => <option key={r}>{r}</option>)}
+                                            {ROLES.filter(r => !['Head Coach', 'Coach'].includes(r)).map(r => <option key={r}>{r}</option>)}
                                         </Select>
                                     </div>
                                     <div>
@@ -2212,18 +2296,68 @@ function RosterManager({ members, events }) {
                                         <Input value={gameId} onChange={e => setGameId(e.target.value)} />
                                     </div>
                                 </div>
+
                                 <div>
                                     <label className="block text-xs font-bold text-neutral-500 mb-1">Profile Image URL</label>
                                     <Input value={pfp} onChange={e => setPfp(e.target.value)} placeholder="https://..." />
                                 </div>
+
                                 <textarea className="w-full h-40 bg-black border border-neutral-800 rounded-xl p-3 text-white" value={notes} onChange={e => setNotes(e.target.value)} placeholder="Notes..." />
+
                                 <ButtonPrimary onClick={handleSave} className="w-full py-3">Save Changes</ButtonPrimary>
+
+                                {/* --- RENAME SECTION (Danger Zone) --- */}
+                                <div className="mt-8 pt-6 border-t border-neutral-800">
+                                    <label className="block text-xs font-bold text-red-500 mb-2 uppercase tracking-widest">
+                                        Danger Zone: Rename User
+                                    </label>
+                                    <div className="flex gap-2">
+                                        <Input
+                                            value={renameInput}
+                                            onChange={(e) => setRenameInput(e.target.value)}
+                                            placeholder={`New name for ${selectedMember}...`}
+                                            className="border-red-900/30 focus:border-red-600"
+                                        />
+                                        <button
+                                            onClick={handleRename}
+                                            className="bg-red-950 hover:bg-red-900 text-red-500 border border-red-900 font-bold px-4 rounded-xl text-xs uppercase tracking-wider transition-colors"
+                                        >
+                                            Rename
+                                        </button>
+                                    </div>
+                                    <p className="text-[10px] text-neutral-600 mt-2">
+                                        This moves their Roster Profile and Availability slots to the new ID.
+                                    </p>
+                                </div>
+
                             </div>
                         ) : <div className="h-full flex items-center justify-center text-neutral-500">Select a player</div>}
                     </Card>
                 </div>
             ) : (
-                <div className="grid grid-cols-2 gap-8 h-full">{[setCompare1, setCompare2].map((setter, i) => (<Card key={i} className="h-full"><Select onChange={e => setter(e.target.value)} className="mb-6"><option>Select Player</option>{members.map(m => <option key={m}>{m}</option>)}</Select>{((i === 0 ? compare1 : compare2) && rosterData[i === 0 ? compare1 : compare2]) && (<div className="space-y-4 text-center"><div className="w-24 h-24 mx-auto bg-red-600 rounded-full flex items-center justify-center text-3xl font-black text-white border-4 border-black shadow-xl">{(i === 0 ? compare1 : compare2)[0]}</div><div className="text-3xl font-black text-white uppercase">{(i === 0 ? compare1 : compare2)}</div><div className="flex justify-center gap-2"><span className="bg-neutral-800 px-3 py-1 rounded text-xs font-bold text-white">{rosterData[i === 0 ? compare1 : compare2]?.rank || 'Unranked'}</span><span className="bg-red-900/50 px-3 py-1 rounded text-xs font-bold text-red-400">{rosterData[i === 0 ? compare1 : compare2]?.role || 'Member'}</span></div>{mvpCounts[(i === 0 ? compare1 : compare2)] > 0 && <div className="text-yellow-500 font-bold text-sm bg-yellow-900/20 py-1 rounded border border-yellow-500/20">🏆 {mvpCounts[(i === 0 ? compare1 : compare2)]} MVP Awards</div>}<div className="p-4 bg-black/50 rounded-xl border border-neutral-800 text-left"><div className="text-[10px] text-neutral-500 uppercase font-bold mb-2">Performance Notes</div><p className="text-sm text-neutral-300 italic">"{rosterData[i === 0 ? compare1 : compare2]?.notes || 'No notes available.'}"</p></div></div>)}</Card>))}</div>
+                // Compare Mode (Unchanged)
+                <div className="grid grid-cols-2 gap-8 h-full">
+                    {[setCompare1, setCompare2].map((setter, i) => (
+                        <Card key={i} className="h-full">
+                            <Select onChange={e => setter(e.target.value)} className="mb-6"><option>Select Player</option>{members.map(m => <option key={m}>{m}</option>)}</Select>
+                            {((i === 0 ? compare1 : compare2) && rosterData[i === 0 ? compare1 : compare2]) && (
+                                <div className="space-y-4 text-center">
+                                    <div className="w-24 h-24 mx-auto bg-red-600 rounded-full flex items-center justify-center text-3xl font-black text-white border-4 border-black shadow-xl">{(i === 0 ? compare1 : compare2)[0]}</div>
+                                    <div className="text-3xl font-black text-white uppercase">{(i === 0 ? compare1 : compare2)}</div>
+                                    <div className="flex justify-center gap-2">
+                                        <span className="bg-neutral-800 px-3 py-1 rounded text-xs font-bold text-white">{rosterData[i === 0 ? compare1 : compare2]?.rank || 'Unranked'}</span>
+                                        <span className="bg-red-900/50 px-3 py-1 rounded text-xs font-bold text-red-400">{rosterData[i === 0 ? compare1 : compare2]?.role || 'Member'}</span>
+                                    </div>
+                                    {mvpCounts[(i === 0 ? compare1 : compare2)] > 0 && <div className="text-yellow-500 font-bold text-sm bg-yellow-900/20 py-1 rounded border border-yellow-500/20">🏆 {mvpCounts[(i === 0 ? compare1 : compare2)]} MVP Awards</div>}
+                                    <div className="p-4 bg-black/50 rounded-xl border border-neutral-800 text-left">
+                                        <div className="text-[10px] text-neutral-500 uppercase font-bold mb-2">Performance Notes</div>
+                                        <p className="text-sm text-neutral-300 italic">"{rosterData[i === 0 ? compare1 : compare2]?.notes || 'No notes available.'}"</p>
+                                    </div>
+                                </div>
+                            )}
+                        </Card>
+                    ))}
+                </div>
             )}
         </div>
     );
