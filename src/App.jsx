@@ -1803,6 +1803,9 @@ function WarRoom() {
     const [intelInput, setIntelInput] = useState('');
 
     useEffect(() => {
+        // SAFETY CHECK: If db is not connected, this will crash. 
+        if (!db) { console.error("Firebase DB not found"); return; }
+
         const unsub = onSnapshot(collection(db, 'war_room'), (snap) => {
             const data = [];
             snap.forEach(doc => data.push({ id: doc.id, ...doc.data() }));
@@ -1863,7 +1866,7 @@ function WarRoom() {
             {/* LEFT PANEL: LIST */}
             <div className="w-full md:w-1/3 flex flex-col h-full">
                 <Card className="flex flex-col h-full overflow-hidden">
-                    <div className="flex-none flex justify-between items-center mb-4">
+                    <div className="flex-none flex justify-between items-center mb-4 p-4">
                         <h3 className="text-xl font-black text-white italic tracking-tighter">
                             <span className="text-red-600">WAR</span> ROOM
                         </h3>
@@ -1873,7 +1876,7 @@ function WarRoom() {
                     </div>
 
                     {isAdding && (
-                        <div className="flex-none bg-neutral-900 p-3 rounded-xl border border-white/10 mb-4 space-y-2 animate-fade-in">
+                        <div className="flex-none bg-neutral-900 mx-4 p-3 rounded-xl border border-white/10 mb-4 space-y-2 animate-fade-in">
                             <Input placeholder="Team Name" value={newEnemy.name} onChange={e => setNewEnemy({ ...newEnemy, name: e.target.value })} />
                             <div className="flex gap-2">
                                 <Select value={newEnemy.threat} onChange={e => setNewEnemy({ ...newEnemy, threat: e.target.value })}>
@@ -1887,7 +1890,7 @@ function WarRoom() {
                         </div>
                     )}
 
-                    <div className="flex-1 overflow-y-auto custom-scrollbar space-y-2 pr-2">
+                    <div className="flex-1 overflow-y-auto custom-scrollbar space-y-2 px-4 pb-4">
                         {enemies.length === 0 && <div className="text-neutral-500 text-xs text-center py-4">No Intel Dossiers Found.</div>}
 
                         {enemies.map(team => (
@@ -1912,7 +1915,7 @@ function WarRoom() {
             {/* RIGHT PANEL: EDITOR */}
             <div className="flex-1 h-full">
                 {selectedEnemy ? (
-                    <Card className="h-full flex flex-col relative overflow-hidden">
+                    <Card className="h-full flex flex-col relative overflow-hidden p-6">
                         {/* Background Effect */}
                         <div className="absolute top-0 right-0 w-32 h-32 bg-red-600/10 blur-[50px] pointer-events-none"></div>
 
@@ -1976,6 +1979,9 @@ function WarRoom() {
         </div>
     );
 }
+
+// THIS WAS MISSING
+export default WarRoom;
 
 function MatchHistory({ currentUser, members }) {
     const [history, setHistory] = useState([]);
