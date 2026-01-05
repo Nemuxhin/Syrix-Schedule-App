@@ -1967,1106 +1967,1106 @@ function WarRoom() {
             </div>
         </div>
     );
+}
 
-    function MatchHistory({ currentUser, members }) {
-        const [history, setHistory] = useState([]);
-        const [pending, setPending] = useState([]);
-        const [isAdding, setIsAdding] = useState(false);
-        const [expandedId, setExpandedId] = useState(null);
+function MatchHistory({ currentUser, members }) {
+    const [history, setHistory] = useState([]);
+    const [pending, setPending] = useState([]);
+    const [isAdding, setIsAdding] = useState(false);
+    const [expandedId, setExpandedId] = useState(null);
 
-        // State for Editing/Finalizing
-        const [editingId, setEditingId] = useState(null);
-        const [editForm, setEditForm] = useState({});
+    // State for Editing/Finalizing
+    const [editingId, setEditingId] = useState(null);
+    const [editForm, setEditForm] = useState({});
 
-        // State for New Manual Logs - UPDATED WITH ANALYTICS FIELDS
-        const [newMatch, setNewMatch] = useState({
-            opponent: '', date: '', myScore: '', enemyScore: '',
-            atkScore: '', defScore: '', map: 'Ascent', vod: '',
-            pistols: '', ecos: '', fb: ''
+    // State for New Manual Logs - UPDATED WITH ANALYTICS FIELDS
+    const [newMatch, setNewMatch] = useState({
+        opponent: '', date: '', myScore: '', enemyScore: '',
+        atkScore: '', defScore: '', map: 'Ascent', vod: '',
+        pistols: '', ecos: '', fb: ''
+    });
+
+    const addToast = useToast();
+
+    // Load Events
+    useEffect(() => {
+        const unsub = onSnapshot(collection(db, 'events'), (snap) => {
+            const evs = [];
+            snap.forEach(doc => evs.push({ id: doc.id, ...doc.data() }));
+            setHistory(evs.filter(e => e.result).sort((a, b) => new Date(b.date) - new Date(a.date)));
+            setPending(evs.filter(e => !e.result).sort((a, b) => new Date(a.date) - new Date(b.date)));
         });
+        return () => unsub();
+    }, []);
 
-        const addToast = useToast();
+    const handleManualAdd = async () => {
+        if (!newMatch.opponent || !newMatch.myScore) return addToast("Opponent & Score required", "error");
 
-        // Load Events
-        useEffect(() => {
-            const unsub = onSnapshot(collection(db, 'events'), (snap) => {
-                const evs = [];
-                snap.forEach(doc => evs.push({ id: doc.id, ...doc.data() }));
-                setHistory(evs.filter(e => e.result).sort((a, b) => new Date(b.date) - new Date(a.date)));
-                setPending(evs.filter(e => !e.result).sort((a, b) => new Date(a.date) - new Date(b.date)));
-            });
-            return () => unsub();
-        }, []);
+        await addDoc(collection(db, 'events'), {
+            type: 'Scrim',
+            opponent: newMatch.opponent,
+            date: newMatch.date || new Date().toISOString().split('T')[0],
+            result: { ...newMatch }
+        });
+        setIsAdding(false);
+        setNewMatch({ opponent: '', date: '', myScore: '', enemyScore: '', atkScore: '', defScore: '', map: 'Ascent', vod: '', pistols: '', ecos: '', fb: '' });
+        addToast('Match Analysis Logged');
+    };
 
-        const handleManualAdd = async () => {
-            if (!newMatch.opponent || !newMatch.myScore) return addToast("Opponent & Score required", "error");
+    const openEditor = (match, isFinalizing = false) => {
+        setEditingId(match.id);
+        setEditForm({
+            opponent: match.opponent,
+            date: match.date,
+            map: match.map || (match.result ? match.result.map : 'Ascent'),
+            vod: match.result?.vod || '',
+            myScore: match.result?.myScore || '',
+            enemyScore: match.result?.enemyScore || '',
+            atkScore: match.result?.atkScore || '',
+            defScore: match.result?.defScore || '',
+            // Load new stats if they exist, otherwise empty
+            pistols: match.result?.pistols || '',
+            ecos: match.result?.ecos || '',
+            fb: match.result?.fb || '',
+            isFinalizing: isFinalizing
+        });
+    };
 
-            await addDoc(collection(db, 'events'), {
-                type: 'Scrim',
-                opponent: newMatch.opponent,
-                date: newMatch.date || new Date().toISOString().split('T')[0],
-                result: { ...newMatch }
-            });
-            setIsAdding(false);
-            setNewMatch({ opponent: '', date: '', myScore: '', enemyScore: '', atkScore: '', defScore: '', map: 'Ascent', vod: '', pistols: '', ecos: '', fb: '' });
-            addToast('Match Analysis Logged');
-        };
+    const saveEdit = async () => {
+        const { opponent, date, isFinalizing, ...resultData } = editForm;
+        await updateDoc(doc(db, 'events', editingId), {
+            opponent,
+            date,
+            result: resultData
+        });
+        setEditingId(null);
+        addToast('Match Stats Updated');
+    };
 
-        const openEditor = (match, isFinalizing = false) => {
-            setEditingId(match.id);
-            setEditForm({
-                opponent: match.opponent,
-                date: match.date,
-                map: match.map || (match.result ? match.result.map : 'Ascent'),
-                vod: match.result?.vod || '',
-                myScore: match.result?.myScore || '',
-                enemyScore: match.result?.enemyScore || '',
-                atkScore: match.result?.atkScore || '',
-                defScore: match.result?.defScore || '',
-                // Load new stats if they exist, otherwise empty
-                pistols: match.result?.pistols || '',
-                ecos: match.result?.ecos || '',
-                fb: match.result?.fb || '',
-                isFinalizing: isFinalizing
-            });
-        };
-
-        const saveEdit = async () => {
-            const { opponent, date, isFinalizing, ...resultData } = editForm;
-            await updateDoc(doc(db, 'events', editingId), {
-                opponent,
-                date,
-                result: resultData
-            });
-            setEditingId(null);
-            addToast('Match Stats Updated');
-        };
-
-        const deleteEvent = async (id) => {
-            if (window.confirm("Delete this match record?")) {
-                await deleteDoc(doc(db, 'events', id));
-                addToast("Record Deleted");
-            }
+    const deleteEvent = async (id) => {
+        if (window.confirm("Delete this match record?")) {
+            await deleteDoc(doc(db, 'events', id));
+            addToast("Record Deleted");
         }
+    }
 
-        const castVote = async (matchId, player) => {
-            await setDoc(doc(db, 'events', matchId), {
-                mvpVotes: { [currentUser.uid]: player }
-            }, { merge: true });
-            addToast(`Voted for ${player}`);
-        };
+    const castVote = async (matchId, player) => {
+        await setDoc(doc(db, 'events', matchId), {
+            mvpVotes: { [currentUser.uid]: player }
+        }, { merge: true });
+        addToast(`Voted for ${player}`);
+    };
 
-        const getVoteLeader = (votes) => {
-            if (!votes) return null;
-            const tally = {};
-            Object.values(votes).forEach(v => tally[v] = (tally[v] || 0) + 1);
-            let max = 0; let leader = null;
-            Object.entries(tally).forEach(([p, c]) => { if (c > max) { max = c; leader = p; } });
-            return { leader, count: max };
-        };
+    const getVoteLeader = (votes) => {
+        if (!votes) return null;
+        const tally = {};
+        Object.values(votes).forEach(v => tally[v] = (tally[v] || 0) + 1);
+        let max = 0; let leader = null;
+        Object.entries(tally).forEach(([p, c]) => { if (c > max) { max = c; leader = p; } });
+        return { leader, count: max };
+    };
 
-        const getResultColor = (my, enemy) => {
-            const m = parseInt(my); const e = parseInt(enemy);
-            if (m > e) return 'border-l-4 border-l-green-500';
-            if (m < e) return 'border-l-4 border-l-red-600';
-            return 'border-l-4 border-l-neutral-500';
-        };
+    const getResultColor = (my, enemy) => {
+        const m = parseInt(my); const e = parseInt(enemy);
+        if (m > e) return 'border-l-4 border-l-green-500';
+        if (m < e) return 'border-l-4 border-l-red-600';
+        return 'border-l-4 border-l-neutral-500';
+    };
 
-        return (
-            <Card className="min-h-full">
-                <div className="flex justify-between items-center mb-6">
-                    <h3 className="text-2xl font-black text-white flex items-center gap-3"><span className="text-red-600">MATCH</span> HISTORY</h3>
-                    <ButtonSecondary onClick={() => setIsAdding(!isAdding)} className="text-xs">
-                        {isAdding ? 'Cancel' : '+ Log Analysis'}
-                    </ButtonSecondary>
+    return (
+        <Card className="min-h-full">
+            <div className="flex justify-between items-center mb-6">
+                <h3 className="text-2xl font-black text-white flex items-center gap-3"><span className="text-red-600">MATCH</span> HISTORY</h3>
+                <ButtonSecondary onClick={() => setIsAdding(!isAdding)} className="text-xs">
+                    {isAdding ? 'Cancel' : '+ Log Analysis'}
+                </ButtonSecondary>
+            </div>
+
+            {/* --- MANUAL ADD FORM --- */}
+            {isAdding && (
+                <div className="mb-8 bg-black/50 p-6 rounded-2xl border border-white/10 space-y-4 animate-fade-in relative overflow-hidden">
+                    <div className="absolute top-0 left-0 w-1 h-full bg-red-600"></div>
+                    <h4 className="text-white font-bold uppercase text-sm">Log Unscheduled Match</h4>
+                    <div className="grid grid-cols-2 gap-3">
+                        <Input placeholder="Opponent Name" value={newMatch.opponent} onChange={e => setNewMatch({ ...newMatch, opponent: e.target.value })} />
+                        <Input type="date" value={newMatch.date} onChange={e => setNewMatch({ ...newMatch, date: e.target.value })} className="[color-scheme:dark]" />
+                    </div>
+                    <div className="grid grid-cols-2 gap-3">
+                        <Select value={newMatch.map} onChange={e => setNewMatch({ ...newMatch, map: e.target.value })}>
+                            {MAPS.map(m => <option key={m} value={m}>{m}</option>)}
+                        </Select>
+                        <Input placeholder="VOD Link (Optional)" value={newMatch.vod} onChange={e => setNewMatch({ ...newMatch, vod: e.target.value })} />
+                    </div>
+
+                    {/* Scores */}
+                    <div className="grid grid-cols-4 gap-2">
+                        <div className="col-span-2 flex gap-2">
+                            <Input placeholder="My Score" value={newMatch.myScore} onChange={e => setNewMatch({ ...newMatch, myScore: e.target.value })} type="number" />
+                            <Input placeholder="Enemy Score" value={newMatch.enemyScore} onChange={e => setNewMatch({ ...newMatch, enemyScore: e.target.value })} type="number" />
+                        </div>
+                        <Input placeholder="Atk Wins" value={newMatch.atkScore} onChange={e => setNewMatch({ ...newMatch, atkScore: e.target.value })} type="number" />
+                        <Input placeholder="Def Wins" value={newMatch.defScore} onChange={e => setNewMatch({ ...newMatch, defScore: e.target.value })} type="number" />
+                    </div>
+
+                    {/* NEW: ADVANCED ANALYTICS ROW */}
+                    <div className="grid grid-cols-3 gap-3 p-3 bg-neutral-900/50 rounded-lg border border-white/5">
+                        <div>
+                            <label className="text-[10px] text-neutral-500 font-bold uppercase block mb-1">Pistols (0-2)</label>
+                            <Input placeholder="#" value={newMatch.pistols} onChange={e => setNewMatch({ ...newMatch, pistols: e.target.value })} type="number" />
+                        </div>
+                        <div>
+                            <label className="text-[10px] text-neutral-500 font-bold uppercase block mb-1">Eco Wins</label>
+                            <Input placeholder="#" value={newMatch.ecos} onChange={e => setNewMatch({ ...newMatch, ecos: e.target.value })} type="number" />
+                        </div>
+                        <div>
+                            <label className="text-[10px] text-neutral-500 font-bold uppercase block mb-1">First Blood %</label>
+                            <Input placeholder="%" value={newMatch.fb} onChange={e => setNewMatch({ ...newMatch, fb: e.target.value })} type="number" />
+                        </div>
+                    </div>
+
+                    <ButtonPrimary onClick={handleManualAdd} className="w-full py-3 text-xs">Save to History</ButtonPrimary>
                 </div>
+            )}
 
-                {/* --- MANUAL ADD FORM --- */}
-                {isAdding && (
-                    <div className="mb-8 bg-black/50 p-6 rounded-2xl border border-white/10 space-y-4 animate-fade-in relative overflow-hidden">
-                        <div className="absolute top-0 left-0 w-1 h-full bg-red-600"></div>
-                        <h4 className="text-white font-bold uppercase text-sm">Log Unscheduled Match</h4>
-                        <div className="grid grid-cols-2 gap-3">
-                            <Input placeholder="Opponent Name" value={newMatch.opponent} onChange={e => setNewMatch({ ...newMatch, opponent: e.target.value })} />
-                            <Input type="date" value={newMatch.date} onChange={e => setNewMatch({ ...newMatch, date: e.target.value })} className="[color-scheme:dark]" />
-                        </div>
-                        <div className="grid grid-cols-2 gap-3">
-                            <Select value={newMatch.map} onChange={e => setNewMatch({ ...newMatch, map: e.target.value })}>
-                                {MAPS.map(m => <option key={m} value={m}>{m}</option>)}
-                            </Select>
-                            <Input placeholder="VOD Link (Optional)" value={newMatch.vod} onChange={e => setNewMatch({ ...newMatch, vod: e.target.value })} />
-                        </div>
-
-                        {/* Scores */}
-                        <div className="grid grid-cols-4 gap-2">
-                            <div className="col-span-2 flex gap-2">
-                                <Input placeholder="My Score" value={newMatch.myScore} onChange={e => setNewMatch({ ...newMatch, myScore: e.target.value })} type="number" />
-                                <Input placeholder="Enemy Score" value={newMatch.enemyScore} onChange={e => setNewMatch({ ...newMatch, enemyScore: e.target.value })} type="number" />
-                            </div>
-                            <Input placeholder="Atk Wins" value={newMatch.atkScore} onChange={e => setNewMatch({ ...newMatch, atkScore: e.target.value })} type="number" />
-                            <Input placeholder="Def Wins" value={newMatch.defScore} onChange={e => setNewMatch({ ...newMatch, defScore: e.target.value })} type="number" />
-                        </div>
-
-                        {/* NEW: ADVANCED ANALYTICS ROW */}
-                        <div className="grid grid-cols-3 gap-3 p-3 bg-neutral-900/50 rounded-lg border border-white/5">
-                            <div>
-                                <label className="text-[10px] text-neutral-500 font-bold uppercase block mb-1">Pistols (0-2)</label>
-                                <Input placeholder="#" value={newMatch.pistols} onChange={e => setNewMatch({ ...newMatch, pistols: e.target.value })} type="number" />
-                            </div>
-                            <div>
-                                <label className="text-[10px] text-neutral-500 font-bold uppercase block mb-1">Eco Wins</label>
-                                <Input placeholder="#" value={newMatch.ecos} onChange={e => setNewMatch({ ...newMatch, ecos: e.target.value })} type="number" />
-                            </div>
-                            <div>
-                                <label className="text-[10px] text-neutral-500 font-bold uppercase block mb-1">First Blood %</label>
-                                <Input placeholder="%" value={newMatch.fb} onChange={e => setNewMatch({ ...newMatch, fb: e.target.value })} type="number" />
-                            </div>
-                        </div>
-
-                        <ButtonPrimary onClick={handleManualAdd} className="w-full py-3 text-xs">Save to History</ButtonPrimary>
-                    </div>
-                )}
-
-                {/* --- PENDING REPORTS SECTION --- */}
-                {pending.length > 0 && (
-                    <div className="mb-8">
-                        <h4 className="text-xs font-black text-neutral-500 uppercase tracking-widest mb-3 flex items-center gap-2">
-                            <span className="w-2 h-2 rounded-full bg-yellow-500 animate-pulse"></span> Pending Reports
-                        </h4>
-                        <div className="grid grid-cols-1 gap-3">
-                            {pending.map(p => (
-                                <div key={p.id} className="bg-neutral-900/50 border border-yellow-500/20 p-4 rounded-xl flex flex-col md:flex-row justify-between items-center gap-4">
-                                    <div>
-                                        <div className="font-bold text-white text-lg">{p.opponent}</div>
-                                        <div className="text-xs text-neutral-400">{p.date} • {p.time} • <span className="text-red-400">{p.map}</span></div>
-                                    </div>
-                                    {editingId === p.id ? (
-                                        <div className="flex-1 w-full bg-black p-4 rounded-lg border border-neutral-700 animate-fade-in">
-                                            <div className="text-xs text-yellow-500 font-bold mb-2 uppercase">Input Stats</div>
-                                            <div className="grid grid-cols-4 gap-2 mb-2">
-                                                <Input placeholder="Us" value={editForm.myScore} onChange={e => setEditForm({ ...editForm, myScore: e.target.value })} type="number" />
-                                                <Input placeholder="Them" value={editForm.enemyScore} onChange={e => setEditForm({ ...editForm, enemyScore: e.target.value })} type="number" />
-                                                <Input placeholder="Atk" value={editForm.atkScore} onChange={e => setEditForm({ ...editForm, atkScore: e.target.value })} type="number" />
-                                                <Input placeholder="Def" value={editForm.defScore} onChange={e => setEditForm({ ...editForm, defScore: e.target.value })} type="number" />
-                                            </div>
-                                            {/* NEW: ANALYTICS FOR PENDING */}
-                                            <div className="grid grid-cols-3 gap-2 mb-2">
-                                                <Input placeholder="Pistols" value={editForm.pistols} onChange={e => setEditForm({ ...editForm, pistols: e.target.value })} type="number" />
-                                                <Input placeholder="Ecos" value={editForm.ecos} onChange={e => setEditForm({ ...editForm, ecos: e.target.value })} type="number" />
-                                                <Input placeholder="FB %" value={editForm.fb} onChange={e => setEditForm({ ...editForm, fb: e.target.value })} type="number" />
-                                            </div>
-                                            <div className="flex gap-2">
-                                                <ButtonPrimary onClick={saveEdit} className="text-xs py-2 flex-1">Confirm</ButtonPrimary>
-                                                <ButtonSecondary onClick={() => setEditingId(null)} className="text-xs py-2">Cancel</ButtonSecondary>
-                                            </div>
+            {/* --- PENDING REPORTS SECTION --- */}
+            {pending.length > 0 && (
+                <div className="mb-8">
+                    <h4 className="text-xs font-black text-neutral-500 uppercase tracking-widest mb-3 flex items-center gap-2">
+                        <span className="w-2 h-2 rounded-full bg-yellow-500 animate-pulse"></span> Pending Reports
+                    </h4>
+                    <div className="grid grid-cols-1 gap-3">
+                        {pending.map(p => (
+                            <div key={p.id} className="bg-neutral-900/50 border border-yellow-500/20 p-4 rounded-xl flex flex-col md:flex-row justify-between items-center gap-4">
+                                <div>
+                                    <div className="font-bold text-white text-lg">{p.opponent}</div>
+                                    <div className="text-xs text-neutral-400">{p.date} • {p.time} • <span className="text-red-400">{p.map}</span></div>
+                                </div>
+                                {editingId === p.id ? (
+                                    <div className="flex-1 w-full bg-black p-4 rounded-lg border border-neutral-700 animate-fade-in">
+                                        <div className="text-xs text-yellow-500 font-bold mb-2 uppercase">Input Stats</div>
+                                        <div className="grid grid-cols-4 gap-2 mb-2">
+                                            <Input placeholder="Us" value={editForm.myScore} onChange={e => setEditForm({ ...editForm, myScore: e.target.value })} type="number" />
+                                            <Input placeholder="Them" value={editForm.enemyScore} onChange={e => setEditForm({ ...editForm, enemyScore: e.target.value })} type="number" />
+                                            <Input placeholder="Atk" value={editForm.atkScore} onChange={e => setEditForm({ ...editForm, atkScore: e.target.value })} type="number" />
+                                            <Input placeholder="Def" value={editForm.defScore} onChange={e => setEditForm({ ...editForm, defScore: e.target.value })} type="number" />
                                         </div>
-                                    ) : (
-                                        <button onClick={() => openEditor(p, true)} className="bg-yellow-600/20 hover:bg-yellow-600 text-yellow-500 hover:text-white border border-yellow-600/50 px-6 py-2 rounded-lg font-bold text-xs uppercase transition-all shadow-lg">
-                                            ✅ Report Score
-                                        </button>
-                                    )}
-                                </div>
-                            ))}
-                        </div>
-                    </div>
-                )}
-
-                {/* --- MATCH HISTORY LIST --- */}
-                <h4 className="text-xs font-black text-neutral-500 uppercase tracking-widest mb-3">Completed Operations</h4>
-                <div className="space-y-4">
-                    {history.length === 0 && <div className="text-neutral-600 italic text-center py-8">No match history recorded.</div>}
-
-                    {history.map(m => {
-                        // --- EDIT MODE FOR EXISTING HISTORY ---
-                        if (editingId === m.id) return (
-                            <div key={m.id} className="bg-neutral-900 border border-red-600 p-4 rounded-xl space-y-3 animate-fade-in">
-                                <div className="flex justify-between items-center border-b border-red-900/30 pb-2">
-                                    <span className="text-red-500 font-bold text-xs uppercase">Editing Record</span>
-                                    <button onClick={() => setEditingId(null)} className="text-neutral-500 hover:text-white text-xs">Cancel</button>
-                                </div>
-                                <div className="grid grid-cols-2 gap-3">
-                                    <Input value={editForm.opponent} onChange={e => setEditForm({ ...editForm, opponent: e.target.value })} />
-                                    <Input type="date" value={editForm.date} onChange={e => setEditForm({ ...editForm, date: e.target.value })} className="[color-scheme:dark]" />
-                                </div>
-                                <div className="grid grid-cols-2 gap-3">
-                                    <Select value={editForm.map} onChange={e => setEditForm({ ...editForm, map: e.target.value })}>
-                                        {MAPS.map(map => <option key={map} value={map}>{map}</option>)}
-                                    </Select>
-                                    <Input placeholder="VOD Link" value={editForm.vod} onChange={e => setEditForm({ ...editForm, vod: e.target.value })} />
-                                </div>
-                                <div className="grid grid-cols-4 gap-2">
-                                    <div className="col-span-2 flex gap-2">
-                                        <Input placeholder="Us" value={editForm.myScore} onChange={e => setEditForm({ ...editForm, myScore: e.target.value })} />
-                                        <Input placeholder="Them" value={editForm.enemyScore} onChange={e => setEditForm({ ...editForm, enemyScore: e.target.value })} />
+                                        {/* NEW: ANALYTICS FOR PENDING */}
+                                        <div className="grid grid-cols-3 gap-2 mb-2">
+                                            <Input placeholder="Pistols" value={editForm.pistols} onChange={e => setEditForm({ ...editForm, pistols: e.target.value })} type="number" />
+                                            <Input placeholder="Ecos" value={editForm.ecos} onChange={e => setEditForm({ ...editForm, ecos: e.target.value })} type="number" />
+                                            <Input placeholder="FB %" value={editForm.fb} onChange={e => setEditForm({ ...editForm, fb: e.target.value })} type="number" />
+                                        </div>
+                                        <div className="flex gap-2">
+                                            <ButtonPrimary onClick={saveEdit} className="text-xs py-2 flex-1">Confirm</ButtonPrimary>
+                                            <ButtonSecondary onClick={() => setEditingId(null)} className="text-xs py-2">Cancel</ButtonSecondary>
+                                        </div>
                                     </div>
-                                    <Input placeholder="Atk" value={editForm.atkScore} onChange={e => setEditForm({ ...editForm, atkScore: e.target.value })} />
-                                    <Input placeholder="Def" value={editForm.defScore} onChange={e => setEditForm({ ...editForm, defScore: e.target.value })} />
-                                </div>
-                                {/* NEW: ANALYTICS EDITING */}
-                                <div className="grid grid-cols-3 gap-2">
-                                    <Input placeholder="Pistols" value={editForm.pistols} onChange={e => setEditForm({ ...editForm, pistols: e.target.value })} />
-                                    <Input placeholder="Ecos" value={editForm.ecos} onChange={e => setEditForm({ ...editForm, ecos: e.target.value })} />
-                                    <Input placeholder="FB %" value={editForm.fb} onChange={e => setEditForm({ ...editForm, fb: e.target.value })} />
-                                </div>
-                                <ButtonPrimary onClick={saveEdit} className="w-full py-2 text-xs">Update Record</ButtonPrimary>
+                                ) : (
+                                    <button onClick={() => openEditor(p, true)} className="bg-yellow-600/20 hover:bg-yellow-600 text-yellow-500 hover:text-white border border-yellow-600/50 px-6 py-2 rounded-lg font-bold text-xs uppercase transition-all shadow-lg">
+                                        ✅ Report Score
+                                    </button>
+                                )}
                             </div>
-                        );
+                        ))}
+                    </div>
+                </div>
+            )}
 
-                        // --- VIEW MODE ---
-                        const voteData = getVoteLeader(m.mvpVotes);
-                        const isWin = parseInt(m.result.myScore) > parseInt(m.result.enemyScore);
+            {/* --- MATCH HISTORY LIST --- */}
+            <h4 className="text-xs font-black text-neutral-500 uppercase tracking-widest mb-3">Completed Operations</h4>
+            <div className="space-y-4">
+                {history.length === 0 && <div className="text-neutral-600 italic text-center py-8">No match history recorded.</div>}
 
-                        return (
-                            <div key={m.id} onClick={() => setExpandedId(expandedId === m.id ? null : m.id)} className={`bg-black/40 border border-neutral-800 p-4 rounded-xl relative overflow-hidden cursor-pointer hover:bg-neutral-900 transition-all ${getResultColor(m.result.myScore, m.result.enemyScore)}`}>
-                                {expandedId === m.id && (isWin ? <VictoryStamp /> : <DefeatStamp />)}
-                                <div className="flex justify-between items-center relative z-10">
-                                    <div>
-                                        <div className="text-sm font-bold text-white flex items-center gap-2">
-                                            {m.opponent}
-                                            {m.result.vod && (
-                                                <a href={m.result.vod} target="_blank" rel="noreferrer" onClick={e => e.stopPropagation()} className="text-[9px] bg-red-600 text-white px-2 py-0.5 rounded hover:bg-red-500 font-black uppercase flex items-center gap-1"><span>▶</span> VOD</a>
+                {history.map(m => {
+                    // --- EDIT MODE FOR EXISTING HISTORY ---
+                    if (editingId === m.id) return (
+                        <div key={m.id} className="bg-neutral-900 border border-red-600 p-4 rounded-xl space-y-3 animate-fade-in">
+                            <div className="flex justify-between items-center border-b border-red-900/30 pb-2">
+                                <span className="text-red-500 font-bold text-xs uppercase">Editing Record</span>
+                                <button onClick={() => setEditingId(null)} className="text-neutral-500 hover:text-white text-xs">Cancel</button>
+                            </div>
+                            <div className="grid grid-cols-2 gap-3">
+                                <Input value={editForm.opponent} onChange={e => setEditForm({ ...editForm, opponent: e.target.value })} />
+                                <Input type="date" value={editForm.date} onChange={e => setEditForm({ ...editForm, date: e.target.value })} className="[color-scheme:dark]" />
+                            </div>
+                            <div className="grid grid-cols-2 gap-3">
+                                <Select value={editForm.map} onChange={e => setEditForm({ ...editForm, map: e.target.value })}>
+                                    {MAPS.map(map => <option key={map} value={map}>{map}</option>)}
+                                </Select>
+                                <Input placeholder="VOD Link" value={editForm.vod} onChange={e => setEditForm({ ...editForm, vod: e.target.value })} />
+                            </div>
+                            <div className="grid grid-cols-4 gap-2">
+                                <div className="col-span-2 flex gap-2">
+                                    <Input placeholder="Us" value={editForm.myScore} onChange={e => setEditForm({ ...editForm, myScore: e.target.value })} />
+                                    <Input placeholder="Them" value={editForm.enemyScore} onChange={e => setEditForm({ ...editForm, enemyScore: e.target.value })} />
+                                </div>
+                                <Input placeholder="Atk" value={editForm.atkScore} onChange={e => setEditForm({ ...editForm, atkScore: e.target.value })} />
+                                <Input placeholder="Def" value={editForm.defScore} onChange={e => setEditForm({ ...editForm, defScore: e.target.value })} />
+                            </div>
+                            {/* NEW: ANALYTICS EDITING */}
+                            <div className="grid grid-cols-3 gap-2">
+                                <Input placeholder="Pistols" value={editForm.pistols} onChange={e => setEditForm({ ...editForm, pistols: e.target.value })} />
+                                <Input placeholder="Ecos" value={editForm.ecos} onChange={e => setEditForm({ ...editForm, ecos: e.target.value })} />
+                                <Input placeholder="FB %" value={editForm.fb} onChange={e => setEditForm({ ...editForm, fb: e.target.value })} />
+                            </div>
+                            <ButtonPrimary onClick={saveEdit} className="w-full py-2 text-xs">Update Record</ButtonPrimary>
+                        </div>
+                    );
+
+                    // --- VIEW MODE ---
+                    const voteData = getVoteLeader(m.mvpVotes);
+                    const isWin = parseInt(m.result.myScore) > parseInt(m.result.enemyScore);
+
+                    return (
+                        <div key={m.id} onClick={() => setExpandedId(expandedId === m.id ? null : m.id)} className={`bg-black/40 border border-neutral-800 p-4 rounded-xl relative overflow-hidden cursor-pointer hover:bg-neutral-900 transition-all ${getResultColor(m.result.myScore, m.result.enemyScore)}`}>
+                            {expandedId === m.id && (isWin ? <VictoryStamp /> : <DefeatStamp />)}
+                            <div className="flex justify-between items-center relative z-10">
+                                <div>
+                                    <div className="text-sm font-bold text-white flex items-center gap-2">
+                                        {m.opponent}
+                                        {m.result.vod && (
+                                            <a href={m.result.vod} target="_blank" rel="noreferrer" onClick={e => e.stopPropagation()} className="text-[9px] bg-red-600 text-white px-2 py-0.5 rounded hover:bg-red-500 font-black uppercase flex items-center gap-1"><span>▶</span> VOD</a>
+                                        )}
+                                    </div>
+                                    <div className="text-xs text-neutral-500 font-mono mt-0.5">{m.date} • {m.result.map}</div>
+                                </div>
+                                <div className="flex items-center gap-4">
+                                    <div className={`text-2xl font-black ${isWin ? 'text-green-500' : 'text-red-500'}`}>{m.result.myScore} - {m.result.enemyScore}</div>
+                                    <div className="flex gap-2">
+                                        <button onClick={(e) => { e.stopPropagation(); openEditor(m); }} className="text-neutral-600 hover:text-white p-1" title="Edit">✏️</button>
+                                        <button onClick={(e) => { e.stopPropagation(); deleteEvent(m.id); }} className="text-neutral-600 hover:text-red-500 p-1" title="Delete">🗑️</button>
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* Details Drawer */}
+                            {expandedId === m.id && (
+                                <div className="mt-4 pt-4 border-t border-neutral-800 animate-slide-in">
+                                    {/* SCORES ROW */}
+                                    <div className="grid grid-cols-2 gap-4 text-center mb-4">
+                                        <div className="bg-neutral-900 p-2 rounded border border-neutral-800">
+                                            <div className="text-[10px] text-neutral-500 uppercase font-bold">Attack Wins</div>
+                                            <div className="text-white font-bold text-lg">{m.result.atkScore || '-'}</div>
+                                        </div>
+                                        <div className="bg-neutral-900 p-2 rounded border border-neutral-800">
+                                            <div className="text-[10px] text-neutral-500 uppercase font-bold">Defense Wins</div>
+                                            <div className="text-white font-bold text-lg">{m.result.defScore || '-'}</div>
+                                        </div>
+                                    </div>
+
+                                    {/* NEW: ANALYTICS ROW */}
+                                    <div className="grid grid-cols-3 gap-2 text-center mb-4">
+                                        <div className="bg-neutral-900/50 p-2 rounded border border-white/5">
+                                            <div className="text-[9px] text-neutral-400 uppercase font-bold">Pistols Won</div>
+                                            <div className={`text-sm font-black ${m.result.pistols >= 1 ? 'text-green-500' : 'text-neutral-500'}`}>{m.result.pistols || '0'}/2</div>
+                                        </div>
+                                        <div className="bg-neutral-900/50 p-2 rounded border border-white/5">
+                                            <div className="text-[9px] text-neutral-400 uppercase font-bold">Eco Wins</div>
+                                            <div className="text-sm font-black text-white">{m.result.ecos || '0'}</div>
+                                        </div>
+                                        <div className="bg-neutral-900/50 p-2 rounded border border-white/5">
+                                            <div className="text-[9px] text-neutral-400 uppercase font-bold">FB %</div>
+                                            <div className="text-sm font-black text-white">{m.result.fb || '0'}%</div>
+                                        </div>
+                                    </div>
+
+                                    <div className="bg-neutral-900/50 p-3 rounded-lg border border-white/5 flex flex-wrap gap-4 items-center justify-between" onClick={e => e.stopPropagation()}>
+                                        <div className="text-xs font-bold text-neutral-400 flex items-center gap-2">
+                                            <span>⭐ MVP VOTE:</span>
+                                            {voteData ? <span className="text-yellow-500 text-sm">{voteData.leader} ({voteData.count})</span> : <span className="text-neutral-600">No votes</span>}
+                                        </div>
+                                        <div className="flex items-center gap-2">
+                                            {m.mvpVotes?.[currentUser.uid] ? (
+                                                <span className="text-[10px] bg-green-900/30 text-green-500 px-2 py-1 rounded border border-green-900/50">Voted for {m.mvpVotes[currentUser.uid]}</span>
+                                            ) : (
+                                                <select onChange={(e) => castVote(m.id, e.target.value)} className="bg-black text-white text-xs p-1.5 rounded border border-neutral-700 outline-none focus:border-red-500 cursor-pointer" defaultValue="">
+                                                    <option value="" disabled>Select MVP...</option>
+                                                    {members.map(mem => <option key={mem} value={mem}>{mem}</option>)}
+                                                </select>
                                             )}
                                         </div>
-                                        <div className="text-xs text-neutral-500 font-mono mt-0.5">{m.date} • {m.result.map}</div>
-                                    </div>
-                                    <div className="flex items-center gap-4">
-                                        <div className={`text-2xl font-black ${isWin ? 'text-green-500' : 'text-red-500'}`}>{m.result.myScore} - {m.result.enemyScore}</div>
-                                        <div className="flex gap-2">
-                                            <button onClick={(e) => { e.stopPropagation(); openEditor(m); }} className="text-neutral-600 hover:text-white p-1" title="Edit">✏️</button>
-                                            <button onClick={(e) => { e.stopPropagation(); deleteEvent(m.id); }} className="text-neutral-600 hover:text-red-500 p-1" title="Delete">🗑️</button>
-                                        </div>
                                     </div>
                                 </div>
-
-                                {/* Details Drawer */}
-                                {expandedId === m.id && (
-                                    <div className="mt-4 pt-4 border-t border-neutral-800 animate-slide-in">
-                                        {/* SCORES ROW */}
-                                        <div className="grid grid-cols-2 gap-4 text-center mb-4">
-                                            <div className="bg-neutral-900 p-2 rounded border border-neutral-800">
-                                                <div className="text-[10px] text-neutral-500 uppercase font-bold">Attack Wins</div>
-                                                <div className="text-white font-bold text-lg">{m.result.atkScore || '-'}</div>
-                                            </div>
-                                            <div className="bg-neutral-900 p-2 rounded border border-neutral-800">
-                                                <div className="text-[10px] text-neutral-500 uppercase font-bold">Defense Wins</div>
-                                                <div className="text-white font-bold text-lg">{m.result.defScore || '-'}</div>
-                                            </div>
-                                        </div>
-
-                                        {/* NEW: ANALYTICS ROW */}
-                                        <div className="grid grid-cols-3 gap-2 text-center mb-4">
-                                            <div className="bg-neutral-900/50 p-2 rounded border border-white/5">
-                                                <div className="text-[9px] text-neutral-400 uppercase font-bold">Pistols Won</div>
-                                                <div className={`text-sm font-black ${m.result.pistols >= 1 ? 'text-green-500' : 'text-neutral-500'}`}>{m.result.pistols || '0'}/2</div>
-                                            </div>
-                                            <div className="bg-neutral-900/50 p-2 rounded border border-white/5">
-                                                <div className="text-[9px] text-neutral-400 uppercase font-bold">Eco Wins</div>
-                                                <div className="text-sm font-black text-white">{m.result.ecos || '0'}</div>
-                                            </div>
-                                            <div className="bg-neutral-900/50 p-2 rounded border border-white/5">
-                                                <div className="text-[9px] text-neutral-400 uppercase font-bold">FB %</div>
-                                                <div className="text-sm font-black text-white">{m.result.fb || '0'}%</div>
-                                            </div>
-                                        </div>
-
-                                        <div className="bg-neutral-900/50 p-3 rounded-lg border border-white/5 flex flex-wrap gap-4 items-center justify-between" onClick={e => e.stopPropagation()}>
-                                            <div className="text-xs font-bold text-neutral-400 flex items-center gap-2">
-                                                <span>⭐ MVP VOTE:</span>
-                                                {voteData ? <span className="text-yellow-500 text-sm">{voteData.leader} ({voteData.count})</span> : <span className="text-neutral-600">No votes</span>}
-                                            </div>
-                                            <div className="flex items-center gap-2">
-                                                {m.mvpVotes?.[currentUser.uid] ? (
-                                                    <span className="text-[10px] bg-green-900/30 text-green-500 px-2 py-1 rounded border border-green-900/50">Voted for {m.mvpVotes[currentUser.uid]}</span>
-                                                ) : (
-                                                    <select onChange={(e) => castVote(m.id, e.target.value)} className="bg-black text-white text-xs p-1.5 rounded border border-neutral-700 outline-none focus:border-red-500 cursor-pointer" defaultValue="">
-                                                        <option value="" disabled>Select MVP...</option>
-                                                        {members.map(mem => <option key={mem} value={mem}>{mem}</option>)}
-                                                    </select>
-                                                )}
-                                            </div>
-                                        </div>
-                                    </div>
-                                )}
-                            </div>
-                        );
-                    })}
-                </div>
-            </Card>
-        );
-    }
-    function RosterManager({ members, events }) {
-        const [rosterData, setRosterData] = useState({});
-        const [mode, setMode] = useState('edit');
-        const [compare1, setCompare1] = useState('');
-        const [compare2, setCompare2] = useState('');
-        const [selectedMember, setSelectedMember] = useState(null);
-
-        // Editor State
-        const [role, setRole] = useState('Tryout');
-        const [rank, setRank] = useState('Unranked');
-        const [gameId, setGameId] = useState('');
-        const [pfp, setPfp] = useState('');
-        const [ingameRole, setIngameRole] = useState('Flex');
-        const [notes, setNotes] = useState('');
-
-        // Rename State
-        const [renameInput, setRenameInput] = useState('');
-
-        const addToast = useToast();
-
-        // Fetch Roster Data
-        useEffect(() => {
-            const unsub = onSnapshot(collection(db, 'roster'), (snap) => {
-                const data = {};
-                snap.forEach(doc => data[doc.id] = doc.data());
-                setRosterData(data);
-            });
-            return () => unsub();
-        }, []);
-
-        // Save Changes Handler
-        const handleSave = async () => {
-            if (!selectedMember) return;
-            try {
-                await setDoc(doc(db, 'roster', selectedMember), {
-                    role,
-                    rank,
-                    notes,
-                    gameId,
-                    pfp,
-                    ingameRole
-                }, { merge: true });
-                addToast('Player Updated Successfully');
-            } catch (error) {
-                console.error("Save failed:", error);
-                addToast("Error saving player", "error");
-            }
-        };
-
-        // Rename User Handler
-        const handleRename = async () => {
-            if (!selectedMember || !renameInput) return addToast("Please enter a new name", "error");
-            if (renameInput === selectedMember) return addToast("Name is identical", "error");
-
-            const confirm = window.confirm(
-                `⚠️ CAUTION: Renaming '${selectedMember}' to '${renameInput}'.\n\n` +
-                `This will move their Roster profile AND Availability slots.\n` +
-                `Are you sure?`
-            );
-
-            if (!confirm) return;
-
-            try {
-                // 1. Fetch Old Data
-                const oldRosterRef = doc(db, 'roster', selectedMember);
-                const oldAvailRef = doc(db, 'availabilities', selectedMember);
-
-                const rosterSnap = await getDoc(oldRosterRef);
-                const availSnap = await getDoc(oldAvailRef);
-
-                // 2. Create NEW Roster Document
-                if (rosterSnap.exists()) {
-                    await setDoc(doc(db, 'roster', renameInput), rosterSnap.data());
-                    await deleteDoc(oldRosterRef); // Delete old
-                } else {
-                    // If they don't have a roster doc yet, create a basic one
-                    await setDoc(doc(db, 'roster', renameInput), { role: 'Tryout', rank: 'Unranked', notes: 'Renamed user' });
-                }
-
-                // 3. Create NEW Availability Document (if it exists)
-                if (availSnap.exists()) {
-                    await setDoc(doc(db, 'availabilities', renameInput), availSnap.data());
-                    await deleteDoc(oldAvailRef); // Delete old
-                }
-
-                addToast(`Successfully renamed to ${renameInput}`);
-                setSelectedMember(renameInput); // Switch selection to new name
-                setRenameInput(''); // Clear input
-
-            } catch (error) {
-                console.error("Rename failed:", error);
-                addToast("Error moving data", "error");
-            }
-        };
-
-        // Sorted Members for Sidebar
-        const sortedMembers = useMemo(() => {
-            return sortRosterByRole(members, rosterData);
-        }, [members, rosterData]);
-
-        // MVP Calculations
-        const mvpCounts = useMemo(() => {
-            const counts = {};
-            if (!events) return counts;
-            events.forEach(ev => {
-                if (!ev.mvpVotes) return;
-                const voteTally = {};
-                Object.values(ev.mvpVotes).forEach(p => voteTally[p] = (voteTally[p] || 0) + 1);
-                let max = 0; let winner = null;
-                Object.entries(voteTally).forEach(([p, c]) => { if (c > max) { max = c; winner = p; } });
-                if (winner) counts[winner] = (counts[winner] || 0) + 1;
-            });
-            return counts;
-        }, [events]);
-
-        return (
-            <div className="h-full flex flex-col gap-6">
-                <div className="flex gap-4 border-b border-white/10 pb-4">
-                    <button onClick={() => setMode('edit')} className={`text-sm font-bold uppercase ${mode === 'edit' ? 'text-red-500' : 'text-neutral-500'}`}>Edit Mode</button>
-                    <button onClick={() => setMode('compare')} className={`text-sm font-bold uppercase ${mode === 'compare' ? 'text-red-500' : 'text-neutral-500'}`}>Compare Players</button>
-                </div>
-
-                {mode === 'edit' ? (
-                    <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 h-full">
-                        {/* Sidebar List */}
-                        <div className="lg:col-span-1 bg-neutral-900/80 p-6 rounded-3xl border border-white/5 flex flex-col">
-                            <h3 className="text-white font-bold mb-4">Members</h3>
-                            <div className="flex-1 space-y-2 overflow-y-auto custom-scrollbar">
-                                {sortedMembers.length === 0 ?
-                                    <div className="text-neutral-500 text-xs italic p-4 text-center border border-dashed border-neutral-800 rounded-xl">No members found. Log availability to appear here.</div> :
-                                    sortedMembers.map(m => (
-                                        <div key={m} onClick={() => {
-                                            setSelectedMember(m);
-                                            setRole(rosterData[m]?.role || 'Tryout');
-                                            setRank(rosterData[m]?.rank || 'Unranked');
-                                            setNotes(rosterData[m]?.notes || '');
-                                            setGameId(rosterData[m]?.gameId || '');
-                                            setPfp(rosterData[m]?.pfp || '');
-                                            setIngameRole(rosterData[m]?.ingameRole || 'Flex');
-                                        }} className={`p-3 rounded-xl cursor-pointer border transition-all flex justify-between items-center ${selectedMember === m ? 'bg-red-900/20 border-red-600' : 'bg-black border-neutral-800'}`}>
-                                            <span className="text-white font-bold flex items-center gap-2">{m} {mvpCounts[m] > 0 && <span className="text-[9px] bg-yellow-500/20 text-yellow-500 px-1 rounded border border-yellow-500/20">🏆 x{mvpCounts[m]}</span>}</span>
-                                            <span className="text-xs text-neutral-500 uppercase">{rosterData[m]?.role}</span>
-                                        </div>
-                                    ))
-                                }
-                            </div>
+                            )}
                         </div>
+                    );
+                })}
+            </div>
+        </Card>
+    );
+}
+function RosterManager({ members, events }) {
+    const [rosterData, setRosterData] = useState({});
+    const [mode, setMode] = useState('edit');
+    const [compare1, setCompare1] = useState('');
+    const [compare2, setCompare2] = useState('');
+    const [selectedMember, setSelectedMember] = useState(null);
 
-                        {/* Edit Form */}
-                        <Card className="lg:col-span-2">
-                            {selectedMember ? (
-                                <div className="space-y-6">
-                                    <h3 className="text-2xl font-black text-white">Managing: <span className="text-red-500">{selectedMember}</span></h3>
+    // Editor State
+    const [role, setRole] = useState('Tryout');
+    const [rank, setRank] = useState('Unranked');
+    const [gameId, setGameId] = useState('');
+    const [pfp, setPfp] = useState('');
+    const [ingameRole, setIngameRole] = useState('Flex');
+    const [notes, setNotes] = useState('');
 
-                                    <div className="grid grid-cols-2 gap-4">
-                                        <div>
-                                            <label className="block text-xs font-bold text-neutral-500 mb-1">Team Role</label>
-                                            <Select value={role} onChange={e => setRole(e.target.value)}>
-                                                {/* UPDATED: Added Coach Roles */}
-                                                {['Head Coach', 'Coach', 'Captain', 'Main', 'Sub', 'Tryout'].map(r => <option key={r}>{r}</option>)}
-                                            </Select>
-                                        </div>
-                                        <div>
-                                            <label className="block text-xs font-bold text-neutral-500 mb-1">Rank</label>
-                                            <Select value={rank} onChange={e => setRank(e.target.value)}>{RANKS.map(r => <option key={r}>{r}</option>)}</Select>
-                                        </div>
+    // Rename State
+    const [renameInput, setRenameInput] = useState('');
+
+    const addToast = useToast();
+
+    // Fetch Roster Data
+    useEffect(() => {
+        const unsub = onSnapshot(collection(db, 'roster'), (snap) => {
+            const data = {};
+            snap.forEach(doc => data[doc.id] = doc.data());
+            setRosterData(data);
+        });
+        return () => unsub();
+    }, []);
+
+    // Save Changes Handler
+    const handleSave = async () => {
+        if (!selectedMember) return;
+        try {
+            await setDoc(doc(db, 'roster', selectedMember), {
+                role,
+                rank,
+                notes,
+                gameId,
+                pfp,
+                ingameRole
+            }, { merge: true });
+            addToast('Player Updated Successfully');
+        } catch (error) {
+            console.error("Save failed:", error);
+            addToast("Error saving player", "error");
+        }
+    };
+
+    // Rename User Handler
+    const handleRename = async () => {
+        if (!selectedMember || !renameInput) return addToast("Please enter a new name", "error");
+        if (renameInput === selectedMember) return addToast("Name is identical", "error");
+
+        const confirm = window.confirm(
+            `⚠️ CAUTION: Renaming '${selectedMember}' to '${renameInput}'.\n\n` +
+            `This will move their Roster profile AND Availability slots.\n` +
+            `Are you sure?`
+        );
+
+        if (!confirm) return;
+
+        try {
+            // 1. Fetch Old Data
+            const oldRosterRef = doc(db, 'roster', selectedMember);
+            const oldAvailRef = doc(db, 'availabilities', selectedMember);
+
+            const rosterSnap = await getDoc(oldRosterRef);
+            const availSnap = await getDoc(oldAvailRef);
+
+            // 2. Create NEW Roster Document
+            if (rosterSnap.exists()) {
+                await setDoc(doc(db, 'roster', renameInput), rosterSnap.data());
+                await deleteDoc(oldRosterRef); // Delete old
+            } else {
+                // If they don't have a roster doc yet, create a basic one
+                await setDoc(doc(db, 'roster', renameInput), { role: 'Tryout', rank: 'Unranked', notes: 'Renamed user' });
+            }
+
+            // 3. Create NEW Availability Document (if it exists)
+            if (availSnap.exists()) {
+                await setDoc(doc(db, 'availabilities', renameInput), availSnap.data());
+                await deleteDoc(oldAvailRef); // Delete old
+            }
+
+            addToast(`Successfully renamed to ${renameInput}`);
+            setSelectedMember(renameInput); // Switch selection to new name
+            setRenameInput(''); // Clear input
+
+        } catch (error) {
+            console.error("Rename failed:", error);
+            addToast("Error moving data", "error");
+        }
+    };
+
+    // Sorted Members for Sidebar
+    const sortedMembers = useMemo(() => {
+        return sortRosterByRole(members, rosterData);
+    }, [members, rosterData]);
+
+    // MVP Calculations
+    const mvpCounts = useMemo(() => {
+        const counts = {};
+        if (!events) return counts;
+        events.forEach(ev => {
+            if (!ev.mvpVotes) return;
+            const voteTally = {};
+            Object.values(ev.mvpVotes).forEach(p => voteTally[p] = (voteTally[p] || 0) + 1);
+            let max = 0; let winner = null;
+            Object.entries(voteTally).forEach(([p, c]) => { if (c > max) { max = c; winner = p; } });
+            if (winner) counts[winner] = (counts[winner] || 0) + 1;
+        });
+        return counts;
+    }, [events]);
+
+    return (
+        <div className="h-full flex flex-col gap-6">
+            <div className="flex gap-4 border-b border-white/10 pb-4">
+                <button onClick={() => setMode('edit')} className={`text-sm font-bold uppercase ${mode === 'edit' ? 'text-red-500' : 'text-neutral-500'}`}>Edit Mode</button>
+                <button onClick={() => setMode('compare')} className={`text-sm font-bold uppercase ${mode === 'compare' ? 'text-red-500' : 'text-neutral-500'}`}>Compare Players</button>
+            </div>
+
+            {mode === 'edit' ? (
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 h-full">
+                    {/* Sidebar List */}
+                    <div className="lg:col-span-1 bg-neutral-900/80 p-6 rounded-3xl border border-white/5 flex flex-col">
+                        <h3 className="text-white font-bold mb-4">Members</h3>
+                        <div className="flex-1 space-y-2 overflow-y-auto custom-scrollbar">
+                            {sortedMembers.length === 0 ?
+                                <div className="text-neutral-500 text-xs italic p-4 text-center border border-dashed border-neutral-800 rounded-xl">No members found. Log availability to appear here.</div> :
+                                sortedMembers.map(m => (
+                                    <div key={m} onClick={() => {
+                                        setSelectedMember(m);
+                                        setRole(rosterData[m]?.role || 'Tryout');
+                                        setRank(rosterData[m]?.rank || 'Unranked');
+                                        setNotes(rosterData[m]?.notes || '');
+                                        setGameId(rosterData[m]?.gameId || '');
+                                        setPfp(rosterData[m]?.pfp || '');
+                                        setIngameRole(rosterData[m]?.ingameRole || 'Flex');
+                                    }} className={`p-3 rounded-xl cursor-pointer border transition-all flex justify-between items-center ${selectedMember === m ? 'bg-red-900/20 border-red-600' : 'bg-black border-neutral-800'}`}>
+                                        <span className="text-white font-bold flex items-center gap-2">{m} {mvpCounts[m] > 0 && <span className="text-[9px] bg-yellow-500/20 text-yellow-500 px-1 rounded border border-yellow-500/20">🏆 x{mvpCounts[m]}</span>}</span>
+                                        <span className="text-xs text-neutral-500 uppercase">{rosterData[m]?.role}</span>
                                     </div>
+                                ))
+                            }
+                        </div>
+                    </div>
 
-                                    <div className="grid grid-cols-2 gap-4">
-                                        <div>
-                                            <label className="block text-xs font-bold text-neutral-500 mb-1">Agent Role</label>
-                                            <Select value={ingameRole} onChange={e => setIngameRole(e.target.value)}>
-                                                {ROLES.filter(r => !['Head Coach', 'Coach'].includes(r)).map(r => <option key={r}>{r}</option>)}
-                                            </Select>
-                                        </div>
-                                        <div>
-                                            <label className="block text-xs font-bold text-neutral-500 mb-1">Riot ID</label>
-                                            <Input value={gameId} onChange={e => setGameId(e.target.value)} />
-                                        </div>
-                                    </div>
+                    {/* Edit Form */}
+                    <Card className="lg:col-span-2">
+                        {selectedMember ? (
+                            <div className="space-y-6">
+                                <h3 className="text-2xl font-black text-white">Managing: <span className="text-red-500">{selectedMember}</span></h3>
 
+                                <div className="grid grid-cols-2 gap-4">
                                     <div>
-                                        <label className="block text-xs font-bold text-neutral-500 mb-1">Profile Image URL</label>
-                                        <Input value={pfp} onChange={e => setPfp(e.target.value)} placeholder="https://..." />
+                                        <label className="block text-xs font-bold text-neutral-500 mb-1">Team Role</label>
+                                        <Select value={role} onChange={e => setRole(e.target.value)}>
+                                            {/* UPDATED: Added Coach Roles */}
+                                            {['Head Coach', 'Coach', 'Captain', 'Main', 'Sub', 'Tryout'].map(r => <option key={r}>{r}</option>)}
+                                        </Select>
                                     </div>
-
-                                    <textarea className="w-full h-40 bg-black border border-neutral-800 rounded-xl p-3 text-white" value={notes} onChange={e => setNotes(e.target.value)} placeholder="Notes..." />
-
-                                    <ButtonPrimary onClick={handleSave} className="w-full py-3">Save Changes</ButtonPrimary>
-
-                                    {/* --- RENAME SECTION (Danger Zone) --- */}
-                                    <div className="mt-8 pt-6 border-t border-neutral-800">
-                                        <label className="block text-xs font-bold text-red-500 mb-2 uppercase tracking-widest">
-                                            Danger Zone: Rename User
-                                        </label>
-                                        <div className="flex gap-2">
-                                            <Input
-                                                value={renameInput}
-                                                onChange={(e) => setRenameInput(e.target.value)}
-                                                placeholder={`New name for ${selectedMember}...`}
-                                                className="border-red-900/30 focus:border-red-600"
-                                            />
-                                            <button
-                                                onClick={handleRename}
-                                                className="bg-red-950 hover:bg-red-900 text-red-500 border border-red-900 font-bold px-4 rounded-xl text-xs uppercase tracking-wider transition-colors"
-                                            >
-                                                Rename
-                                            </button>
-                                        </div>
-                                        <p className="text-[10px] text-neutral-600 mt-2">
-                                            This moves their Roster Profile and Availability slots to the new ID.
-                                        </p>
+                                    <div>
+                                        <label className="block text-xs font-bold text-neutral-500 mb-1">Rank</label>
+                                        <Select value={rank} onChange={e => setRank(e.target.value)}>{RANKS.map(r => <option key={r}>{r}</option>)}</Select>
                                     </div>
-
                                 </div>
-                            ) : <div className="h-full flex items-center justify-center text-neutral-500">Select a player</div>}
+
+                                <div className="grid grid-cols-2 gap-4">
+                                    <div>
+                                        <label className="block text-xs font-bold text-neutral-500 mb-1">Agent Role</label>
+                                        <Select value={ingameRole} onChange={e => setIngameRole(e.target.value)}>
+                                            {ROLES.filter(r => !['Head Coach', 'Coach'].includes(r)).map(r => <option key={r}>{r}</option>)}
+                                        </Select>
+                                    </div>
+                                    <div>
+                                        <label className="block text-xs font-bold text-neutral-500 mb-1">Riot ID</label>
+                                        <Input value={gameId} onChange={e => setGameId(e.target.value)} />
+                                    </div>
+                                </div>
+
+                                <div>
+                                    <label className="block text-xs font-bold text-neutral-500 mb-1">Profile Image URL</label>
+                                    <Input value={pfp} onChange={e => setPfp(e.target.value)} placeholder="https://..." />
+                                </div>
+
+                                <textarea className="w-full h-40 bg-black border border-neutral-800 rounded-xl p-3 text-white" value={notes} onChange={e => setNotes(e.target.value)} placeholder="Notes..." />
+
+                                <ButtonPrimary onClick={handleSave} className="w-full py-3">Save Changes</ButtonPrimary>
+
+                                {/* --- RENAME SECTION (Danger Zone) --- */}
+                                <div className="mt-8 pt-6 border-t border-neutral-800">
+                                    <label className="block text-xs font-bold text-red-500 mb-2 uppercase tracking-widest">
+                                        Danger Zone: Rename User
+                                    </label>
+                                    <div className="flex gap-2">
+                                        <Input
+                                            value={renameInput}
+                                            onChange={(e) => setRenameInput(e.target.value)}
+                                            placeholder={`New name for ${selectedMember}...`}
+                                            className="border-red-900/30 focus:border-red-600"
+                                        />
+                                        <button
+                                            onClick={handleRename}
+                                            className="bg-red-950 hover:bg-red-900 text-red-500 border border-red-900 font-bold px-4 rounded-xl text-xs uppercase tracking-wider transition-colors"
+                                        >
+                                            Rename
+                                        </button>
+                                    </div>
+                                    <p className="text-[10px] text-neutral-600 mt-2">
+                                        This moves their Roster Profile and Availability slots to the new ID.
+                                    </p>
+                                </div>
+
+                            </div>
+                        ) : <div className="h-full flex items-center justify-center text-neutral-500">Select a player</div>}
+                    </Card>
+                </div>
+            ) : (
+                // Compare Mode (Unchanged)
+                <div className="grid grid-cols-2 gap-8 h-full">
+                    {[setCompare1, setCompare2].map((setter, i) => (
+                        <Card key={i} className="h-full">
+                            <Select onChange={e => setter(e.target.value)} className="mb-6"><option>Select Player</option>{members.map(m => <option key={m}>{m}</option>)}</Select>
+                            {((i === 0 ? compare1 : compare2) && rosterData[i === 0 ? compare1 : compare2]) && (
+                                <div className="space-y-4 text-center">
+                                    <div className="w-24 h-24 mx-auto bg-red-600 rounded-full flex items-center justify-center text-3xl font-black text-white border-4 border-black shadow-xl">{(i === 0 ? compare1 : compare2)[0]}</div>
+                                    <div className="text-3xl font-black text-white uppercase">{(i === 0 ? compare1 : compare2)}</div>
+                                    <div className="flex justify-center gap-2">
+                                        <span className="bg-neutral-800 px-3 py-1 rounded text-xs font-bold text-white">{rosterData[i === 0 ? compare1 : compare2]?.rank || 'Unranked'}</span>
+                                        <span className="bg-red-900/50 px-3 py-1 rounded text-xs font-bold text-red-400">{rosterData[i === 0 ? compare1 : compare2]?.role || 'Member'}</span>
+                                    </div>
+                                    {mvpCounts[(i === 0 ? compare1 : compare2)] > 0 && <div className="text-yellow-500 font-bold text-sm bg-yellow-900/20 py-1 rounded border border-yellow-500/20">🏆 {mvpCounts[(i === 0 ? compare1 : compare2)]} MVP Awards</div>}
+                                    <div className="p-4 bg-black/50 rounded-xl border border-neutral-800 text-left">
+                                        <div className="text-[10px] text-neutral-500 uppercase font-bold mb-2">Performance Notes</div>
+                                        <p className="text-sm text-neutral-300 italic">"{rosterData[i === 0 ? compare1 : compare2]?.notes || 'No notes available.'}"</p>
+                                    </div>
+                                </div>
+                            )}
                         </Card>
+                    ))}
+                </div>
+            )}
+        </div>
+    );
+}
+
+function AdminPanel() {
+    const [applications, setApplications] = useState([]);
+    const [processing, setProcessing] = useState(null); // Track which ID is processing
+    const addToast = useToast();
+
+    useEffect(() => {
+        const unsub = onSnapshot(collection(db, 'applications'), (snap) => {
+            const apps = [];
+            snap.forEach(doc => apps.push({ id: doc.id, ...doc.data() }));
+            setApplications(apps);
+        });
+        return () => unsub();
+    }, []);
+
+    const acceptApplicant = async (app) => {
+        setProcessing(app.id);
+
+        try {
+            // --- FIX FOR MISSING USERNAME ---
+            let rosterName = app.user;
+
+            // If the application has no username (null/undefined/empty), ask the Admin to type one.
+            if (!rosterName) {
+                const manualName = window.prompt("⚠️ This application is missing a username.\n\nPlease enter the player's Riot ID or Roster Name manually:");
+                if (!manualName) {
+                    setProcessing(null);
+                    return addToast("Action Cancelled: Name required", "error");
+                }
+                rosterName = manualName;
+            }
+            // --------------------------------
+
+            const safeUid = app.uid || "legacy_id_missing";
+
+            const rosterData = {
+                rank: app.rank || "Unranked",
+                role: 'Tryout',
+                ingameRole: app.role || "Flex",
+                notes: `Tracker: ${app.tracker || "N/A"}\nWhy: ${app.why || "N/A"}`,
+                joinedAt: new Date().toISOString(),
+                uid: safeUid,
+                pfp: "",
+                gameId: ""
+            };
+
+            // Use rosterName (which is guaranteed to exist now) as the document ID
+            await setDoc(doc(db, 'roster', rosterName), rosterData);
+            await deleteDoc(doc(db, 'applications', app.id));
+
+            addToast(`✅ Added ${rosterName} to Roster`);
+
+        } catch (error) {
+            console.error("ACCEPT ERROR:", error);
+            addToast(`Error: ${error.message}`, "error");
+        }
+        setProcessing(null);
+    };
+
+    const rejectApplicant = async (id) => {
+        if (!window.confirm("Are you sure you want to reject this applicant? This cannot be undone.")) return;
+        setProcessing(id);
+        try {
+            await deleteDoc(doc(db, 'applications', id));
+            addToast('Applicant Rejected');
+        } catch (error) {
+            addToast("Error rejecting", "error");
+        }
+        setProcessing(null);
+    };
+
+    return (
+        <Card className="h-full">
+            <h2 className="text-3xl font-black text-white mb-6 flex items-center gap-3">
+                <span className="text-red-600">ADMIN</span> DASHBOARD
+            </h2>
+            <div className="space-y-6">
+                {applications.length === 0 ? (
+                    <div className="text-center py-12 border border-dashed border-neutral-800 rounded-2xl">
+                        <p className="text-neutral-500 italic">No pending applications.</p>
                     </div>
                 ) : (
-                    // Compare Mode (Unchanged)
-                    <div className="grid grid-cols-2 gap-8 h-full">
-                        {[setCompare1, setCompare2].map((setter, i) => (
-                            <Card key={i} className="h-full">
-                                <Select onChange={e => setter(e.target.value)} className="mb-6"><option>Select Player</option>{members.map(m => <option key={m}>{m}</option>)}</Select>
-                                {((i === 0 ? compare1 : compare2) && rosterData[i === 0 ? compare1 : compare2]) && (
-                                    <div className="space-y-4 text-center">
-                                        <div className="w-24 h-24 mx-auto bg-red-600 rounded-full flex items-center justify-center text-3xl font-black text-white border-4 border-black shadow-xl">{(i === 0 ? compare1 : compare2)[0]}</div>
-                                        <div className="text-3xl font-black text-white uppercase">{(i === 0 ? compare1 : compare2)}</div>
-                                        <div className="flex justify-center gap-2">
-                                            <span className="bg-neutral-800 px-3 py-1 rounded text-xs font-bold text-white">{rosterData[i === 0 ? compare1 : compare2]?.rank || 'Unranked'}</span>
-                                            <span className="bg-red-900/50 px-3 py-1 rounded text-xs font-bold text-red-400">{rosterData[i === 0 ? compare1 : compare2]?.role || 'Member'}</span>
-                                        </div>
-                                        {mvpCounts[(i === 0 ? compare1 : compare2)] > 0 && <div className="text-yellow-500 font-bold text-sm bg-yellow-900/20 py-1 rounded border border-yellow-500/20">🏆 {mvpCounts[(i === 0 ? compare1 : compare2)]} MVP Awards</div>}
-                                        <div className="p-4 bg-black/50 rounded-xl border border-neutral-800 text-left">
-                                            <div className="text-[10px] text-neutral-500 uppercase font-bold mb-2">Performance Notes</div>
-                                            <p className="text-sm text-neutral-300 italic">"{rosterData[i === 0 ? compare1 : compare2]?.notes || 'No notes available.'}"</p>
-                                        </div>
+                    <div className="grid grid-cols-1 gap-4">
+                        {applications.map(app => (
+                            <div key={app.id} className="bg-black/80 border border-neutral-800 p-6 rounded-2xl flex flex-col md:flex-row justify-between gap-6 relative overflow-hidden group hover:border-red-600/30 transition-all">
+                                <div className="absolute top-0 left-0 w-1 h-full bg-yellow-500"></div>
+                                <div className="space-y-3 flex-1">
+                                    <div className="flex items-center gap-3">
+                                        <h4 className="text-2xl font-black text-white">{app.user}</h4>
+                                        <span className="bg-neutral-800 text-neutral-300 text-[10px] px-2 py-1 rounded font-bold uppercase tracking-wider">{app.rank}</span>
+                                        <span className="bg-red-900/30 text-red-400 text-[10px] px-2 py-1 rounded font-bold uppercase tracking-wider">{app.role}</span>
                                     </div>
-                                )}
-                            </Card>
+
+                                    <div className="bg-neutral-900/50 p-3 rounded-lg border border-white/5">
+                                        <p className="text-neutral-500 text-xs font-bold uppercase mb-1">Application Statement</p>
+                                        <p className="text-neutral-300 text-sm italic">"{app.why}"</p>
+                                    </div>
+
+                                    <div className="flex items-center gap-4 text-xs">
+                                        <div className="text-neutral-500">Exp: <span className="text-white">{app.exp}</span></div>
+                                        <a href={app.tracker} target="_blank" rel="noreferrer" className="text-red-500 font-bold hover:underline flex items-center gap-1">
+                                            Tracker Profile ↗
+                                        </a>
+                                    </div>
+                                    <div className="text-[10px] text-neutral-600 font-mono">Applied: {new Date(app.submittedAt).toLocaleDateString()}</div>
+                                </div>
+
+                                <div className="flex flex-row md:flex-col gap-3 justify-center min-w-[150px]">
+                                    <button
+                                        onClick={() => acceptApplicant(app)}
+                                        disabled={processing === app.id}
+                                        className="bg-green-600 hover:bg-green-500 text-white font-black uppercase tracking-widest py-3 px-4 rounded-xl shadow-lg transition-all flex-1 text-xs disabled:opacity-50"
+                                    >
+                                        {processing === app.id ? 'Processing...' : 'Accept'}
+                                    </button>
+                                    <button
+                                        onClick={() => rejectApplicant(app.id)}
+                                        disabled={processing === app.id}
+                                        className="bg-black hover:bg-red-900/20 border border-neutral-700 hover:border-red-500 text-neutral-400 hover:text-white font-bold uppercase tracking-widest py-3 px-4 rounded-xl transition-all flex-1 text-xs disabled:opacity-50"
+                                    >
+                                        Reject
+                                    </button>
+                                </div>
+                            </div>
                         ))}
                     </div>
                 )}
             </div>
-        );
-    }
+        </Card>
+    );
+}
+function PartnerDirectory() {
+    const [partners, setPartners] = useState([]); const [newPartner, setNewPartner] = useState({ name: '', contact: '', notes: '' });
+    useEffect(() => { const unsub = onSnapshot(collection(db, 'partners'), (s) => { const p = []; s.forEach(d => p.push({ id: d.id, ...d.data() })); setPartners(p); }); return unsub; }, []);
+    const add = async () => { await addDoc(collection(db, 'partners'), newPartner); setNewPartner({ name: '', contact: '', notes: '' }); };
+    return (
+        <Card className="h-full"><h3 className="text-2xl font-black text-white mb-6">PARTNERS</h3><div className="mb-6 space-y-2"><Input placeholder="Team Name" value={newPartner.name} onChange={e => setNewPartner({ ...newPartner, name: e.target.value })} /><div className="flex gap-2"><Input placeholder="Contact" value={newPartner.contact} onChange={e => setNewPartner({ ...newPartner, contact: e.target.value })} /><Input placeholder="Notes" value={newPartner.notes} onChange={e => setNewPartner({ ...newPartner, notes: e.target.value })} /></div><ButtonPrimary onClick={add} className="w-full text-xs py-2">Add</ButtonPrimary></div><div className="space-y-2 h-96 overflow-y-auto custom-scrollbar">{partners.map(p => <div key={p.id} className="p-4 bg-black border border-neutral-800 rounded-xl flex justify-between"><div><div className="font-bold text-white">{p.name}</div><div className="text-xs text-red-500">{p.contact}</div></div><button onClick={() => deleteDoc(doc(db, 'partners', p.id))} className="text-neutral-600 hover:text-red-500">×</button></div>)}</div></Card>
+    );
+}
 
-    function AdminPanel() {
-        const [applications, setApplications] = useState([]);
-        const [processing, setProcessing] = useState(null); // Track which ID is processing
-        const addToast = useToast();
+function MapVeto() {
+    const [vetoState, setVetoState] = useState({}); useEffect(() => { const unsub = onSnapshot(doc(db, 'general', 'map_veto'), (snap) => { if (snap.exists()) setVetoState(snap.data()); }); return () => unsub(); }, []);
+    const toggleMap = async (map) => { const current = vetoState[map] || 'neutral'; const next = current === 'neutral' ? 'ban' : current === 'ban' ? 'pick' : 'neutral'; await setDoc(doc(db, 'general', 'map_veto'), { ...vetoState, [map]: next }); };
+    const resetVeto = async () => { await setDoc(doc(db, 'general', 'map_veto'), {}); };
+    return (<Card className="h-full"><div className="flex justify-between items-center mb-6"><h3 className="text-2xl font-black text-white">MAP VETO</h3><ButtonSecondary onClick={resetVeto} className="text-xs px-3 py-1">Reset Board</ButtonSecondary></div><div className="grid grid-cols-2 md:grid-cols-5 gap-4">{MAPS.map(map => { const status = vetoState[map] || 'neutral'; return (<div key={map} onClick={() => toggleMap(map)} className={`aspect-video rounded-xl border-2 cursor-pointer flex items-center justify-center relative group ${status === 'neutral' ? 'border-neutral-800 bg-black/50' : ''} ${status === 'ban' ? 'border-red-600 bg-red-900/20' : ''} ${status === 'pick' ? 'border-green-500 bg-green-900/20' : ''}`}><span className="font-black uppercase text-white">{map}</span><div className="absolute bottom-2 text-[10px] font-bold">{status.toUpperCase()}</div></div>); })}</div></Card>);
+}
 
-        useEffect(() => {
-            const unsub = onSnapshot(collection(db, 'applications'), (snap) => {
-                const apps = [];
-                snap.forEach(doc => apps.push({ id: doc.id, ...doc.data() }));
-                setApplications(apps);
-            });
-            return () => unsub();
-        }, []);
+function ContentManager() {
+    // Existing State
+    const [news, setNews] = useState([]);
+    const [intel, setIntel] = useState([]);
+    const [merch, setMerch] = useState([]);
+    const [newNews, setNewNews] = useState({ title: '', body: '', date: new Date().toISOString().split('T')[0], type: 'Update', isFeatured: false });
+    const [newIntel, setNewIntel] = useState({ title: '', subtitle: '', url: '', date: new Date().toISOString().split('T')[0] });
+    const [newMerch, setNewMerch] = useState({ name: '', price: '', link: '' });
 
-        const acceptApplicant = async (app) => {
-            setProcessing(app.id);
+    // Achievements State
+    const [achievements, setAchievements] = useState([]);
+    const [newAchievement, setNewAchievement] = useState({ title: '', subtitle: '', icon: '🏆', highlight: false });
 
-            try {
-                // --- FIX FOR MISSING USERNAME ---
-                let rosterName = app.user;
+    const addToast = useToast();
 
-                // If the application has no username (null/undefined/empty), ask the Admin to type one.
-                if (!rosterName) {
-                    const manualName = window.prompt("⚠️ This application is missing a username.\n\nPlease enter the player's Riot ID or Roster Name manually:");
-                    if (!manualName) {
-                        setProcessing(null);
-                        return addToast("Action Cancelled: Name required", "error");
-                    }
-                    rosterName = manualName;
-                }
-                // --------------------------------
+    // Fetch Data
+    useEffect(() => {
+        const unsubNews = onSnapshot(query(collection(db, 'news')), (snap) => {
+            const n = []; snap.forEach(doc => n.push({ id: doc.id, ...doc.data() }));
+            setNews(n.sort((a, b) => new Date(b.date) - new Date(a.date)));
+        });
+        const unsubIntel = onSnapshot(query(collection(db, 'intel')), (snap) => {
+            const i = []; snap.forEach(doc => i.push({ id: doc.id, ...doc.data() }));
+            setIntel(i.sort((a, b) => new Date(b.date) - new Date(a.date)));
+        });
+        const unsubMerch = onSnapshot(collection(db, 'merch'), (snap) => {
+            const m = []; snap.forEach(doc => m.push({ id: doc.id, ...doc.data() }));
+            setMerch(m);
+        });
+        const unsubAchieve = onSnapshot(collection(db, 'achievements'), (snap) => {
+            const a = []; snap.forEach(doc => a.push({ id: doc.id, ...doc.data() }));
+            setAchievements(a);
+        });
 
-                const safeUid = app.uid || "legacy_id_missing";
+        return () => { unsubNews(); unsubIntel(); unsubMerch(); unsubAchieve(); };
+    }, []);
 
-                const rosterData = {
-                    rank: app.rank || "Unranked",
-                    role: 'Tryout',
-                    ingameRole: app.role || "Flex",
-                    notes: `Tracker: ${app.tracker || "N/A"}\nWhy: ${app.why || "N/A"}`,
-                    joinedAt: new Date().toISOString(),
-                    uid: safeUid,
-                    pfp: "",
-                    gameId: ""
-                };
+    // Handlers
+    const addNews = async () => {
+        if (!newNews.title || !newNews.body) return addToast('Title and Body required', 'error');
+        await addDoc(collection(db, 'news'), newNews);
+        setNewNews({ title: '', body: '', date: new Date().toISOString().split('T')[0], type: 'Update', isFeatured: false });
+        addToast('News Posted');
+    };
 
-                // Use rosterName (which is guaranteed to exist now) as the document ID
-                await setDoc(doc(db, 'roster', rosterName), rosterData);
-                await deleteDoc(doc(db, 'applications', app.id));
+    const addIntel = async () => {
+        if (!newIntel.title || !newIntel.url) return addToast('Title and URL required', 'error');
+        await addDoc(collection(db, 'intel'), newIntel);
+        setNewIntel({ title: '', subtitle: '', url: '', date: new Date().toISOString().split('T')[0] });
+        addToast('Intel Added');
+    };
 
-                addToast(`✅ Added ${rosterName} to Roster`);
+    const addMerch = async () => {
+        if (!newMerch.name || !newMerch.price) return addToast('Name and Price required', 'error');
+        await addDoc(collection(db, 'merch'), newMerch);
+        setNewMerch({ name: '', price: '', link: '' });
+        addToast('Item Added');
+    };
 
-            } catch (error) {
-                console.error("ACCEPT ERROR:", error);
-                addToast(`Error: ${error.message}`, "error");
-            }
-            setProcessing(null);
-        };
+    const addAchievement = async () => {
+        if (!newAchievement.title || !newAchievement.subtitle) return addToast('Details required', 'error');
+        await addDoc(collection(db, 'achievements'), {
+            ...newAchievement,
+            createdAt: new Date().toISOString()
+        });
+        setNewAchievement({ title: '', subtitle: '', icon: '🏆', highlight: false });
+        addToast('Trophy Added');
+    };
 
-        const rejectApplicant = async (id) => {
-            if (!window.confirm("Are you sure you want to reject this applicant? This cannot be undone.")) return;
-            setProcessing(id);
-            try {
-                await deleteDoc(doc(db, 'applications', id));
-                addToast('Applicant Rejected');
-            } catch (error) {
-                addToast("Error rejecting", "error");
-            }
-            setProcessing(null);
-        };
+    const deleteItem = async (collectionName, id) => {
+        await deleteDoc(doc(db, collectionName, id));
+        addToast('Item Deleted');
+    };
 
-        return (
-            <Card className="h-full">
-                <h2 className="text-3xl font-black text-white mb-6 flex items-center gap-3">
-                    <span className="text-red-600">ADMIN</span> DASHBOARD
-                </h2>
-                <div className="space-y-6">
-                    {applications.length === 0 ? (
-                        <div className="text-center py-12 border border-dashed border-neutral-800 rounded-2xl">
-                            <p className="text-neutral-500 italic">No pending applications.</p>
-                        </div>
-                    ) : (
-                        <div className="grid grid-cols-1 gap-4">
-                            {applications.map(app => (
-                                <div key={app.id} className="bg-black/80 border border-neutral-800 p-6 rounded-2xl flex flex-col md:flex-row justify-between gap-6 relative overflow-hidden group hover:border-red-600/30 transition-all">
-                                    <div className="absolute top-0 left-0 w-1 h-full bg-yellow-500"></div>
-                                    <div className="space-y-3 flex-1">
-                                        <div className="flex items-center gap-3">
-                                            <h4 className="text-2xl font-black text-white">{app.user}</h4>
-                                            <span className="bg-neutral-800 text-neutral-300 text-[10px] px-2 py-1 rounded font-bold uppercase tracking-wider">{app.rank}</span>
-                                            <span className="bg-red-900/30 text-red-400 text-[10px] px-2 py-1 rounded font-bold uppercase tracking-wider">{app.role}</span>
-                                        </div>
+    return (
+        // UPDATED GRID CLASS HERE: grid-cols-1 md:grid-cols-2 (Creates 2x2 layout)
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-8 h-full">
 
-                                        <div className="bg-neutral-900/50 p-3 rounded-lg border border-white/5">
-                                            <p className="text-neutral-500 text-xs font-bold uppercase mb-1">Application Statement</p>
-                                            <p className="text-neutral-300 text-sm italic">"{app.why}"</p>
-                                        </div>
+            {/* 1. NEWS MANAGER */}
+            <Card className="h-full flex flex-col min-h-[400px]">
+                <h3 className="text-xl font-black text-white mb-4 flex items-center gap-2"><span className="text-red-600">/</span> SITREP</h3>
+                <div className="bg-neutral-900/50 p-4 rounded-xl border border-white/10 space-y-3 mb-4">
+                    <div className="flex justify-between items-center mb-1">
+                        <span className="text-[10px] font-bold text-neutral-500 uppercase">Post News</span>
+                        <label className="flex items-center gap-2 cursor-pointer"><input type="checkbox" checked={newNews.isFeatured} onChange={e => setNewNews({ ...newNews, isFeatured: e.target.checked })} className="accent-red-600 w-3 h-3" /><span className="text-[10px] font-bold text-red-500 uppercase">Featured</span></label>
+                    </div>
+                    <Input placeholder="Headline" value={newNews.title} onChange={e => setNewNews({ ...newNews, title: e.target.value })} />
+                    <textarea className="w-full bg-black/40 border border-neutral-800 rounded-xl p-3 text-white text-xs" rows={2} placeholder="Body..." value={newNews.body} onChange={e => setNewNews({ ...newNews, body: e.target.value })} />
+                    <ButtonPrimary onClick={addNews} className="w-full py-2 text-xs">Post</ButtonPrimary>
+                </div>
+                <div className="flex-1 overflow-y-auto custom-scrollbar space-y-2">{news.map(n => (<div key={n.id} className="p-3 bg-black/40 rounded border border-neutral-800 flex justify-between items-start"><div className="w-full"><div className="font-bold text-white text-xs truncate">{n.title}</div></div><button onClick={() => deleteItem('news', n.id)} className="text-neutral-500 hover:text-red-500 ml-2">×</button></div>))}</div>
+            </Card>
 
-                                        <div className="flex items-center gap-4 text-xs">
-                                            <div className="text-neutral-500">Exp: <span className="text-white">{app.exp}</span></div>
-                                            <a href={app.tracker} target="_blank" rel="noreferrer" className="text-red-500 font-bold hover:underline flex items-center gap-1">
-                                                Tracker Profile ↗
-                                            </a>
-                                        </div>
-                                        <div className="text-[10px] text-neutral-600 font-mono">Applied: {new Date(app.submittedAt).toLocaleDateString()}</div>
-                                    </div>
+            {/* 2. INTEL MANAGER */}
+            <Card className="h-full flex flex-col min-h-[400px]">
+                <h3 className="text-xl font-black text-white mb-4 flex items-center gap-2"><span className="text-red-600">/</span> INTEL</h3>
+                <div className="bg-neutral-900/50 p-4 rounded-xl border border-white/10 space-y-3 mb-4">
+                    <span className="text-[10px] font-bold text-neutral-500 uppercase">Add VOD</span>
+                    <Input placeholder="Title" value={newIntel.title} onChange={e => setNewIntel({ ...newIntel, title: e.target.value })} />
+                    <Input placeholder="URL" value={newIntel.url} onChange={e => setNewIntel({ ...newIntel, url: e.target.value })} />
+                    <ButtonPrimary onClick={addIntel} className="w-full py-2 text-xs">Add</ButtonPrimary>
+                </div>
+                <div className="flex-1 overflow-y-auto custom-scrollbar space-y-2">{intel.map(i => (<div key={i.id} className="p-3 bg-black/40 rounded border border-neutral-800 flex justify-between items-center"><div className="truncate text-xs text-white font-bold">{i.title}</div><button onClick={() => deleteItem('intel', i.id)} className="text-neutral-500 hover:text-red-500">×</button></div>))}</div>
+            </Card>
 
-                                    <div className="flex flex-row md:flex-col gap-3 justify-center min-w-[150px]">
-                                        <button
-                                            onClick={() => acceptApplicant(app)}
-                                            disabled={processing === app.id}
-                                            className="bg-green-600 hover:bg-green-500 text-white font-black uppercase tracking-widest py-3 px-4 rounded-xl shadow-lg transition-all flex-1 text-xs disabled:opacity-50"
-                                        >
-                                            {processing === app.id ? 'Processing...' : 'Accept'}
-                                        </button>
-                                        <button
-                                            onClick={() => rejectApplicant(app.id)}
-                                            disabled={processing === app.id}
-                                            className="bg-black hover:bg-red-900/20 border border-neutral-700 hover:border-red-500 text-neutral-400 hover:text-white font-bold uppercase tracking-widest py-3 px-4 rounded-xl transition-all flex-1 text-xs disabled:opacity-50"
-                                        >
-                                            Reject
-                                        </button>
-                                    </div>
+            {/* 3. ARMORY MANAGER */}
+            <Card className="h-full flex flex-col min-h-[400px]">
+                <h3 className="text-xl font-black text-white mb-4 flex items-center gap-2"><span className="text-red-600">/</span> ARMORY</h3>
+                <div className="bg-neutral-900/50 p-4 rounded-xl border border-white/10 space-y-3 mb-4">
+                    <span className="text-[10px] font-bold text-neutral-500 uppercase">New Item</span>
+                    <Input placeholder="Name" value={newMerch.name} onChange={e => setNewMerch({ ...newMerch, name: e.target.value })} />
+                    <Input placeholder="Price" value={newMerch.price} onChange={e => setNewMerch({ ...newMerch, price: e.target.value })} />
+                    <ButtonPrimary onClick={addMerch} className="w-full py-2 text-xs">Add</ButtonPrimary>
+                </div>
+                <div className="flex-1 overflow-y-auto custom-scrollbar space-y-2">{merch.map(m => (<div key={m.id} className="p-3 bg-black/40 rounded border border-neutral-800 flex justify-between items-center"><div className="truncate text-xs text-white font-bold">{m.name}</div><button onClick={() => deleteItem('merch', m.id)} className="text-neutral-500 hover:text-red-500">×</button></div>))}</div>
+            </Card>
+
+            {/* 4. TROPHY MANAGER */}
+            <Card className="h-full flex flex-col min-h-[400px]">
+                <h3 className="text-xl font-black text-white mb-4 flex items-center gap-2"><span className="text-red-600">/</span> TROPHIES</h3>
+                <div className="bg-neutral-900/50 p-4 rounded-xl border border-white/10 space-y-3 mb-4">
+                    <div className="flex justify-between items-center mb-1">
+                        <span className="text-[10px] font-bold text-neutral-500 uppercase">New Achievement</span>
+                        <label className="flex items-center gap-2 cursor-pointer"><input type="checkbox" checked={newAchievement.highlight} onChange={e => setNewAchievement({ ...newAchievement, highlight: e.target.checked })} className="accent-red-600 w-3 h-3" /><span className="text-[10px] font-bold text-red-500 uppercase">Red Text</span></label>
+                    </div>
+                    <div className="flex gap-2">
+                        <Select value={newAchievement.icon} onChange={e => setNewAchievement({ ...newAchievement, icon: e.target.value })} className="w-16 text-center text-xl">
+                            {['🏆', '🥇', '🥈', '🥉', '🎖️', '⭐', '🔥', '👑'].map(icon => <option key={icon}>{icon}</option>)}
+                        </Select>
+                        <Input placeholder="Title (e.g. PREMIER)" value={newAchievement.title} onChange={e => setNewAchievement({ ...newAchievement, title: e.target.value })} />
+                    </div>
+                    <Input placeholder="Subtitle (e.g. Winner 2024)" value={newAchievement.subtitle} onChange={e => setNewAchievement({ ...newAchievement, subtitle: e.target.value })} />
+                    <ButtonPrimary onClick={addAchievement} className="w-full py-2 text-xs">Add Trophy</ButtonPrimary>
+                </div>
+                <div className="flex-1 overflow-y-auto custom-scrollbar space-y-2">
+                    {achievements.map(a => (
+                        <div key={a.id} className="p-3 bg-black/40 rounded border border-neutral-800 flex justify-between items-center group">
+                            <div className="flex items-center gap-3">
+                                <span className="text-xl">{a.icon}</span>
+                                <div>
+                                    <div className={`text-xs font-black uppercase ${a.highlight ? 'text-red-500' : 'text-white'}`}>{a.title}</div>
+                                    <div className="text-[10px] text-neutral-500 font-bold uppercase">{a.subtitle}</div>
                                 </div>
-                            ))}
+                            </div>
+                            <button onClick={() => deleteItem('achievements', a.id)} className="text-neutral-600 hover:text-red-500 px-2">×</button>
                         </div>
-                    )}
+                    ))}
                 </div>
             </Card>
-        );
-    }
-    function PartnerDirectory() {
-        const [partners, setPartners] = useState([]); const [newPartner, setNewPartner] = useState({ name: '', contact: '', notes: '' });
-        useEffect(() => { const unsub = onSnapshot(collection(db, 'partners'), (s) => { const p = []; s.forEach(d => p.push({ id: d.id, ...d.data() })); setPartners(p); }); return unsub; }, []);
-        const add = async () => { await addDoc(collection(db, 'partners'), newPartner); setNewPartner({ name: '', contact: '', notes: '' }); };
-        return (
-            <Card className="h-full"><h3 className="text-2xl font-black text-white mb-6">PARTNERS</h3><div className="mb-6 space-y-2"><Input placeholder="Team Name" value={newPartner.name} onChange={e => setNewPartner({ ...newPartner, name: e.target.value })} /><div className="flex gap-2"><Input placeholder="Contact" value={newPartner.contact} onChange={e => setNewPartner({ ...newPartner, contact: e.target.value })} /><Input placeholder="Notes" value={newPartner.notes} onChange={e => setNewPartner({ ...newPartner, notes: e.target.value })} /></div><ButtonPrimary onClick={add} className="w-full text-xs py-2">Add</ButtonPrimary></div><div className="space-y-2 h-96 overflow-y-auto custom-scrollbar">{partners.map(p => <div key={p.id} className="p-4 bg-black border border-neutral-800 rounded-xl flex justify-between"><div><div className="font-bold text-white">{p.name}</div><div className="text-xs text-red-500">{p.contact}</div></div><button onClick={() => deleteDoc(doc(db, 'partners', p.id))} className="text-neutral-600 hover:text-red-500">×</button></div>)}</div></Card>
-        );
-    }
+        </div>
+    );
+}
+function SyrixDashboard({ onBack }) {
+    const [currentUser, setCurrentUser] = useState(null);
+    const [rosterName, setRosterName] = useState(null);
+    const [activeTab, setActiveTab] = useState('dashboard');
+    const [availabilities, setAvailabilities] = useState({});
+    const [events, setEvents] = useState([]);
+    const [day, setDay] = useState(DAYS[0]);
+    const [start, setStart] = useState('12:00');
+    const [end, setEnd] = useState('23:30');
+    const [role, setRole] = useState('Flex');
+    const [saveStatus, setSaveStatus] = useState('idle');
+    const [userTimezone, setUserTimezone] = useState(Intl.DateTimeFormat().resolvedOptions().timeZone);
+    const [authLoading, setAuthLoading] = useState(true);
+    const [isModalOpen, setIsModalOpen] = useState(false);
+    const [modalContent, setModalContent] = useState({ title: '', children: null });
+    const [isMember, setIsMember] = useState(false);
+    const addToast = useToast();
+    const [allRosterNames, setAllRosterNames] = useState([]);
 
-    function MapVeto() {
-        const [vetoState, setVetoState] = useState({}); useEffect(() => { const unsub = onSnapshot(doc(db, 'general', 'map_veto'), (snap) => { if (snap.exists()) setVetoState(snap.data()); }); return () => unsub(); }, []);
-        const toggleMap = async (map) => { const current = vetoState[map] || 'neutral'; const next = current === 'neutral' ? 'ban' : current === 'ban' ? 'pick' : 'neutral'; await setDoc(doc(db, 'general', 'map_veto'), { ...vetoState, [map]: next }); };
-        const resetVeto = async () => { await setDoc(doc(db, 'general', 'map_veto'), {}); };
-        return (<Card className="h-full"><div className="flex justify-between items-center mb-6"><h3 className="text-2xl font-black text-white">MAP VETO</h3><ButtonSecondary onClick={resetVeto} className="text-xs px-3 py-1">Reset Board</ButtonSecondary></div><div className="grid grid-cols-2 md:grid-cols-5 gap-4">{MAPS.map(map => { const status = vetoState[map] || 'neutral'; return (<div key={map} onClick={() => toggleMap(map)} className={`aspect-video rounded-xl border-2 cursor-pointer flex items-center justify-center relative group ${status === 'neutral' ? 'border-neutral-800 bg-black/50' : ''} ${status === 'ban' ? 'border-red-600 bg-red-900/20' : ''} ${status === 'pick' ? 'border-green-500 bg-green-900/20' : ''}`}><span className="font-black uppercase text-white">{map}</span><div className="absolute bottom-2 text-[10px] font-bold">{status.toUpperCase()}</div></div>); })}</div></Card>);
-    }
+    useEffect(() => { return onAuthStateChanged(auth, user => { setCurrentUser(user); setAuthLoading(false); }); }, []);
+    const signIn = async () => { try { await signInWithPopup(auth, new OAuthProvider('oidc.discord')); } catch (e) { console.error(e); } };
+    const handleSignOut = async () => await signOut(auth);
 
-    function ContentManager() {
-        // Existing State
-        const [news, setNews] = useState([]);
-        const [intel, setIntel] = useState([]);
-        const [merch, setMerch] = useState([]);
-        const [newNews, setNewNews] = useState({ title: '', body: '', date: new Date().toISOString().split('T')[0], type: 'Update', isFeatured: false });
-        const [newIntel, setNewIntel] = useState({ title: '', subtitle: '', url: '', date: new Date().toISOString().split('T')[0] });
-        const [newMerch, setNewMerch] = useState({ name: '', price: '', link: '' });
+    useEffect(() => {
+        if (!currentUser) return;
 
-        // Achievements State
-        const [achievements, setAchievements] = useState([]);
-        const [newAchievement, setNewAchievement] = useState({ title: '', subtitle: '', icon: '🏆', highlight: false });
+        // Listener 1: Get Current User's Profile (Existing logic)
+        const memberQuery = query(collection(db, 'roster'), where("uid", "==", currentUser.uid));
+        const unsub1 = onSnapshot(memberQuery, (snapshot) => {
+            if (!snapshot.empty) {
+                setRosterName(snapshot.docs[0].id);
+                setIsMember(true);
+            } else {
+                setIsMember(ADMIN_UIDS.includes(currentUser.uid));
+                setRosterName(currentUser.displayName);
+            }
+        });
 
-        const addToast = useToast();
+        // Listener 2: Get Availabilities (Existing logic)
+        const unsub2 = onSnapshot(collection(db, 'availabilities'), (s) => {
+            const d = {};
+            s.forEach(doc => d[doc.id] = doc.data().slots || []);
+            setAvailabilities(d);
+        });
 
-        // Fetch Data
-        useEffect(() => {
-            const unsubNews = onSnapshot(query(collection(db, 'news')), (snap) => {
-                const n = []; snap.forEach(doc => n.push({ id: doc.id, ...doc.data() }));
-                setNews(n.sort((a, b) => new Date(b.date) - new Date(a.date)));
-            });
-            const unsubIntel = onSnapshot(query(collection(db, 'intel')), (snap) => {
-                const i = []; snap.forEach(doc => i.push({ id: doc.id, ...doc.data() }));
-                setIntel(i.sort((a, b) => new Date(b.date) - new Date(a.date)));
-            });
-            const unsubMerch = onSnapshot(collection(db, 'merch'), (snap) => {
-                const m = []; snap.forEach(doc => m.push({ id: doc.id, ...doc.data() }));
-                setMerch(m);
-            });
-            const unsubAchieve = onSnapshot(collection(db, 'achievements'), (snap) => {
-                const a = []; snap.forEach(doc => a.push({ id: doc.id, ...doc.data() }));
-                setAchievements(a);
-            });
+        // Listener 3: Get Events (Existing logic)
+        const unsub3 = onSnapshot(collection(db, 'events'), (s) => {
+            const e = [];
+            s.forEach(d => e.push({ id: d.id, ...d.data() }));
+            setEvents(e.sort((a, b) => new Date(a.date + 'T' + a.time) - new Date(b.date + 'T' + b.time)));
+        });
 
-            return () => { unsubNews(); unsubIntel(); unsubMerch(); unsubAchieve(); };
-        }, []);
+        // --- NEW LISTENER 4: FETCH ALL ROSTER NAMES ---
+        // This ensures members show up even if they haven't set availability yet
+        const unsub4 = onSnapshot(collection(db, 'roster'), (s) => {
+            const names = [];
+            s.forEach(doc => names.push(doc.id));
+            setAllRosterNames(names);
+        });
 
-        // Handlers
-        const addNews = async () => {
-            if (!newNews.title || !newNews.body) return addToast('Title and Body required', 'error');
-            await addDoc(collection(db, 'news'), newNews);
-            setNewNews({ title: '', body: '', date: new Date().toISOString().split('T')[0], type: 'Update', isFeatured: false });
-            addToast('News Posted');
-        };
+        return () => { unsub1(); unsub2(); unsub3(); unsub4(); };
+    }, [currentUser]);
 
-        const addIntel = async () => {
-            if (!newIntel.title || !newIntel.url) return addToast('Title and URL required', 'error');
-            await addDoc(collection(db, 'intel'), newIntel);
-            setNewIntel({ title: '', subtitle: '', url: '', date: new Date().toISOString().split('T')[0] });
-            addToast('Intel Added');
-        };
+    // 3. UPDATE dynamicMembers TO USE THE ROSTER LIST
+    // Replace the old dynamicMembers line with this:
+    const dynamicMembers = useMemo(() => {
+        // Combine roster names AND availability names (just in case) and remove duplicates
+        return [...new Set([...allRosterNames, ...Object.keys(availabilities)])].sort();
+    }, [allRosterNames, availabilities]);
 
-        const addMerch = async () => {
-            if (!newMerch.name || !newMerch.price) return addToast('Name and Price required', 'error');
-            await addDoc(collection(db, 'merch'), newMerch);
-            setNewMerch({ name: '', price: '', link: '' });
-            addToast('Item Added');
-        };
-
-        const addAchievement = async () => {
-            if (!newAchievement.title || !newAchievement.subtitle) return addToast('Details required', 'error');
-            await addDoc(collection(db, 'achievements'), {
-                ...newAchievement,
-                createdAt: new Date().toISOString()
-            });
-            setNewAchievement({ title: '', subtitle: '', icon: '🏆', highlight: false });
-            addToast('Trophy Added');
-        };
-
-        const deleteItem = async (collectionName, id) => {
-            await deleteDoc(doc(db, collectionName, id));
-            addToast('Item Deleted');
-        };
-
-        return (
-            // UPDATED GRID CLASS HERE: grid-cols-1 md:grid-cols-2 (Creates 2x2 layout)
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-8 h-full">
-
-                {/* 1. NEWS MANAGER */}
-                <Card className="h-full flex flex-col min-h-[400px]">
-                    <h3 className="text-xl font-black text-white mb-4 flex items-center gap-2"><span className="text-red-600">/</span> SITREP</h3>
-                    <div className="bg-neutral-900/50 p-4 rounded-xl border border-white/10 space-y-3 mb-4">
-                        <div className="flex justify-between items-center mb-1">
-                            <span className="text-[10px] font-bold text-neutral-500 uppercase">Post News</span>
-                            <label className="flex items-center gap-2 cursor-pointer"><input type="checkbox" checked={newNews.isFeatured} onChange={e => setNewNews({ ...newNews, isFeatured: e.target.checked })} className="accent-red-600 w-3 h-3" /><span className="text-[10px] font-bold text-red-500 uppercase">Featured</span></label>
-                        </div>
-                        <Input placeholder="Headline" value={newNews.title} onChange={e => setNewNews({ ...newNews, title: e.target.value })} />
-                        <textarea className="w-full bg-black/40 border border-neutral-800 rounded-xl p-3 text-white text-xs" rows={2} placeholder="Body..." value={newNews.body} onChange={e => setNewNews({ ...newNews, body: e.target.value })} />
-                        <ButtonPrimary onClick={addNews} className="w-full py-2 text-xs">Post</ButtonPrimary>
-                    </div>
-                    <div className="flex-1 overflow-y-auto custom-scrollbar space-y-2">{news.map(n => (<div key={n.id} className="p-3 bg-black/40 rounded border border-neutral-800 flex justify-between items-start"><div className="w-full"><div className="font-bold text-white text-xs truncate">{n.title}</div></div><button onClick={() => deleteItem('news', n.id)} className="text-neutral-500 hover:text-red-500 ml-2">×</button></div>))}</div>
-                </Card>
-
-                {/* 2. INTEL MANAGER */}
-                <Card className="h-full flex flex-col min-h-[400px]">
-                    <h3 className="text-xl font-black text-white mb-4 flex items-center gap-2"><span className="text-red-600">/</span> INTEL</h3>
-                    <div className="bg-neutral-900/50 p-4 rounded-xl border border-white/10 space-y-3 mb-4">
-                        <span className="text-[10px] font-bold text-neutral-500 uppercase">Add VOD</span>
-                        <Input placeholder="Title" value={newIntel.title} onChange={e => setNewIntel({ ...newIntel, title: e.target.value })} />
-                        <Input placeholder="URL" value={newIntel.url} onChange={e => setNewIntel({ ...newIntel, url: e.target.value })} />
-                        <ButtonPrimary onClick={addIntel} className="w-full py-2 text-xs">Add</ButtonPrimary>
-                    </div>
-                    <div className="flex-1 overflow-y-auto custom-scrollbar space-y-2">{intel.map(i => (<div key={i.id} className="p-3 bg-black/40 rounded border border-neutral-800 flex justify-between items-center"><div className="truncate text-xs text-white font-bold">{i.title}</div><button onClick={() => deleteItem('intel', i.id)} className="text-neutral-500 hover:text-red-500">×</button></div>))}</div>
-                </Card>
-
-                {/* 3. ARMORY MANAGER */}
-                <Card className="h-full flex flex-col min-h-[400px]">
-                    <h3 className="text-xl font-black text-white mb-4 flex items-center gap-2"><span className="text-red-600">/</span> ARMORY</h3>
-                    <div className="bg-neutral-900/50 p-4 rounded-xl border border-white/10 space-y-3 mb-4">
-                        <span className="text-[10px] font-bold text-neutral-500 uppercase">New Item</span>
-                        <Input placeholder="Name" value={newMerch.name} onChange={e => setNewMerch({ ...newMerch, name: e.target.value })} />
-                        <Input placeholder="Price" value={newMerch.price} onChange={e => setNewMerch({ ...newMerch, price: e.target.value })} />
-                        <ButtonPrimary onClick={addMerch} className="w-full py-2 text-xs">Add</ButtonPrimary>
-                    </div>
-                    <div className="flex-1 overflow-y-auto custom-scrollbar space-y-2">{merch.map(m => (<div key={m.id} className="p-3 bg-black/40 rounded border border-neutral-800 flex justify-between items-center"><div className="truncate text-xs text-white font-bold">{m.name}</div><button onClick={() => deleteItem('merch', m.id)} className="text-neutral-500 hover:text-red-500">×</button></div>))}</div>
-                </Card>
-
-                {/* 4. TROPHY MANAGER */}
-                <Card className="h-full flex flex-col min-h-[400px]">
-                    <h3 className="text-xl font-black text-white mb-4 flex items-center gap-2"><span className="text-red-600">/</span> TROPHIES</h3>
-                    <div className="bg-neutral-900/50 p-4 rounded-xl border border-white/10 space-y-3 mb-4">
-                        <div className="flex justify-between items-center mb-1">
-                            <span className="text-[10px] font-bold text-neutral-500 uppercase">New Achievement</span>
-                            <label className="flex items-center gap-2 cursor-pointer"><input type="checkbox" checked={newAchievement.highlight} onChange={e => setNewAchievement({ ...newAchievement, highlight: e.target.checked })} className="accent-red-600 w-3 h-3" /><span className="text-[10px] font-bold text-red-500 uppercase">Red Text</span></label>
-                        </div>
-                        <div className="flex gap-2">
-                            <Select value={newAchievement.icon} onChange={e => setNewAchievement({ ...newAchievement, icon: e.target.value })} className="w-16 text-center text-xl">
-                                {['🏆', '🥇', '🥈', '🥉', '🎖️', '⭐', '🔥', '👑'].map(icon => <option key={icon}>{icon}</option>)}
-                            </Select>
-                            <Input placeholder="Title (e.g. PREMIER)" value={newAchievement.title} onChange={e => setNewAchievement({ ...newAchievement, title: e.target.value })} />
-                        </div>
-                        <Input placeholder="Subtitle (e.g. Winner 2024)" value={newAchievement.subtitle} onChange={e => setNewAchievement({ ...newAchievement, subtitle: e.target.value })} />
-                        <ButtonPrimary onClick={addAchievement} className="w-full py-2 text-xs">Add Trophy</ButtonPrimary>
-                    </div>
-                    <div className="flex-1 overflow-y-auto custom-scrollbar space-y-2">
-                        {achievements.map(a => (
-                            <div key={a.id} className="p-3 bg-black/40 rounded border border-neutral-800 flex justify-between items-center group">
-                                <div className="flex items-center gap-3">
-                                    <span className="text-xl">{a.icon}</span>
-                                    <div>
-                                        <div className={`text-xs font-black uppercase ${a.highlight ? 'text-red-500' : 'text-white'}`}>{a.title}</div>
-                                        <div className="text-[10px] text-neutral-500 font-bold uppercase">{a.subtitle}</div>
-                                    </div>
-                                </div>
-                                <button onClick={() => deleteItem('achievements', a.id)} className="text-neutral-600 hover:text-red-500 px-2">×</button>
-                            </div>
-                        ))}
-                    </div>
-                </Card>
-            </div>
-        );
-    }
-    function SyrixDashboard({ onBack }) {
-        const [currentUser, setCurrentUser] = useState(null);
-        const [rosterName, setRosterName] = useState(null);
-        const [activeTab, setActiveTab] = useState('dashboard');
-        const [availabilities, setAvailabilities] = useState({});
-        const [events, setEvents] = useState([]);
-        const [day, setDay] = useState(DAYS[0]);
-        const [start, setStart] = useState('12:00');
-        const [end, setEnd] = useState('23:30');
-        const [role, setRole] = useState('Flex');
-        const [saveStatus, setSaveStatus] = useState('idle');
-        const [userTimezone, setUserTimezone] = useState(Intl.DateTimeFormat().resolvedOptions().timeZone);
-        const [authLoading, setAuthLoading] = useState(true);
-        const [isModalOpen, setIsModalOpen] = useState(false);
-        const [modalContent, setModalContent] = useState({ title: '', children: null });
-        const [isMember, setIsMember] = useState(false);
-        const addToast = useToast();
-        const [allRosterNames, setAllRosterNames] = useState([]);
-
-        useEffect(() => { return onAuthStateChanged(auth, user => { setCurrentUser(user); setAuthLoading(false); }); }, []);
-        const signIn = async () => { try { await signInWithPopup(auth, new OAuthProvider('oidc.discord')); } catch (e) { console.error(e); } };
-        const handleSignOut = async () => await signOut(auth);
-
-        useEffect(() => {
-            if (!currentUser) return;
-
-            // Listener 1: Get Current User's Profile (Existing logic)
-            const memberQuery = query(collection(db, 'roster'), where("uid", "==", currentUser.uid));
-            const unsub1 = onSnapshot(memberQuery, (snapshot) => {
-                if (!snapshot.empty) {
-                    setRosterName(snapshot.docs[0].id);
-                    setIsMember(true);
+    // Process Availability for display
+    const displayAvail = useMemo(() => {
+        const c = {};
+        for (const m in availabilities) {
+            c[m] = [];
+            availabilities[m].forEach(s => {
+                const ls = convertFromGMT(s.day, s.start, userTimezone);
+                const le = convertFromGMT(s.day, s.end, userTimezone);
+                if (ls.day === le.day) {
+                    if (timeToMinutes(ls.time) < timeToMinutes(le.time)) c[m].push({ day: ls.day, start: ls.time, end: le.time, role: s.role });
                 } else {
-                    setIsMember(ADMIN_UIDS.includes(currentUser.uid));
-                    setRosterName(currentUser.displayName);
+                    c[m].push({ day: ls.day, start: ls.time, end: '24:00', role: s.role });
+                    if (timeToMinutes(le.time) > 0) c[m].push({ day: le.day, start: '00:00', end: le.time, role: s.role });
                 }
             });
+        }
+        return c;
+    }, [availabilities, userTimezone]);
 
-            // Listener 2: Get Availabilities (Existing logic)
-            const unsub2 = onSnapshot(collection(db, 'availabilities'), (s) => {
-                const d = {};
-                s.forEach(doc => d[doc.id] = doc.data().slots || []);
-                setAvailabilities(d);
-            });
+    const openModal = (t, c, f) => { setModalContent({ title: t, children: c, onConfirm: f }); setIsModalOpen(true); };
 
-            // Listener 3: Get Events (Existing logic)
-            const unsub3 = onSnapshot(collection(db, 'events'), (s) => {
-                const e = [];
-                s.forEach(d => e.push({ id: d.id, ...d.data() }));
-                setEvents(e.sort((a, b) => new Date(a.date + 'T' + a.time) - new Date(b.date + 'T' + b.time)));
-            });
+    const saveAvail = async () => {
+        // Use rosterName if valid, otherwise fallback to "Guest"
+        const finalName = rosterName || currentUser.displayName || 'Guest';
 
-            // --- NEW LISTENER 4: FETCH ALL ROSTER NAMES ---
-            // This ensures members show up even if they haven't set availability yet
-            const unsub4 = onSnapshot(collection(db, 'roster'), (s) => {
-                const names = [];
-                s.forEach(doc => names.push(doc.id));
-                setAllRosterNames(names);
-            });
+        if (timeToMinutes(end) <= timeToMinutes(start)) return addToast('End time must be after start time', 'error');
+        setSaveStatus('saving');
+        const gs = convertToGMT(day, start);
+        const ge = convertToGMT(day, end);
+        const old = availabilities[finalName] || []; // Use finalName
+        const others = old.filter(s => convertFromGMT(s.day, s.start, userTimezone).day !== day);
 
-            return () => { unsub1(); unsub2(); unsub3(); unsub4(); };
-        }, [currentUser]);
+        // Save to the correct document
+        await setDoc(doc(db, 'availabilities', finalName), { slots: [...others, { day: gs.day, start: gs.time, end: ge.time, role }] });
+        setSaveStatus('idle');
+        addToast('Availability Slot Saved');
+    };
+    const clearDay = async () => {
+        const finalName = rosterName || currentUser.displayName || 'Guest';
+        const old = availabilities[finalName] || [];
+        await setDoc(doc(db, 'availabilities', finalName), { slots: old.filter(s => convertFromGMT(s.day, s.start, userTimezone).day !== day) });
+        setIsModalOpen(false);
+        addToast(`Cleared ${day}`);
+    };
+    const schedEvent = async (d) => { await addDoc(collection(db, 'events'), d); addToast('Event Scheduled'); };
+    const deleteEvent = async (id) => { await deleteDoc(doc(db, 'events', id)); setIsModalOpen(false); addToast('Event Deleted'); };
 
-        // 3. UPDATE dynamicMembers TO USE THE ROSTER LIST
-        // Replace the old dynamicMembers line with this:
-        const dynamicMembers = useMemo(() => {
-            // Combine roster names AND availability names (just in case) and remove duplicates
-            return [...new Set([...allRosterNames, ...Object.keys(availabilities)])].sort();
-        }, [allRosterNames, availabilities]);
+    if (authLoading) return <div className="fixed inset-0 bg-black flex items-center justify-center"><div className="w-8 h-8 border-4 border-red-600 border-t-transparent rounded-full animate-spin"></div></div>;
 
-        // Process Availability for display
-        const displayAvail = useMemo(() => {
-            const c = {};
-            for (const m in availabilities) {
-                c[m] = [];
-                availabilities[m].forEach(s => {
-                    const ls = convertFromGMT(s.day, s.start, userTimezone);
-                    const le = convertFromGMT(s.day, s.end, userTimezone);
-                    if (ls.day === le.day) {
-                        if (timeToMinutes(ls.time) < timeToMinutes(le.time)) c[m].push({ day: ls.day, start: ls.time, end: le.time, role: s.role });
-                    } else {
-                        c[m].push({ day: ls.day, start: ls.time, end: '24:00', role: s.role });
-                        if (timeToMinutes(le.time) > 0) c[m].push({ day: le.day, start: '00:00', end: le.time, role: s.role });
-                    }
-                });
-            }
-            return c;
-        }, [availabilities, userTimezone]);
+    // If not logged in, show Login Screen
+    if (!currentUser) return <LoginScreen signIn={signIn} onBack={onBack} />;
 
-        const openModal = (t, c, f) => { setModalContent({ title: t, children: c, onConfirm: f }); setIsModalOpen(true); };
+    // If logged in but not a member, show Application
+    if (!isMember) return (
+        <div className="fixed inset-0 bg-black p-8 overflow-y-auto">
+            <div className="absolute top-4 left-4 z-50">
+                <button onClick={onBack} className="text-white font-bold uppercase hover:text-red-500 transition">&larr; Home</button>
+            </div>
+            <div className="relative z-10 pt-12"><ApplicationForm currentUser={currentUser} /></div>
+        </div>
+    );
 
-        const saveAvail = async () => {
-            // Use rosterName if valid, otherwise fallback to "Guest"
-            const finalName = rosterName || currentUser.displayName || 'Guest';
+    const NavBtn = ({ id, label }) => <button onClick={() => setActiveTab(id)} className={`px-4 py-1.5 rounded-full text-xs font-bold uppercase tracking-widest transition-all duration-200 whitespace-nowrap ${activeTab === id ? 'bg-gradient-to-r from-red-700 to-red-900 text-white shadow-lg shadow-red-900/20 border border-red-500/50' : 'bg-black/30 text-neutral-400 hover:text-white hover:bg-white/10 border border-transparent'}`}>{label}</button>;
 
-            if (timeToMinutes(end) <= timeToMinutes(start)) return addToast('End time must be after start time', 'error');
-            setSaveStatus('saving');
-            const gs = convertToGMT(day, start);
-            const ge = convertToGMT(day, end);
-            const old = availabilities[finalName] || []; // Use finalName
-            const others = old.filter(s => convertFromGMT(s.day, s.start, userTimezone).day !== day);
+    const isAdmin = currentUser && ADMIN_UIDS.includes(currentUser.uid);
 
-            // Save to the correct document
-            await setDoc(doc(db, 'availabilities', finalName), { slots: [...others, { day: gs.day, start: gs.time, end: ge.time, role }] });
-            setSaveStatus('idle');
-            addToast('Availability Slot Saved');
-        };
-        const clearDay = async () => {
-            const finalName = rosterName || currentUser.displayName || 'Guest';
-            const old = availabilities[finalName] || [];
-            await setDoc(doc(db, 'availabilities', finalName), { slots: old.filter(s => convertFromGMT(s.day, s.start, userTimezone).day !== day) });
-            setIsModalOpen(false);
-            addToast(`Cleared ${day}`);
-        };
-        const schedEvent = async (d) => { await addDoc(collection(db, 'events'), d); addToast('Event Scheduled'); };
-        const deleteEvent = async (id) => { await deleteDoc(doc(db, 'events', id)); setIsModalOpen(false); addToast('Event Deleted'); };
+    return (
+        <div className="fixed inset-0 h-full w-full text-neutral-200 font-sans selection:bg-red-500/30 flex flex-col overflow-hidden bg-black">
+            <Background />
 
-        if (authLoading) return <div className="fixed inset-0 bg-black flex items-center justify-center"><div className="w-8 h-8 border-4 border-red-600 border-t-transparent rounded-full animate-spin"></div></div>;
-
-        // If not logged in, show Login Screen
-        if (!currentUser) return <LoginScreen signIn={signIn} onBack={onBack} />;
-
-        // If logged in but not a member, show Application
-        if (!isMember) return (
-            <div className="fixed inset-0 bg-black p-8 overflow-y-auto">
-                <div className="absolute top-4 left-4 z-50">
-                    <button onClick={onBack} className="text-white font-bold uppercase hover:text-red-500 transition">&larr; Home</button>
+            <header className="flex-none flex flex-col gap-4 px-6 py-4 border-b border-white/10 bg-black/40 backdrop-blur-md z-40">
+                <div className="flex justify-between items-center">
+                    <div className="flex items-center gap-4">
+                        <button onClick={onBack} className="text-neutral-500 hover:text-white transition">
+                            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"></path></svg>
+                        </button>
+                        <h1 className="text-3xl font-black tracking-tighter text-white drop-shadow-lg italic">SYRIX <span className="text-red-600">HUB</span></h1>
+                    </div>
+                    <div className="flex items-center gap-4">
+                        <div className="text-right hidden md:block">
+                            <div className="text-sm font-bold text-white">
+                                {rosterName || currentUser.displayName || 'Guest'}
+                            </div>
+                            <button onClick={handleSignOut} className="text-[10px] text-red-500 font-bold uppercase">Log Out</button>
+                        </div>                        <select value={userTimezone} onChange={e => { setUserTimezone(e.target.value); }} className="bg-black/50 border border-neutral-800 text-xs rounded p-2 text-neutral-400 backdrop-blur-sm">{timezones.map(t => <option key={t} value={t}>{t}</option>)}</select>
+                    </div>
                 </div>
-                <div className="relative z-10 pt-12"><ApplicationForm currentUser={currentUser} /></div>
-            </div>
-        );
+                <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-hide mask-fade">
+                    <NavBtn id="dashboard" label="Dashboard" />
+                    <NavBtn id="playbook" label="Playbook" />
+                    <NavBtn id="comps" label="Comps" />
+                    <NavBtn id="matches" label="Matches" />
+                    <NavBtn id="warroom" label="War Room" />
+                    <NavBtn id="strats" label="Stratbook" />
+                    <NavBtn id="lineups" label="Lineups" />
+                    <NavBtn id="roster" label="Roster" />
+                    {isAdmin && <NavBtn id="partners" label="Partners" />}
+                    {isAdmin && <NavBtn id="content" label="Content Mgr" />}
+                    <NavBtn id="mapveto" label="Map Veto" />
+                    {isAdmin && <NavBtn id="admin" label="Admin" />}
+                </div>
+            </header>
 
-        const NavBtn = ({ id, label }) => <button onClick={() => setActiveTab(id)} className={`px-4 py-1.5 rounded-full text-xs font-bold uppercase tracking-widest transition-all duration-200 whitespace-nowrap ${activeTab === id ? 'bg-gradient-to-r from-red-700 to-red-900 text-white shadow-lg shadow-red-900/20 border border-red-500/50' : 'bg-black/30 text-neutral-400 hover:text-white hover:bg-white/10 border border-transparent'}`}>{label}</button>;
-
-        const isAdmin = currentUser && ADMIN_UIDS.includes(currentUser.uid);
-
-        return (
-            <div className="fixed inset-0 h-full w-full text-neutral-200 font-sans selection:bg-red-500/30 flex flex-col overflow-hidden bg-black">
-                <Background />
-
-                <header className="flex-none flex flex-col gap-4 px-6 py-4 border-b border-white/10 bg-black/40 backdrop-blur-md z-40">
-                    <div className="flex justify-between items-center">
-                        <div className="flex items-center gap-4">
-                            <button onClick={onBack} className="text-neutral-500 hover:text-white transition">
-                                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"></path></svg>
-                            </button>
-                            <h1 className="text-3xl font-black tracking-tighter text-white drop-shadow-lg italic">SYRIX <span className="text-red-600">HUB</span></h1>
+            <main className="flex-1 overflow-y-auto p-6 scrollbar-thin scrollbar-thumb-red-900/50 scrollbar-track-black/20 relative z-10">
+                <div className="max-w-[1920px] mx-auto min-h-screen flex flex-col">
+                    {activeTab === 'dashboard' && <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 animate-fade-in">
+                        <div className="lg:col-span-4 space-y-8">
+                            <CaptainsMessage />
+                            <LeaveLogger members={dynamicMembers} />
+                            <Card className="border-red-900/20"><div className="absolute top-0 left-0 w-1 h-full bg-red-600/50"></div><h2 className="text-xl font-bold text-white mb-6 uppercase tracking-wide">Set Availability</h2><div className="space-y-4"><div><label className="text-[10px] font-black text-red-500 uppercase mb-1 block">Day</label><Select value={day} onChange={e => setDay(e.target.value)}>{DAYS.map(d => <option key={d} value={d}>{d}</option>)}</Select></div><div className="grid grid-cols-2 gap-3"><div><label className="text-[10px] font-black text-red-500 uppercase mb-1 block">Start</label><Input type="time" value={start} onChange={e => setStart(e.target.value)} className="[color-scheme:dark]" /></div><div><label className="text-[10px] font-black text-red-500 uppercase mb-1 block">End</label><Input type="time" value={end} onChange={e => setEnd(e.target.value)} className="[color-scheme:dark]" /></div></div><div><label className="text-[10px] font-black text-red-500 uppercase mb-1 block">Pref. Role</label><div className="flex gap-2 overflow-x-auto pb-2 scrollbar-hide">{ROLES.map(r => (<button key={r} onClick={() => setRole(r)} className={`px-3 py-2 rounded-lg text-xs font-black border transition-all whitespace-nowrap flex items-center justify-center ${role === r ? 'bg-red-600 text-white border-red-500' : 'bg-black/50 border-neutral-800 text-neutral-500 hover:text-white'}`}>{ROLE_ABBREVIATIONS[r] || r}</button>))}</div></div><div className="pt-2 flex gap-2"><ButtonPrimary onClick={saveAvail} disabled={saveStatus !== 'idle'} className="flex-1">{saveStatus === 'idle' ? 'Save Slot' : 'Saved!'}</ButtonPrimary><ButtonSecondary onClick={() => openModal('Clear Day', `Clear all for ${day}?`, clearDay)}>Clear</ButtonSecondary></div></div></Card>
+                            <Card className="border-red-900/20"><div className="absolute top-0 left-0 w-1 h-full bg-red-600/50"></div><h2 className="text-xl font-bold text-white mb-6 uppercase tracking-wide">Event Operations</h2><ScrimScheduler onSchedule={schedEvent} userTimezone={userTimezone} /></Card>
                         </div>
-                        <div className="flex items-center gap-4">
-                            <div className="text-right hidden md:block">
-                                <div className="text-sm font-bold text-white">
-                                    {rosterName || currentUser.displayName || 'Guest'}
-                                </div>
-                                <button onClick={handleSignOut} className="text-[10px] text-red-500 font-bold uppercase">Log Out</button>
-                            </div>                        <select value={userTimezone} onChange={e => { setUserTimezone(e.target.value); }} className="bg-black/50 border border-neutral-800 text-xs rounded p-2 text-neutral-400 backdrop-blur-sm">{timezones.map(t => <option key={t} value={t}>{t}</option>)}</select>
+                        <div className="lg:col-span-8 space-y-8">
+                            <div className="grid grid-cols-1 xl:grid-cols-2 gap-8"><Card><h2 className="text-lg font-bold text-white mb-4 flex justify-between items-center uppercase tracking-wide"><span>Upcoming Events</span><span className="text-[10px] bg-red-900/30 text-red-400 border border-red-900/50 px-2 py-1 rounded font-bold">{events.length} ACTIVE</span></h2><div className="space-y-3 max-h-64 overflow-y-auto pr-2 scrollbar-thin scrollbar-thumb-neutral-700">{events.map(ev => (<div key={ev.id} className="p-3 bg-black/40 rounded-xl border border-neutral-800 flex justify-between items-center group hover:border-red-900/50 transition-colors"><div><div className="font-bold text-white text-sm group-hover:text-red-400 transition-colors">{ev.type} <span className="text-neutral-500">vs</span> {ev.opponent || 'TBD'}</div><div className="text-xs text-neutral-400 mt-1">{ev.date} @ <span className="text-white font-mono">{ev.time}</span></div></div><button onClick={() => openModal('Delete Event', 'Remove?', () => deleteEvent(ev.id))} className="text-neutral-600 hover:text-red-500">×</button></div>))}</div></Card><Card><h2 className="text-lg font-bold text-white mb-4 uppercase tracking-wide">Availability Heatmap</h2><AvailabilityHeatmap availabilities={availabilities} members={dynamicMembers} /></Card></div>
+                            <PerformanceWidget events={events} />
+                            <Card><h2 className="text-xl font-bold text-white mb-6 uppercase tracking-wide">Detailed Timeline <span className="text-neutral-500 text-sm normal-case">({userTimezone})</span></h2><div className="overflow-x-auto scrollbar-thin scrollbar-thumb-neutral-700"><table className="w-full text-left border-collapse min-w-[600px]"><thead><tr className="border-b border-neutral-800"><th className="p-3 text-xs font-bold text-neutral-500 uppercase tracking-wider w-32">Team Member</th>{SHORT_DAYS.map(day => (<th key={day} className="p-3 text-xs font-bold text-red-600 uppercase tracking-wider text-center border-l border-neutral-800">{day}</th>))}</tr></thead><tbody className="divide-y divide-neutral-800/50">{dynamicMembers.map(member => (<tr key={member} className="hover:bg-neutral-800/30 transition-colors group"><td className="p-4 font-bold text-white text-sm flex items-center gap-2"><div className="w-2 h-2 rounded-full bg-red-500 shadow-red-500/50 shadow-sm"></div>{member}</td>{DAYS.map((day) => { const slots = (displayAvail[member] || []).filter(s => s.day === day); return (<td key={day} className="p-2 align-middle border-l border-neutral-800/50"><div className="flex flex-col gap-1 items-center justify-center">{slots.length > 0 ? slots.map((s, i) => (<div key={i} className="bg-gradient-to-br from-red-600 to-red-700 text-white text-[10px] font-bold px-2 py-1 rounded w-full text-center shadow-md whitespace-nowrap flex items-center justify-center gap-1">{s.start}-{s.end}<span className="opacity-75 ml-1 text-[9px] border border-white/20 px-1 rounded bg-black/20">{ROLE_ABBREVIATIONS[s.role] || s.role}</span></div>)) : <div className="h-1 w-4 bg-neutral-800 rounded-full"></div>}</div></td>); })}</tr>))}</tbody></table></div></Card>
                         </div>
-                    </div>
-                    <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-hide mask-fade">
-                        <NavBtn id="dashboard" label="Dashboard" />
-                        <NavBtn id="playbook" label="Playbook" />
-                        <NavBtn id="comps" label="Comps" />
-                        <NavBtn id="matches" label="Matches" />
-                        <NavBtn id="warroom" label="War Room" />
-                        <NavBtn id="strats" label="Stratbook" />
-                        <NavBtn id="lineups" label="Lineups" />
-                        <NavBtn id="roster" label="Roster" />
-                        {isAdmin && <NavBtn id="partners" label="Partners" />}
-                        {isAdmin && <NavBtn id="content" label="Content Mgr" />}
-                        <NavBtn id="mapveto" label="Map Veto" />
-                        {isAdmin && <NavBtn id="admin" label="Admin" />}
-                    </div>
-                </header>
+                    </div>}
+                    {activeTab === 'playbook' && <div className="animate-fade-in h-[80vh]"><Playbook /></div>}
+                    {activeTab === 'comps' && <div className="animate-fade-in h-full"><TeamComps members={dynamicMembers} /></div>}
+                    {activeTab === 'matches' && <div className="animate-fade-in"><MatchHistory currentUser={currentUser} members={dynamicMembers} /></div>}
+                    {activeTab === 'strats' && <div className="animate-fade-in h-[85vh]"><StratBook /></div>}
+                    {activeTab === 'lineups' && <div className="animate-fade-in h-[85vh]"><LineupLibrary /></div>}
+                    {activeTab === 'roster' && <div className="animate-fade-in h-full flex-1 flex flex-col"><RosterManager members={dynamicMembers} events={events} /></div>}
+                    {activeTab === 'partners' && isAdmin && <div className="animate-fade-in h-full"><PartnerDirectory /></div>}
+                    {activeTab === 'content' && isAdmin && <div className="animate-fade-in h-full"><ContentManager /></div>}
+                    {activeTab === 'admin' && isAdmin && <div className="animate-fade-in h-full"><AdminPanel /></div>}
+                    {activeTab === 'mapveto' && <div className="animate-fade-in h-[80vh]"><MapVeto /></div>}
 
-                <main className="flex-1 overflow-y-auto p-6 scrollbar-thin scrollbar-thumb-red-900/50 scrollbar-track-black/20 relative z-10">
-                    <div className="max-w-[1920px] mx-auto min-h-screen flex flex-col">
-                        {activeTab === 'dashboard' && <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 animate-fade-in">
-                            <div className="lg:col-span-4 space-y-8">
-                                <CaptainsMessage />
-                                <LeaveLogger members={dynamicMembers} />
-                                <Card className="border-red-900/20"><div className="absolute top-0 left-0 w-1 h-full bg-red-600/50"></div><h2 className="text-xl font-bold text-white mb-6 uppercase tracking-wide">Set Availability</h2><div className="space-y-4"><div><label className="text-[10px] font-black text-red-500 uppercase mb-1 block">Day</label><Select value={day} onChange={e => setDay(e.target.value)}>{DAYS.map(d => <option key={d} value={d}>{d}</option>)}</Select></div><div className="grid grid-cols-2 gap-3"><div><label className="text-[10px] font-black text-red-500 uppercase mb-1 block">Start</label><Input type="time" value={start} onChange={e => setStart(e.target.value)} className="[color-scheme:dark]" /></div><div><label className="text-[10px] font-black text-red-500 uppercase mb-1 block">End</label><Input type="time" value={end} onChange={e => setEnd(e.target.value)} className="[color-scheme:dark]" /></div></div><div><label className="text-[10px] font-black text-red-500 uppercase mb-1 block">Pref. Role</label><div className="flex gap-2 overflow-x-auto pb-2 scrollbar-hide">{ROLES.map(r => (<button key={r} onClick={() => setRole(r)} className={`px-3 py-2 rounded-lg text-xs font-black border transition-all whitespace-nowrap flex items-center justify-center ${role === r ? 'bg-red-600 text-white border-red-500' : 'bg-black/50 border-neutral-800 text-neutral-500 hover:text-white'}`}>{ROLE_ABBREVIATIONS[r] || r}</button>))}</div></div><div className="pt-2 flex gap-2"><ButtonPrimary onClick={saveAvail} disabled={saveStatus !== 'idle'} className="flex-1">{saveStatus === 'idle' ? 'Save Slot' : 'Saved!'}</ButtonPrimary><ButtonSecondary onClick={() => openModal('Clear Day', `Clear all for ${day}?`, clearDay)}>Clear</ButtonSecondary></div></div></Card>
-                                <Card className="border-red-900/20"><div className="absolute top-0 left-0 w-1 h-full bg-red-600/50"></div><h2 className="text-xl font-bold text-white mb-6 uppercase tracking-wide">Event Operations</h2><ScrimScheduler onSchedule={schedEvent} userTimezone={userTimezone} /></Card>
-                            </div>
-                            <div className="lg:col-span-8 space-y-8">
-                                <div className="grid grid-cols-1 xl:grid-cols-2 gap-8"><Card><h2 className="text-lg font-bold text-white mb-4 flex justify-between items-center uppercase tracking-wide"><span>Upcoming Events</span><span className="text-[10px] bg-red-900/30 text-red-400 border border-red-900/50 px-2 py-1 rounded font-bold">{events.length} ACTIVE</span></h2><div className="space-y-3 max-h-64 overflow-y-auto pr-2 scrollbar-thin scrollbar-thumb-neutral-700">{events.map(ev => (<div key={ev.id} className="p-3 bg-black/40 rounded-xl border border-neutral-800 flex justify-between items-center group hover:border-red-900/50 transition-colors"><div><div className="font-bold text-white text-sm group-hover:text-red-400 transition-colors">{ev.type} <span className="text-neutral-500">vs</span> {ev.opponent || 'TBD'}</div><div className="text-xs text-neutral-400 mt-1">{ev.date} @ <span className="text-white font-mono">{ev.time}</span></div></div><button onClick={() => openModal('Delete Event', 'Remove?', () => deleteEvent(ev.id))} className="text-neutral-600 hover:text-red-500">×</button></div>))}</div></Card><Card><h2 className="text-lg font-bold text-white mb-4 uppercase tracking-wide">Availability Heatmap</h2><AvailabilityHeatmap availabilities={availabilities} members={dynamicMembers} /></Card></div>
-                                <PerformanceWidget events={events} />
-                                <Card><h2 className="text-xl font-bold text-white mb-6 uppercase tracking-wide">Detailed Timeline <span className="text-neutral-500 text-sm normal-case">({userTimezone})</span></h2><div className="overflow-x-auto scrollbar-thin scrollbar-thumb-neutral-700"><table className="w-full text-left border-collapse min-w-[600px]"><thead><tr className="border-b border-neutral-800"><th className="p-3 text-xs font-bold text-neutral-500 uppercase tracking-wider w-32">Team Member</th>{SHORT_DAYS.map(day => (<th key={day} className="p-3 text-xs font-bold text-red-600 uppercase tracking-wider text-center border-l border-neutral-800">{day}</th>))}</tr></thead><tbody className="divide-y divide-neutral-800/50">{dynamicMembers.map(member => (<tr key={member} className="hover:bg-neutral-800/30 transition-colors group"><td className="p-4 font-bold text-white text-sm flex items-center gap-2"><div className="w-2 h-2 rounded-full bg-red-500 shadow-red-500/50 shadow-sm"></div>{member}</td>{DAYS.map((day) => { const slots = (displayAvail[member] || []).filter(s => s.day === day); return (<td key={day} className="p-2 align-middle border-l border-neutral-800/50"><div className="flex flex-col gap-1 items-center justify-center">{slots.length > 0 ? slots.map((s, i) => (<div key={i} className="bg-gradient-to-br from-red-600 to-red-700 text-white text-[10px] font-bold px-2 py-1 rounded w-full text-center shadow-md whitespace-nowrap flex items-center justify-center gap-1">{s.start}-{s.end}<span className="opacity-75 ml-1 text-[9px] border border-white/20 px-1 rounded bg-black/20">{ROLE_ABBREVIATIONS[s.role] || s.role}</span></div>)) : <div className="h-1 w-4 bg-neutral-800 rounded-full"></div>}</div></td>); })}</tr>))}</tbody></table></div></Card>
-                            </div>
-                        </div>}
-                        {activeTab === 'playbook' && <div className="animate-fade-in h-[80vh]"><Playbook /></div>}
-                        {activeTab === 'comps' && <div className="animate-fade-in h-full"><TeamComps members={dynamicMembers} /></div>}
-                        {activeTab === 'matches' && <div className="animate-fade-in"><MatchHistory currentUser={currentUser} members={dynamicMembers} /></div>}
-                        {activeTab === 'strats' && <div className="animate-fade-in h-[85vh]"><StratBook /></div>}
-                        {activeTab === 'lineups' && <div className="animate-fade-in h-[85vh]"><LineupLibrary /></div>}
-                        {activeTab === 'roster' && <div className="animate-fade-in h-full flex-1 flex flex-col"><RosterManager members={dynamicMembers} events={events} /></div>}
-                        {activeTab === 'partners' && isAdmin && <div className="animate-fade-in h-full"><PartnerDirectory /></div>}
-                        {activeTab === 'content' && isAdmin && <div className="animate-fade-in h-full"><ContentManager /></div>}
-                        {activeTab === 'admin' && isAdmin && <div className="animate-fade-in h-full"><AdminPanel /></div>}
-                        {activeTab === 'mapveto' && <div className="animate-fade-in h-[80vh]"><MapVeto /></div>}
-                        {activeTab === 'warroom' && <div className="animate-fade-in h-full"><WarRoom /></div>}
-                    </div>
-                </main>
-                <Modal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} onConfirm={modalContent.onConfirm} title={modalContent.title}>{modalContent.children}</Modal>
-            </div>
-        );
-    }
+                </div>
+            </main>
+            <Modal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} onConfirm={modalContent.onConfirm} title={modalContent.title}>{modalContent.children}</Modal>
+        </div>
+    );
+}
 
-    // ==========================================
-    // ROOT APP COMPONENT (CONTROLLER)
-    // ==========================================
-    export default function App() {
-        // State to toggle between Landing Page ('landing') and Team Hub ('hub')
-        const [currentView, setCurrentView] = useState('landing');
+// ==========================================
+// ROOT APP COMPONENT (CONTROLLER)
+// ==========================================
+export default function App() {
+    // State to toggle between Landing Page ('landing') and Team Hub ('hub')
+    const [currentView, setCurrentView] = useState('landing');
 
-        useEffect(() => {
-            document.title = currentView === 'landing'
-                ? "SYRIX | Official Team Portal"
-                : "SYRIX | Command Center";
-        }, [currentView]);
+    useEffect(() => {
+        document.title = currentView === 'landing'
+            ? "SYRIX | Official Team Portal"
+            : "SYRIX | Command Center";
+    }, [currentView]);
 
-        return (
-            <ToastProvider>
-                <GlobalStyles />
-                {currentView === 'landing' ? (
-                    <LandingPage onEnterHub={() => setCurrentView('hub')} />
-                ) : (
-                    <SyrixDashboard onBack={() => setCurrentView('landing')} />
-                )}
-            </ToastProvider>
-        );
-    }
+    return (
+        <ToastProvider>
+            <GlobalStyles />
+            {currentView === 'landing' ? (
+                <LandingPage onEnterHub={() => setCurrentView('hub')} />
+            ) : (
+                <SyrixDashboard onBack={() => setCurrentView('landing')} />
+            )}
+        </ToastProvider>
+    );
 }
