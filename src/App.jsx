@@ -1980,8 +1980,6 @@ function WarRoom() {
     );
 }
 
-// THIS WAS MISSING
-export default WarRoom;
 
 function MatchHistory({ currentUser, members }) {
     const [history, setHistory] = useState([]);
