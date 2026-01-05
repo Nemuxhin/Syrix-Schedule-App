@@ -1798,14 +1798,11 @@ function WarRoom() {
     // Form State
     const [newEnemy, setNewEnemy] = useState({ name: '', threat: 'Medium', notes: '' });
 
-    // Map-Specific Intel State
+    // Map-Specific Intel State (when viewing an enemy)
     const [selectedMapIntel, setSelectedMapIntel] = useState(MAPS[0]);
     const [intelInput, setIntelInput] = useState('');
 
     useEffect(() => {
-        // SAFETY CHECK: If db is not connected, this will crash. 
-        if (!db) { console.error("Firebase DB not found"); return; }
-
         const unsub = onSnapshot(collection(db, 'war_room'), (snap) => {
             const data = [];
             snap.forEach(doc => data.push({ id: doc.id, ...doc.data() }));
@@ -1816,22 +1813,17 @@ function WarRoom() {
 
     const createEnemy = async () => {
         if (!newEnemy.name) return;
-        try {
-            await addDoc(collection(db, 'war_room'), {
-                ...newEnemy,
-                mapIntel: {},
-                lastEncounter: new Date().toISOString()
-            });
-            setNewEnemy({ name: '', threat: 'Medium', notes: '' });
-            setIsAdding(false);
-        } catch (e) {
-            console.error("Error adding enemy:", e);
-            alert("Error saving: Check database permissions");
-        }
+        await addDoc(collection(db, 'war_room'), {
+            ...newEnemy,
+            mapIntel: {}, // Object to store notes per map
+            lastEncounter: new Date().toISOString()
+        });
+        setNewEnemy({ name: '', threat: 'Medium', notes: '' });
+        setIsAdding(false);
     };
 
     const deleteEnemy = async (id) => {
-        if (window.confirm("Burn this dossier?")) {
+        if (confirm("Burn this dossier?")) {
             await deleteDoc(doc(db, 'war_room', id));
             setSelectedEnemy(null);
         }
@@ -1848,25 +1840,24 @@ function WarRoom() {
             mapIntel: updatedIntel
         }, { merge: true });
 
+        // Update local state to reflect change immediately
         setSelectedEnemy({ ...selectedEnemy, mapIntel: updatedIntel });
-        alert("Intel Updated");
     };
 
+    // Helper to get color based on Threat Level
     const getThreatColor = (t) => {
         if (t === 'Extreme') return 'text-red-600 border-red-600 bg-red-900/20';
         if (t === 'High') return 'text-orange-500 border-orange-500 bg-orange-900/20';
         return 'text-green-500 border-green-500 bg-green-900/20';
     };
 
-    // --- RENDER ---
-    return (
-        // FIXED: Changed h-full to h-[80vh] to force it to take up 80% of the screen height
-        <div className="h-[80vh] flex flex-col md:flex-row gap-6 pb-6">
-
-            {/* LEFT PANEL: LIST */}
-            <div className="w-full md:w-1/3 flex flex-col h-full">
-                <Card className="flex flex-col h-full overflow-hidden">
-                    <div className="flex-none flex justify-between items-center mb-4 p-4">
+return (
+        <div className="h-full flex flex-col md:flex-row gap-6">
+            
+            {/* SIDEBAR: Enemy List (Unchanged) */}
+            <div className="w-full md:w-1/3 flex flex-col gap-4">
+                <Card className="flex-1 flex flex-col max-h-[85vh]">
+                    <div className="flex justify-between items-center mb-4">
                         <h3 className="text-xl font-black text-white italic tracking-tighter">
                             <span className="text-red-600">WAR</span> ROOM
                         </h3>
@@ -1876,10 +1867,10 @@ function WarRoom() {
                     </div>
 
                     {isAdding && (
-                        <div className="flex-none bg-neutral-900 mx-4 p-3 rounded-xl border border-white/10 mb-4 space-y-2 animate-fade-in">
-                            <Input placeholder="Team Name" value={newEnemy.name} onChange={e => setNewEnemy({ ...newEnemy, name: e.target.value })} />
+                        <div className="bg-neutral-900 p-3 rounded-xl border border-white/10 mb-4 space-y-2 animate-fade-in">
+                            <Input placeholder="Team Name" value={newEnemy.name} onChange={e => setNewEnemy({...newEnemy, name: e.target.value})} />
                             <div className="flex gap-2">
-                                <Select value={newEnemy.threat} onChange={e => setNewEnemy({ ...newEnemy, threat: e.target.value })}>
+                                <Select value={newEnemy.threat} onChange={e => setNewEnemy({...newEnemy, threat: e.target.value})}>
                                     <option>Low</option>
                                     <option>Medium</option>
                                     <option>High</option>
@@ -1890,12 +1881,10 @@ function WarRoom() {
                         </div>
                     )}
 
-                    <div className="flex-1 overflow-y-auto custom-scrollbar space-y-2 px-4 pb-4">
-                        {enemies.length === 0 && <div className="text-neutral-500 text-xs text-center py-4">No Intel Dossiers Found.</div>}
-
+                    <div className="flex-1 overflow-y-auto custom-scrollbar space-y-2 pr-2">
                         {enemies.map(team => (
-                            <div
-                                key={team.id}
+                            <div 
+                                key={team.id} 
                                 onClick={() => { setSelectedEnemy(team); setIntelInput(team.mapIntel?.[selectedMapIntel] || ''); }}
                                 className={`p-4 rounded-xl border cursor-pointer transition-all flex justify-between items-center ${selectedEnemy?.id === team.id ? 'bg-white/10 border-white' : 'bg-black/40 border-neutral-800 hover:border-neutral-600'}`}
                             >
@@ -1912,15 +1901,14 @@ function WarRoom() {
                 </Card>
             </div>
 
-            {/* RIGHT PANEL: EDITOR */}
+            {/* MAIN PANEL: Dossier */}
             <div className="flex-1 h-full">
                 {selectedEnemy ? (
-                    <Card className="h-full flex flex-col relative overflow-hidden p-6">
-                        {/* Background Effect */}
+                    <Card className="h-full flex flex-col relative overflow-hidden min-h-[600px]">
                         <div className="absolute top-0 right-0 w-32 h-32 bg-red-600/10 blur-[50px] pointer-events-none"></div>
-
-                        {/* Header Section (Fixed Height) */}
-                        <div className="flex-none flex justify-between items-start mb-6 border-b border-white/10 pb-4">
+                        
+                        {/* HEADER */}
+                        <div className="flex justify-between items-start mb-6 border-b border-white/10 pb-4">
                             <div>
                                 <h2 className="text-4xl font-black text-white uppercase tracking-tighter">{selectedEnemy.name}</h2>
                                 <span className={`text-xs font-bold px-3 py-1 rounded border uppercase tracking-widest ${getThreatColor(selectedEnemy.threat)}`}>
@@ -1932,14 +1920,14 @@ function WarRoom() {
                             </button>
                         </div>
 
-                        {/* Map Tabs (Fixed Height) */}
-                        <div className="flex-none flex gap-2 overflow-x-auto pb-2 mb-4 custom-scrollbar">
+                        {/* MAP INTEL TABS */}
+                        <div className="flex gap-2 overflow-x-auto pb-2 mb-4 custom-scrollbar">
                             {MAPS.map(m => (
-                                <button
-                                    key={m}
-                                    onClick={() => {
-                                        setSelectedMapIntel(m);
-                                        setIntelInput(selectedEnemy.mapIntel?.[m] || '');
+                                <button 
+                                    key={m} 
+                                    onClick={() => { 
+                                        setSelectedMapIntel(m); 
+                                        setIntelInput(selectedEnemy.mapIntel?.[m] || ''); 
                                     }}
                                     className={`px-4 py-2 rounded-lg text-[10px] font-black uppercase transition-all whitespace-nowrap border ${selectedMapIntel === m ? 'bg-red-600 text-white border-red-500' : 'bg-black border-neutral-800 text-neutral-500 hover:text-white'}`}
                                 >
@@ -1948,29 +1936,30 @@ function WarRoom() {
                             ))}
                         </div>
 
-                        {/* Text Editor (Flex Grow to fill remaining space) */}
-                        <div className="flex-1 bg-neutral-900/50 rounded-xl border border-white/5 p-4 flex flex-col min-h-0">
-                            <div className="flex-none text-[10px] text-neutral-500 font-bold uppercase tracking-widest mb-2 flex justify-between">
+                        {/* EDITOR AREA - FIXED HERE */}
+                        {/* Added h-full and min-h so it stretches properly */}
+                        <div className="flex-1 bg-neutral-900/50 rounded-xl border border-white/5 p-6 flex flex-col relative h-full min-h-[400px]">
+                            <div className="text-[10px] text-neutral-500 font-bold uppercase tracking-widest mb-4 flex justify-between">
                                 <span>Intel: {selectedMapIntel}</span>
                                 {selectedEnemy.mapIntel?.[selectedMapIntel] !== intelInput && <span className="text-yellow-500 animate-pulse">Unsaved Changes</span>}
                             </div>
-
-                            <textarea
-                                className="flex-1 w-full bg-transparent text-base text-neutral-300 outline-none resize-none placeholder-neutral-700 font-mono leading-relaxed custom-scrollbar p-2"
+                            
+                            {/* Textarea now forces height to fill the container */}
+                            <textarea 
+                                className="flex-1 w-full h-full bg-transparent text-base text-neutral-300 outline-none resize-none placeholder-neutral-700 font-mono leading-relaxed custom-scrollbar p-2"
                                 placeholder={`Log enemy tendencies for ${selectedMapIntel}...\n\nExample:\n- Their Jett OPs A Long every round.\n- They fake B execs with 2 smokes.\n- Weak to fast retakes.`}
                                 value={intelInput}
                                 onChange={(e) => setIntelInput(e.target.value)}
                             />
-
-                            <div className="flex-none flex justify-end pt-4 mt-2 border-t border-white/5">
-                                <ButtonPrimary onClick={saveMapIntel} className="text-xs py-2 px-6">Save Intel</ButtonPrimary>
+                            
+                            <div className="flex justify-end pt-4 mt-2 border-t border-white/5">
+                                <ButtonPrimary onClick={saveMapIntel} className="text-xs py-3 px-8">Save Intel</ButtonPrimary>
                             </div>
                         </div>
 
                     </Card>
                 ) : (
-                    // Placeholder State (Fixed Height)
-                    <div className="h-full border-2 border-dashed border-neutral-800 rounded-3xl flex flex-col items-center justify-center opacity-30">
+                    <div className="h-full flex flex-col items-center justify-center opacity-30 border border-dashed border-neutral-800 rounded-3xl min-h-[600px]">
                         <div className="text-6xl mb-4">📂</div>
                         <div className="text-xl font-black uppercase tracking-widest">Select a Target</div>
                     </div>
@@ -1978,8 +1967,6 @@ function WarRoom() {
             </div>
         </div>
     );
-}
-
 
 function MatchHistory({ currentUser, members }) {
     const [history, setHistory] = useState([]);
