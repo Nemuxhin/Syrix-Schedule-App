@@ -1790,6 +1790,183 @@ function LineupLibrary() {
     )
 }
 
+function WarRoom() {
+    const [enemies, setEnemies] = useState([]);
+    const [selectedEnemy, setSelectedEnemy] = useState(null);
+    const [isAdding, setIsAdding] = useState(false);
+
+    // Form State
+    const [newEnemy, setNewEnemy] = useState({ name: '', threat: 'Medium', notes: '' });
+
+    // Map-Specific Intel State (when viewing an enemy)
+    const [selectedMapIntel, setSelectedMapIntel] = useState(MAPS[0]);
+    const [intelInput, setIntelInput] = useState('');
+
+    useEffect(() => {
+        const unsub = onSnapshot(collection(db, 'war_room'), (snap) => {
+            const data = [];
+            snap.forEach(doc => data.push({ id: doc.id, ...doc.data() }));
+            setEnemies(data.sort((a, b) => a.name.localeCompare(b.name)));
+        });
+        return () => unsub();
+    }, []);
+
+    const createEnemy = async () => {
+        if (!newEnemy.name) return;
+        await addDoc(collection(db, 'war_room'), {
+            ...newEnemy,
+            mapIntel: {}, // Object to store notes per map
+            lastEncounter: new Date().toISOString()
+        });
+        setNewEnemy({ name: '', threat: 'Medium', notes: '' });
+        setIsAdding(false);
+    };
+
+    const deleteEnemy = async (id) => {
+        if (confirm("Burn this dossier?")) {
+            await deleteDoc(doc(db, 'war_room', id));
+            setSelectedEnemy(null);
+        }
+    };
+
+    const saveMapIntel = async () => {
+        if (!selectedEnemy) return;
+        const updatedIntel = {
+            ...selectedEnemy.mapIntel,
+            [selectedMapIntel]: intelInput
+        };
+
+        await setDoc(doc(db, 'war_room', selectedEnemy.id), {
+            mapIntel: updatedIntel
+        }, { merge: true });
+
+        // Update local state to reflect change immediately
+        setSelectedEnemy({ ...selectedEnemy, mapIntel: updatedIntel });
+    };
+
+    // Helper to get color based on Threat Level
+    const getThreatColor = (t) => {
+        if (t === 'Extreme') return 'text-red-600 border-red-600 bg-red-900/20';
+        if (t === 'High') return 'text-orange-500 border-orange-500 bg-orange-900/20';
+        return 'text-green-500 border-green-500 bg-green-900/20';
+    };
+
+    return (
+        <div className="h-full flex flex-col md:flex-row gap-6">
+
+            {/* SIDEBAR: Enemy List */}
+            <div className="w-full md:w-1/3 flex flex-col gap-4">
+                <Card className="flex-1 flex flex-col">
+                    <div className="flex justify-between items-center mb-4">
+                        <h3 className="text-xl font-black text-white italic tracking-tighter">
+                            <span className="text-red-600">WAR</span> ROOM
+                        </h3>
+                        <button onClick={() => setIsAdding(!isAdding)} className="text-xs bg-white text-black font-bold px-3 py-1 rounded hover:bg-neutral-200">
+                            {isAdding ? 'Cancel' : '+ New Target'}
+                        </button>
+                    </div>
+
+                    {isAdding && (
+                        <div className="bg-neutral-900 p-3 rounded-xl border border-white/10 mb-4 space-y-2 animate-fade-in">
+                            <Input placeholder="Team Name" value={newEnemy.name} onChange={e => setNewEnemy({ ...newEnemy, name: e.target.value })} />
+                            <div className="flex gap-2">
+                                <Select value={newEnemy.threat} onChange={e => setNewEnemy({ ...newEnemy, threat: e.target.value })}>
+                                    <option>Low</option>
+                                    <option>Medium</option>
+                                    <option>High</option>
+                                    <option>Extreme</option>
+                                </Select>
+                                <ButtonPrimary onClick={createEnemy} className="text-xs py-2 px-4">Add</ButtonPrimary>
+                            </div>
+                        </div>
+                    )}
+
+                    <div className="flex-1 overflow-y-auto custom-scrollbar space-y-2">
+                        {enemies.map(team => (
+                            <div
+                                key={team.id}
+                                onClick={() => { setSelectedEnemy(team); setIntelInput(team.mapIntel?.[selectedMapIntel] || ''); }}
+                                className={`p-4 rounded-xl border cursor-pointer transition-all flex justify-between items-center ${selectedEnemy?.id === team.id ? 'bg-white/10 border-white' : 'bg-black/40 border-neutral-800 hover:border-neutral-600'}`}
+                            >
+                                <div>
+                                    <div className="font-bold text-white">{team.name}</div>
+                                    <div className={`text-[9px] px-2 py-0.5 rounded border inline-block mt-1 uppercase font-black tracking-wider ${getThreatColor(team.threat)}`}>
+                                        {team.threat} Threat
+                                    </div>
+                                </div>
+                                <div className="text-2xl text-neutral-600">›</div>
+                            </div>
+                        ))}
+                    </div>
+                </Card>
+            </div>
+
+            {/* MAIN PANEL: Dossier */}
+            <div className="flex-1">
+                {selectedEnemy ? (
+                    <Card className="h-full flex flex-col relative overflow-hidden">
+                        <div className="absolute top-0 right-0 w-32 h-32 bg-red-600/10 blur-[50px] pointer-events-none"></div>
+
+                        {/* HEADER */}
+                        <div className="flex justify-between items-start mb-6 border-b border-white/10 pb-4">
+                            <div>
+                                <h2 className="text-4xl font-black text-white uppercase tracking-tighter">{selectedEnemy.name}</h2>
+                                <span className={`text-xs font-bold px-3 py-1 rounded border uppercase tracking-widest ${getThreatColor(selectedEnemy.threat)}`}>
+                                    {selectedEnemy.threat} Level Priority
+                                </span>
+                            </div>
+                            <button onClick={() => deleteEnemy(selectedEnemy.id)} className="text-neutral-600 hover:text-red-500 font-bold text-xs uppercase">
+                                Delete Dossier
+                            </button>
+                        </div>
+
+                        {/* MAP INTEL TABS */}
+                        <div className="flex gap-2 overflow-x-auto pb-2 mb-4 custom-scrollbar">
+                            {MAPS.map(m => (
+                                <button
+                                    key={m}
+                                    onClick={() => {
+                                        setSelectedMapIntel(m);
+                                        setIntelInput(selectedEnemy.mapIntel?.[m] || '');
+                                    }}
+                                    className={`px-4 py-2 rounded-lg text-[10px] font-black uppercase transition-all whitespace-nowrap border ${selectedMapIntel === m ? 'bg-red-600 text-white border-red-500' : 'bg-black border-neutral-800 text-neutral-500 hover:text-white'}`}
+                                >
+                                    {m}
+                                </button>
+                            ))}
+                        </div>
+
+                        {/* EDITOR AREA */}
+                        <div className="flex-1 bg-neutral-900/50 rounded-xl border border-white/5 p-4 flex flex-col relative">
+                            <div className="text-[10px] text-neutral-500 font-bold uppercase tracking-widest mb-2 flex justify-between">
+                                <span>Intel: {selectedMapIntel}</span>
+                                {selectedEnemy.mapIntel?.[selectedMapIntel] !== intelInput && <span className="text-yellow-500 animate-pulse">Unsaved Changes</span>}
+                            </div>
+
+                            <textarea
+                                className="flex-1 bg-transparent text-sm text-neutral-300 outline-none resize-none placeholder-neutral-700 font-mono leading-relaxed"
+                                placeholder={`Log enemy tendencies for ${selectedMapIntel}...\n\nExample:\n- Their Jett OPs A Long every round.\n- They fake B execs with 2 smokes.\n- Weak to fast retakes.`}
+                                value={intelInput}
+                                onChange={(e) => setIntelInput(e.target.value)}
+                            />
+
+                            <div className="flex justify-end pt-4 mt-2 border-t border-white/5">
+                                <ButtonPrimary onClick={saveMapIntel} className="text-xs py-2 px-6">Save Intel</ButtonPrimary>
+                            </div>
+                        </div>
+
+                    </Card>
+                ) : (
+                    <div className="h-full flex flex-col items-center justify-center opacity-30">
+                        <div className="text-6xl mb-4">📂</div>
+                        <div className="text-xl font-black uppercase tracking-widest">Select a Target</div>
+                    </div>
+                )}
+            </div>
+        </div>
+    );
+}
+
 function MatchHistory({ currentUser, members }) {
     const [history, setHistory] = useState([]);
     const [pending, setPending] = useState([]);
@@ -2823,6 +3000,7 @@ function SyrixDashboard({ onBack }) {
                     <NavBtn id="playbook" label="Playbook" />
                     <NavBtn id="comps" label="Comps" />
                     <NavBtn id="matches" label="Matches" />
+                    <NavBtn id="warroom" label="War Room" />
                     <NavBtn id="strats" label="Stratbook" />
                     <NavBtn id="lineups" label="Lineups" />
                     <NavBtn id="roster" label="Roster" />
@@ -2858,6 +3036,7 @@ function SyrixDashboard({ onBack }) {
                     {activeTab === 'content' && isAdmin && <div className="animate-fade-in h-full"><ContentManager /></div>}
                     {activeTab === 'admin' && isAdmin && <div className="animate-fade-in h-full"><AdminPanel /></div>}
                     {activeTab === 'mapveto' && <div className="animate-fade-in h-[80vh]"><MapVeto /></div>}
+                    {activeTab === 'warroom' && <div className="animate-fade-in h-full"><WarRoom /></div>}
                 </div>
             </main>
             <Modal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} onConfirm={modalContent.onConfirm} title={modalContent.title}>{modalContent.children}</Modal>
