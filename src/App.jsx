@@ -209,10 +209,12 @@ const ToastProvider = ({ children }) => {
 const useValorantData = () => {
     const [agentData, setAgentData] = useState({});
     const [mapImages, setMapImages] = useState({});
+
     useEffect(() => {
         const fetchAssets = async () => {
             try {
-                const agentRes = await fetch('https://valorant-api.com/v1/agents');
+                // 1. Fetch Agents (Unchanged)
+                const agentRes = await fetch('https://valorant-api.com/v1/agents?isPlayableCharacter=true');
                 const agentJson = await agentRes.json();
                 const aMap = {};
                 if (agentJson.data) agentJson.data.forEach(agent => {
@@ -222,18 +224,31 @@ const useValorantData = () => {
                     };
                 });
                 setAgentData(aMap);
+
+                // 2. Fetch Maps with FILTERING
                 const mapRes = await fetch('https://valorant-api.com/v1/maps');
                 const mapJson = await mapRes.json();
                 const mMap = {};
-                if (mapJson.data) mapJson.data.forEach(map => { mMap[map.displayName] = map.displayIcon; });
+
+                if (mapJson.data) {
+                    mapJson.data.forEach(map => {
+                        // Check if it's a standard map (has a x/y multiplier) 
+                        // and isn't a duplicate like "The Range" or "Basic Training"
+                        if (map.mainLogAssetGuid !== null && map.assetPath.includes('Maps/')) {
+                            // PRIORITY: stylizedIcon is often a cleaner overhead for strats. 
+                            // FALLBACK: displayIcon is the standard minimap.
+                            mMap[map.displayName] = map.stylizedIcon || map.displayIcon;
+                        }
+                    });
+                }
                 setMapImages(mMap);
             } catch (e) { console.error("Failed to fetch Valorant assets", e); }
         };
         fetchAssets();
     }, []);
+
     return { agentData, mapImages };
 };
-
 // --- REUSABLE COMPONENTS ---
 const Modal = ({ isOpen, onClose, onConfirm, title, children }) => {
     if (!isOpen) return null;
