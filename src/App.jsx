@@ -230,13 +230,13 @@ const useValorantData = () => {
                 const mapJson = await mapRes.json();
                 const mMap = {};
 
-                if (mapJson.data) {
+                if(mapJson.data) {
                     mapJson.data.forEach(map => {
-                        // Check if it's a standard map (has a x/y multiplier) 
-                        // and isn't a duplicate like "The Range" or "Basic Training"
+                        // Filter out non-playable maps and duplicates
                         if (map.mainLogAssetGuid !== null && map.assetPath.includes('Maps/')) {
-                            // PRIORITY: stylizedIcon is often a cleaner overhead for strats. 
-                            // FALLBACK: displayIcon is the standard minimap.
+
+                            // LOGIC: Use stylizedIcon if available (it's the new 2025/2026 tactical look)
+                            // If not, fallback to displayIcon
                             mMap[map.displayName] = map.stylizedIcon || map.displayIcon;
                         }
                     });
