@@ -368,7 +368,6 @@ const LandingPage = ({ onEnterHub }) => {
         const stepX = width / (points.length - 1 || 1);
         return points.map((pt, i) => `${i * stepX},${height / 2 - (pt / max) * (height / 2)}`).join(" ");
     };
-    // -----------------------------
 
     const featuredNews = newsData.find(n => n.isFeatured) || newsData[0];
     const otherNews = newsData.filter(n => n.id !== featuredNews?.id).slice(0, 3);
@@ -1134,8 +1133,6 @@ function PerformanceWidget({ events }) {
     );
 }
 
-// --- Missing Components Restored ---
-
 function Playbook() {
     const [selectedMap, setSelectedMap] = useState(MAPS[0]);
     const [side, setSide] = useState('Attack');
@@ -1345,7 +1342,6 @@ function StratBook() {
 
     // --- HISTORY LOGIC ---
     const addToHistory = (newIcons, newLines) => {
-        // Cut off "future" if we undid, then add new state
         const newHistory = history.slice(0, historyStep + 1);
         newHistory.push({ icons: newIcons, lines: newLines });
 
@@ -2382,7 +2378,6 @@ function RosterManager({ members, events }) {
                 await setDoc(doc(db, 'roster', renameInput), rosterSnap.data());
                 await deleteDoc(oldRosterRef); // Delete old
             } else {
-                // If they don't have a roster doc yet, create a basic one
                 await setDoc(doc(db, 'roster', renameInput), { role: 'Tryout', rank: 'Unranked', notes: 'Renamed user' });
             }
 
@@ -2575,7 +2570,6 @@ function AdminPanel() {
             // --- FIX FOR MISSING USERNAME ---
             let rosterName = app.user;
 
-            // If the application has no username (null/undefined/empty), ask the Admin to type one.
             if (!rosterName) {
                 const manualName = window.prompt("⚠️ This application is missing a username.\n\nPlease enter the player's Riot ID or Roster Name manually:");
                 if (!manualName) {
