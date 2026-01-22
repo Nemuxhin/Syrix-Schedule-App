@@ -1728,7 +1728,19 @@ function StratBook() {
     );
 }
 
-function LineupLibrary() {
+const getEmbedUrl = (url) => {
+    if (!url) return "";
+    let videoId = "";
+    if (url.includes("youtu.be/")) {
+        videoId = url.split("youtu.be/")[1].split(/[?#]/)[0];
+    } else if (url.includes("v=")) {
+        videoId = url.split("v=")[1].split(/[&?#]/)[0];
+    } else if (url.includes("embed/")) {
+        videoId = url.split("embed/")[1].split(/[?#]/)[0];
+    }
+    return videoId ? `https://www.youtube.com/embed/${videoId}` : url;
+};
+function LineupLibrary({ rosterName }) {
     const [selectedMap, setSelectedMap] = useState(MAPS[0]);
     const { mapImages, agentData } = useValorantData();
     const [lineups, setLineups] = useState([]);
@@ -1760,14 +1772,7 @@ function LineupLibrary() {
     };
 
     const saveLineup = async () => {
-        if (!newLineup.title || !newLineup.url) {
-            addToast("Please enter a Title and URL", "error");
-            return;
-        }
-        if (!tempCoords) {
-            addToast("Error: No location selected", "error");
-            return;
-        }
+        if (!newLineup.title || !newLineup.url) return addToast("Title and URL required", "error");
 
         try {
             await addDoc(collection(db, 'lineups'), {
@@ -1775,107 +1780,88 @@ function LineupLibrary() {
                 map: selectedMap,
                 x: tempCoords.x,
                 y: tempCoords.y,
-                addedBy: currentUser.displayName || "Unknown",
+                // FIX: Use rosterName passed from Dashboard
+                addedBy: rosterName || "Unknown Member",
                 userId: currentUser.uid,
                 date: new Date().toISOString()
             });
             setIsAdding(false);
             setNewLineup({ title: '', url: '', description: '', agent: 'Sova', type: 'Recon' });
-            addToast("Lineup Added to Library");
+            addToast("Lineup Added");
         } catch (error) {
-            console.error("Error saving lineup:", error);
-            addToast("Failed to save lineup", "error");
+            addToast("Error saving lineup", "error");
         }
-    };
-
-    const deleteLineup = async (id) => {
-        await deleteDoc(doc(db, 'lineups', id));
-        setViewingLineup(null);
-        addToast("Lineup Removed");
     };
 
     return (
         <div className="h-full flex flex-col gap-6">
-            <div className="flex flex-col space-y-2">
-                <h3 className="text-3xl font-black text-white italic tracking-tighter"><span className="text-red-600">/</span> LINEUP LIBRARY</h3>
-                <div className="text-xs text-neutral-500">Click on the map to add a new lineup pin.</div>
-            </div>
+            <h3 className="text-3xl font-black text-white italic tracking-tighter"><span className="text-red-600">/</span> LINEUP LIBRARY</h3>
 
             <div className="w-full bg-black/40 border border-white/5 p-2 rounded-xl overflow-x-auto flex gap-2 custom-scrollbar">
                 {MAPS.map(m => (
-                    <button
-                        key={m}
-                        onClick={() => setSelectedMap(m)}
-                        className={`px-4 py-2 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all whitespace-nowrap border ${selectedMap === m ? 'bg-red-600 text-white border-red-500 shadow-lg shadow-red-900/50' : 'bg-neutral-900 border-neutral-800 text-neutral-500 hover:text-white hover:border-neutral-600 hover:bg-neutral-800'}`}
-                    >
+                    <button key={m} onClick={() => setSelectedMap(m)} className={`px-4 py-2 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all whitespace-nowrap border ${selectedMap === m ? 'bg-red-600 text-white border-red-500' : 'bg-neutral-900 border-neutral-800 text-neutral-500 hover:text-white'}`}>
                         {m}
                     </button>
                 ))}
             </div>
 
             <div className="flex flex-col lg:flex-row gap-6 h-full min-h-0">
-                <div className="relative aspect-square h-full max-h-[600px] bg-neutral-900 rounded-2xl overflow-hidden border border-neutral-800 shadow-2xl flex-shrink-0 group self-start lg:self-auto">
+                <div className="relative aspect-square h-full max-h-[600px] bg-neutral-900 rounded-2xl overflow-hidden border border-neutral-800 shadow-2xl flex-shrink-0 group">
                     {mapImages[selectedMap] && <img ref={mapRef} onClick={handleMapClick} src={mapImages[selectedMap]} alt="Map" className="w-full h-full object-cover cursor-crosshair opacity-80 group-hover:opacity-100 transition-opacity" />}
                     {lineups.map(l => (
-                        <div
-                            key={l.id}
-                            onClick={(e) => { e.stopPropagation(); setViewingLineup(l); }}
-                            className="absolute w-6 h-6 -translate-x-1/2 -translate-y-1/2 bg-red-600 rounded-full border-2 border-white cursor-pointer hover:scale-125 transition-transform z-10 shadow-[0_0_10px_red] flex items-center justify-center"
-                            style={{ left: `${l.x}%`, top: `${l.y}%` }}
-                        >
-                            {agentData[l.agent]?.icon && <img src={agentData[l.agent].icon} className="w-full h-full rounded-full object-cover" />}
+                        <div key={l.id} onClick={() => setViewingLineup(l)} className="absolute w-8 h-8 -translate-x-1/2 -translate-y-1/2 bg-red-600 rounded-full border-2 border-white cursor-pointer hover:scale-125 transition-transform z-10 flex items-center justify-center overflow-hidden">
+                            {agentData[l.agent]?.icon && <img src={agentData[l.agent].icon} className="w-full h-full object-cover" alt={l.agent} />}
                         </div>
                     ))}
                 </div>
 
-                <Card className="flex-1 flex flex-col h-full min-h-[400px]">
+                <Card className="flex-1 flex flex-col h-full">
                     {viewingLineup ? (
                         <div className="space-y-4 h-full flex flex-col">
-                            <div className="flex justify-between items-start border-b border-white/10 pb-4">
-                                <div>
-                                    <h4 className="text-2xl font-black text-white uppercase">{viewingLineup.title}</h4>
-                                    <div className="flex items-center gap-2 mt-1">
-                                        <span className="text-xs bg-red-900/30 text-red-400 px-2 py-0.5 rounded border border-red-900/50 font-bold uppercase">{viewingLineup.agent}</span>
-                                        <span className="text-xs text-neutral-500">Added by {viewingLineup.addedBy}</span>
-                                    </div>
-                                </div>
-                                <button onClick={() => deleteLineup(viewingLineup.id)} className="text-neutral-500 hover:text-red-500 transition-colors">DELETE</button>
-                            </div>
-                            <div className="flex-1 bg-black/50 rounded-xl overflow-hidden border border-neutral-800 relative min-h-[200px]">
-                                {viewingLineup.url.includes('youtube') || viewingLineup.url.includes('youtu.be') ? (
-                                    <iframe src={viewingLineup.url.replace('watch?v=', 'embed/').replace('youtu.be/', 'youtube.com/embed/')} className="w-full h-full absolute inset-0" allowFullScreen></iframe>
+                            <h4 className="text-2xl font-black text-white uppercase">{viewingLineup.title}</h4>
+
+                            {/* VIDEO / IMAGE VIEWER FIX */}
+                            <div className="flex-1 bg-black/50 rounded-xl overflow-hidden border border-neutral-800 relative min-h-[250px]">
+                                {viewingLineup.url.toLowerCase().includes('yout') ? (
+                                    <iframe
+                                        src={getEmbedUrl(viewingLineup.url)}
+                                        className="w-full h-full absolute inset-0 border-0"
+                                        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                                        allowFullScreen
+                                    ></iframe>
                                 ) : (
-                                    <img src={viewingLineup.url} className="w-full h-full object-contain" />
+                                    <img src={viewingLineup.url} className="w-full h-full object-contain" alt="Lineup Visual" />
                                 )}
                             </div>
-                            <p className="text-neutral-300 italic text-sm p-4 bg-black/30 rounded-lg border border-white/5">"{viewingLineup.description}"</p>
-                            <ButtonSecondary onClick={() => setViewingLineup(null)} className="w-full">Close Viewer</ButtonSecondary>
+
+                            <p className="text-neutral-400 italic text-sm">"{viewingLineup.description}"</p>
+                            <div className="text-[10px] text-neutral-600 uppercase font-bold tracking-widest">Added by: {viewingLineup.addedBy}</div>
+                            <ButtonSecondary onClick={() => setViewingLineup(null)} className="w-full">Close</ButtonSecondary>
                         </div>
                     ) : (
-                        <div className="h-full flex flex-col items-center justify-center text-neutral-600 space-y-4">
-                            <div className="w-16 h-16 border-2 border-dashed border-neutral-700 rounded-full flex items-center justify-center text-2xl">📍</div>
-                            <div className="text-sm font-bold uppercase tracking-widest">Select a pin to view details</div>
+                        <div className="h-full flex flex-col items-center justify-center text-neutral-600 opacity-50">
+                            <span className="text-4xl mb-2">📍</span>
+                            <p className="text-xs font-bold uppercase tracking-widest">Select a pin to view intel</p>
                         </div>
                     )}
                 </Card>
             </div>
 
-            <Modal isOpen={isAdding} onClose={() => setIsAdding(false)} onConfirm={saveLineup} title="Add New Lineup">
+            <Modal isOpen={isAdding} onClose={() => setIsAdding(false)} onConfirm={saveLineup} title="New Lineup Pin">
                 <div className="space-y-4">
-                    <Input placeholder="Lineup Title (e.g., God Dart A Main)" value={newLineup.title} onChange={e => setNewLineup({ ...newLineup, title: e.target.value })} />
-                    <Input placeholder="Video/Image URL" value={newLineup.url} onChange={e => setNewLineup({ ...newLineup, url: e.target.value })} />
+                    <Input placeholder="Title (e.g. A Main Recon)" value={newLineup.title} onChange={e => setNewLineup({ ...newLineup, title: e.target.value })} />
+                    <Input placeholder="YouTube or Image URL" value={newLineup.url} onChange={e => setNewLineup({ ...newLineup, url: e.target.value })} />
                     <div className="grid grid-cols-2 gap-4">
                         <Select value={newLineup.agent} onChange={e => setNewLineup({ ...newLineup, agent: e.target.value })}>
                             {AGENT_NAMES.map(a => <option key={a}>{a}</option>)}
                         </Select>
-                        <Input placeholder="Description / Tips" value={newLineup.description} onChange={e => setNewLineup({ ...newLineup, description: e.target.value })} />
+                        <Input placeholder="Brief tips..." value={newLineup.description} onChange={e => setNewLineup({ ...newLineup, description: e.target.value })} />
                     </div>
                 </div>
             </Modal>
         </div>
-    )
+    );
 }
-
 function WarRoom() {
     const [enemies, setEnemies] = useState([]);
     const [selectedEnemy, setSelectedEnemy] = useState(null);
