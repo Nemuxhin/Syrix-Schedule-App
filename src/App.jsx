@@ -884,29 +884,104 @@ function CaptainsMessage() {
     return (<div className="bg-gradient-to-br from-red-950 to-black p-6 rounded-3xl border border-red-900/50 shadow-xl"><div className="flex justify-between items-center mb-2"><h2 className="text-lg font-black text-white">📢 CAPTAIN'S MESSAGE</h2>{!isEditing && <button onClick={() => { setDraft(message.text); setIsEditing(true) }} className="text-xs text-neutral-400">Edit</button>}</div>{isEditing ? <div><textarea value={draft} onChange={e => setDraft(e.target.value)} className="w-full bg-black p-2 text-white mb-2" /><ButtonPrimary onClick={handleSave} className="text-xs py-2">Post</ButtonPrimary></div> : <p className="text-slate-200 text-sm whitespace-pre-wrap">"{message.text}"</p>}</div>);
 }
 
-function LeaveLogger({ members }) {
+function LeaveLogger({ members, rosterName }) {
     const [leaves, setLeaves] = useState([]);
     const [newLeave, setNewLeave] = useState({ start: '', end: '', reason: '' });
     const { currentUser } = getAuth();
+    const addToast = useToast();
+
     useEffect(() => {
         const unsub = onSnapshot(collection(db, 'leaves'), (snap) => {
-            const l = []; snap.forEach(doc => l.push({ id: doc.id, ...doc.data() }));
+            const l = [];
+            snap.forEach(doc => l.push({ id: doc.id, ...doc.data() }));
+
+            // Sort by start date
             l.sort((a, b) => new Date(a.start) - new Date(b.start));
-            setLeaves(l.filter(leave => new Date(leave.end) >= new Date()));
+
+            // Only show current or future absences
+            setLeaves(l.filter(leave => new Date(leave.end) >= new Date().setHours(0, 0, 0, 0)));
         });
         return () => unsub();
     }, []);
-    const addLeave = async () => { if (!newLeave.start || !newLeave.end) return; await addDoc(collection(db, 'leaves'), { ...newLeave, user: currentUser.displayName || 'Guest', timestamp: new Date().toISOString() }); setNewLeave({ start: '', end: '', reason: '' }); };
-    const deleteLeave = async (id) => await deleteDoc(doc(db, 'leaves', id));
+
+    const addLeave = async () => {
+        if (!newLeave.start || !newLeave.end) {
+            addToast("Please select start and end dates", "error");
+            return;
+        }
+
+        try {
+            await addDoc(collection(db, 'leaves'), {
+                ...newLeave,
+                // Uses the Roster Name from the Hub login logic, fallback to a safe string
+                user: rosterName || "Unknown Member",
+                uid: currentUser?.uid || "unknown",
+                timestamp: new Date().toISOString()
+            });
+
+            setNewLeave({ start: '', end: '', reason: '' });
+            addToast("Absence logged successfully");
+        } catch (error) {
+            console.error("Error logging leave:", error);
+            addToast("Failed to log absence", "error");
+        }
+    };
+
+    const deleteLeave = async (id) => {
+        try {
+            await deleteDoc(doc(db, 'leaves', id));
+            addToast("Entry deleted");
+        } catch (error) {
+            addToast("Error deleting entry", "error");
+        }
+    };
+
     return (
         <Card className="border-red-900/20">
-            <h3 className="text-lg font-black text-white mb-4 border-b border-red-900/30 pb-2 uppercase tracking-widest flex items-center gap-2"><span className="text-xl">🏖️</span> Absence Log</h3>
-            <div className="space-y-3 mb-4"><div className="grid grid-cols-2 gap-2"><Input type="date" value={newLeave.start} onChange={e => setNewLeave({ ...newLeave, start: e.target.value })} className="[color-scheme:dark]" /><Input type="date" value={newLeave.end} onChange={e => setNewLeave({ ...newLeave, end: e.target.value })} className="[color-scheme:dark]" /></div><Input type="text" placeholder="Reason" value={newLeave.reason} onChange={e => setNewLeave({ ...newLeave, reason: e.target.value })} /><ButtonSecondary onClick={addLeave} className="w-full text-xs py-3">Log Absence</ButtonSecondary></div>
-            <div className="space-y-2 max-h-40 overflow-y-auto pr-2 custom-scrollbar">{leaves.length === 0 && <p className="text-neutral-600 italic text-xs text-center py-2">No upcoming absences.</p>}{leaves.map(l => (<div key={l.id} className="p-3 bg-black/50 border border-neutral-800 rounded-lg flex justify-between items-center text-xs hover:border-red-900/50 transition-colors group"><div><span className="font-bold text-red-500 mr-2">{l.user}</span><span className="text-neutral-400">{l.start} - {l.end}</span><div className="text-neutral-500 italic mt-0.5">{l.reason}</div></div>{(l.user === currentUser?.displayName || ADMIN_UIDS.includes(currentUser?.uid)) && (<button onClick={() => deleteLeave(l.id)} className="text-neutral-600 hover:text-red-500 font-bold px-2 opacity-0 group-hover:opacity-100 transition-opacity">✕</button>)}</div>))}</div>
+            <h3 className="text-lg font-black text-white mb-4 border-b border-red-900/30 pb-2 uppercase tracking-widest flex items-center gap-2">
+                <span className="text-xl">🏖️</span> Absence Log
+            </h3>
+
+            <div className="space-y-3 mb-4">
+                <div className="grid grid-cols-2 gap-2">
+                    <div className="flex flex-col gap-1">
+                        <label className="text-[9px] font-bold text-neutral-500 uppercase ml-1">Start</label>
+                        <Input type="date" value={newLeave.start} onChange={e => setNewLeave({ ...newLeave, start: e.target.value })} className="[color-scheme:dark]" />
+                    </div>
+                    <div className="flex flex-col gap-1">
+                        <label className="text-[9px] font-bold text-neutral-500 uppercase ml-1">End</label>
+                        <Input type="date" value={newLeave.end} onChange={e => setNewLeave({ ...newLeave, end: e.target.value })} className="[color-scheme:dark]" />
+                    </div>
+                </div>
+                <Input type="text" placeholder="Reason (e.g. Vacation, Exams)" value={newLeave.reason} onChange={e => setNewLeave({ ...newLeave, reason: e.target.value })} />
+                <ButtonSecondary onClick={addLeave} className="w-full text-xs py-3">Log Absence</ButtonSecondary>
+            </div>
+
+            <div className="space-y-2 max-h-48 overflow-y-auto pr-2 custom-scrollbar">
+                {leaves.length === 0 ? (
+                    <p className="text-neutral-600 italic text-xs text-center py-4">No upcoming absences.</p>
+                ) : (
+                    leaves.map(l => (
+                        <div key={l.id} className="p-3 bg-black/50 border border-neutral-800 rounded-lg flex justify-between items-center text-xs hover:border-red-900/50 transition-colors group">
+                            <div>
+                                <span className="font-bold text-red-500 mr-2">{l.user}</span>
+                                <span className="text-neutral-400 font-mono">{l.start} to {l.end}</span>
+                                <div className="text-neutral-500 italic mt-0.5">{l.reason || "No reason provided"}</div>
+                            </div>
+
+                            {/* Allow deletion if user owns the post OR is an admin */}
+                            {(l.user === rosterName || ADMIN_UIDS.includes(currentUser?.uid)) && (
+                                <button onClick={() => deleteLeave(l.id)} className="text-neutral-600 hover:text-red-500 font-bold px-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                                    ✕
+                                </button>
+                            )}
+                        </div>
+                    ))
+                )}
+            </div>
         </Card>
     );
 }
-
 function ScrimScheduler({ onSchedule, userTimezone }) {
     const [form, setForm] = useState({ type: 'Scrim', date: '', time: '', opponent: '', map: MAPS[0] });
 
