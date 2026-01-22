@@ -289,11 +289,19 @@ const LandingPage = ({ onEnterHub }) => {
         const unsubEvents = onSnapshot(collection(db, 'events'), (snap) => {
             const e = [];
             snap.forEach(doc => e.push({ id: doc.id, ...doc.data() }));
-            setAllEvents(e); // Store all events for stats calculation
-            // Filter for future matches
+            setAllEvents(e);
+
+            // FIX: Filter for events that are TODAY or in the FUTURE
+            const now = new Date();
+            now.setHours(0, 0, 0, 0); // Set to start of today
+
             const futureMatches = e
-                .filter(m => new Date(m.date) >= new Date())
+                .filter(m => {
+                    const eventDate = new Date(m.date);
+                    return eventDate >= now && !m.result; // Hide if date passed OR if it has a result
+                })
                 .sort((a, b) => new Date(a.date) - new Date(b.date));
+
             setMatches(futureMatches);
         });
 
@@ -2971,8 +2979,17 @@ function SyrixDashboard({ onBack }) {
         const unsub3 = onSnapshot(collection(db, 'events'), (s) => {
             const e = [];
             s.forEach(d => e.push({ id: d.id, ...d.data() }));
-            setEvents(e.sort((a, b) => new Date(a.date + 'T' + a.time) - new Date(b.date + 'T' + b.time)));
-        });
+
+            const now = new Date().setHours(0, 0, 0, 0);
+
+            // Filter out past events and events that already have scores/results
+            const upcomingOnly = e.filter(ev => {
+                const eventDate = new Date(ev.date).getTime();
+                return eventDate >= now && !ev.result;
+            });
+
+            setEvents(upcomingOnly.sort((a, b) => new Date(a.date + 'T' + a.time) - new Date(b.date + 'T' + b.time)));
+        });;
 
         // --- NEW LISTENER 4: FETCH ALL ROSTER NAMES ---
         // This ensures members show up even if they haven't set availability yet
