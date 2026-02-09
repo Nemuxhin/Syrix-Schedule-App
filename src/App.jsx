@@ -1363,11 +1363,11 @@ function StratBook() {
     const [placingItem, setPlacingItem] = useState(null);
     const [placingWallStart, setPlacingWallStart] = useState(null); // {x,y}
 
-    // --- STATE TRACKING (kept) ---
+    // --- STATE ---
     const [mapIcons, setMapIcons] = useState([]);
     const [drawLines, setDrawLines] = useState([]);
 
-    // --- HISTORY STACK (kept) ---
+    // --- HISTORY ---
     const [history, setHistory] = useState([{ icons: [], lines: [] }]);
     const [historyStep, setHistoryStep] = useState(0);
 
@@ -1378,15 +1378,22 @@ function StratBook() {
     // --- Selection / Moving ---
     const [selectedIconId, setSelectedIconId] = useState(null);
     const [moving, setMoving] = useState(null);
-    // moving = { id, kind:'icon'|'wallP1'|'wallP2', startClientX, startClientY, rect, origX, origY }
 
     // --- Saved Strats ---
     const [savedStrats, setSavedStrats] = useState([]);
     const [viewingStrat, setViewingStrat] = useState(null);
 
     // --------------------------
-    // ✅ FIX: safer icon shape renderer (prevents nested ternary paste bugs)
+    // Safe helpers
     // --------------------------
+    const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+    const uid = () => {
+        try {
+            if (typeof crypto !== "undefined" && crypto.randomUUID) return crypto.randomUUID();
+        } catch { }
+        return String(Date.now() + Math.random());
+    };
+
     const renderShapeIcon = (icon) => {
         if (icon.shape === "ring") {
             return (
@@ -1439,31 +1446,55 @@ function StratBook() {
     };
 
     // --------------------------
-    // Firestore (kept + safer)
+    // Firestore (OPTIONAL + SAFE)
+    // If Firestore is missing OR permission denied, UI still works.
     // --------------------------
     useEffect(() => {
-        const qStrats = query(collection(db, "strats"), where("map", "==", selectedMap));
-        const unsubStrats = onSnapshot(
-            qStrats,
-            (snap) => {
-                const s = [];
-                snap.forEach((docSnap) => s.push({ id: docSnap.id, ...docSnap.data() }));
-                s.sort((a, b) => new Date(b.date) - new Date(a.date));
-                setSavedStrats(s);
-            },
-            (err) => {
-                console.error(err);
-                addToast("Firestore permission error (reads disabled)", "error");
-            }
-        );
-        return () => unsubStrats();
+        let unsub = null;
+
+        const hasFirestore =
+            typeof db !== "undefined" &&
+            typeof collection !== "undefined" &&
+            typeof query !== "undefined" &&
+            typeof where !== "undefined" &&
+            typeof onSnapshot !== "undefined";
+
+        if (!hasFirestore) {
+            setSavedStrats([]);
+            return;
+        }
+
+        try {
+            const qStrats = query(collection(db, "strats"), where("map", "==", selectedMap));
+            unsub = onSnapshot(
+                qStrats,
+                (snap) => {
+                    const s = [];
+                    snap.forEach((docSnap) => s.push({ id: docSnap.id, ...docSnap.data() }));
+                    s.sort((a, b) => new Date(b.date) - new Date(a.date));
+                    setSavedStrats(s);
+                },
+                (err) => {
+                    console.error(err);
+                    setSavedStrats([]);
+                    addToast("Saved strats disabled (Firestore permission-denied)", "error");
+                }
+            );
+        } catch (e) {
+            console.error(e);
+            setSavedStrats([]);
+        }
+
+        return () => {
+            if (typeof unsub === "function") unsub();
+        };
     }, [selectedMap]);
 
     // --------------------------
-    // Canvas redraw (kept)
+    // Canvas redraw
     // --------------------------
     useEffect(() => {
-        const ctx = canvasRef.current?.getContext("2d");
+        const ctx = canvasRef.current?.getContext?.("2d");
         if (!ctx) return;
 
         ctx.clearRect(0, 0, 1024, 1024);
@@ -1491,7 +1522,7 @@ function StratBook() {
     }, [drawLines, currentLine, selectedMap, color]);
 
     // --------------------------
-    // History (kept)
+    // History
     // --------------------------
     const addToHistory = (newIcons, newLines) => {
         const newHistory = history.slice(0, historyStep + 1);
@@ -1522,13 +1553,12 @@ function StratBook() {
     };
 
     // --------------------------
-    // Helpers
+    // Pointer position
     // --------------------------
-    const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
-    const uid = () => (crypto?.randomUUID ? crypto.randomUUID() : String(Date.now() + Math.random()));
-
     const getCanvasPos = (e) => {
-        const rect = canvasRef.current.getBoundingClientRect();
+        const el = canvasRef.current;
+        if (!el) return { x: 0, y: 0 };
+        const rect = el.getBoundingClientRect();
         return {
             x: (e.clientX - rect.left) * (1024 / rect.width),
             y: (e.clientY - rect.top) * (1024 / rect.height),
@@ -1536,7 +1566,9 @@ function StratBook() {
     };
 
     const getMapPercentPos = (e) => {
-        const rect = containerRef.current.getBoundingClientRect();
+        const el = containerRef.current;
+        if (!el) return { x: 50, y: 50, rect: { width: 1, height: 1 } };
+        const rect = el.getBoundingClientRect();
         return {
             x: clamp(((e.clientX - rect.left) / rect.width) * 100, 0, 100),
             y: clamp(((e.clientY - rect.top) / rect.height) * 100, 0, 100),
@@ -1545,11 +1577,7 @@ function StratBook() {
     };
 
     // ==========================================================
-    // ✅ NEW: Planner-like util classification for ALL agents
-    // - walls become WALL placement (start -> end)
-    // - smokes become CIRCLE overlays
-    // - mollies become CIRCLE overlays (orange)
-    // - cages / slows / scans / stuns become distinct CIRCLE overlays
+    // ✅ FULL util classification (all agents)
     // ==========================================================
     const PRESET = {
         smoke: { radius: 8.5, fill: "rgba(255,255,255,0.18)", outline: "rgba(255,255,255,0.55)" },
@@ -1602,7 +1630,6 @@ function StratBook() {
         jett: [{ match: ["cloudburst"], kind: "smoke" }],
         astra: [{ match: ["nebula", "dissipate"], kind: "smoke" }],
         clove: [{ match: ["ruse"], kind: "smoke" }],
-        reyna: [{ match: ["leer"], kind: "stun" }], // shown as yellow circle marker
         sova: [{ match: ["recon bolt"], kind: "scan" }],
         fade: [{ match: ["haunt"], kind: "scan" }, { match: ["seize"], kind: "slow" }],
         gekko: [{ match: ["mosh pit"], kind: "molly" }],
@@ -1618,32 +1645,21 @@ function StratBook() {
             if (hit) return hit;
         }
 
-        // Walls
         if (hasAny(n, ["wall", "screen", "tide", "lane", "barrier", "blaze"])) {
             return { kind: "wall", wall: WALL_PRESET.neutral };
         }
-
-        // Smokes / vision blockers
         if (hasAny(n, ["smoke", "cloud", "cover", "nebula", "shroud", "cove", "mist", "veil", "poison cloud"])) {
             return { kind: "smoke" };
         }
-
-        // Mollies / damaging pools
         if (hasAny(n, ["molly", "incendiary", "fire", "hot hands", "snake bite", "snakebite", "nanoswarm", "acid", "burn", "mosh"])) {
             return { kind: "molly" };
         }
-
-        // Slows / vulnerable / seize-like zones
         if (hasAny(n, ["slow", "chill", "decay", "vulnerable", "seize"])) {
             return { kind: "slow" };
         }
-
-        // Recon / scans / reveals
         if (hasAny(n, ["recon", "scan", "reveal", "haunt", "dart", "eye", "seek", "trail"])) {
             return { kind: "scan" };
         }
-
-        // Stun / concuss / flash
         if (hasAny(n, ["stun", "concuss", "flash", "blind", "daze"])) {
             return { kind: "stun" };
         }
@@ -1651,34 +1667,17 @@ function StratBook() {
         return { kind: "icon" };
     };
 
-    // --------------------------
-    // Ability special rendering (UPDATED)
-    // --------------------------
     const abilityRender = (agentName, ability) => {
         const base = { type: "ability", name: ability.name, icon: ability.icon, renderKind: RENDER.ICON };
         const c = classifyAbility(agentName, ability.name);
 
-        if (c.kind === "wall") {
-            return { ...base, renderKind: RENDER.WALL, wall: c.wall ?? WALL_PRESET.neutral };
-        }
-        if (c.kind === "smoke") {
-            return { ...base, renderKind: RENDER.CIRCLE, circle: PRESET.smoke };
-        }
-        if (c.kind === "molly") {
-            return { ...base, renderKind: RENDER.CIRCLE, circle: PRESET.molly };
-        }
-        if (c.kind === "cage") {
-            return { ...base, renderKind: RENDER.CIRCLE, circle: PRESET.cage };
-        }
-        if (c.kind === "slow") {
-            return { ...base, renderKind: RENDER.CIRCLE, circle: PRESET.slow };
-        }
-        if (c.kind === "scan") {
-            return { ...base, renderKind: RENDER.CIRCLE, circle: PRESET.scan };
-        }
-        if (c.kind === "stun") {
-            return { ...base, renderKind: RENDER.CIRCLE, circle: PRESET.stun };
-        }
+        if (c.kind === "wall") return { ...base, renderKind: RENDER.WALL, wall: c.wall ?? WALL_PRESET.neutral };
+        if (c.kind === "smoke") return { ...base, renderKind: RENDER.CIRCLE, circle: PRESET.smoke };
+        if (c.kind === "molly") return { ...base, renderKind: RENDER.CIRCLE, circle: PRESET.molly };
+        if (c.kind === "cage") return { ...base, renderKind: RENDER.CIRCLE, circle: PRESET.cage };
+        if (c.kind === "slow") return { ...base, renderKind: RENDER.CIRCLE, circle: PRESET.slow };
+        if (c.kind === "scan") return { ...base, renderKind: RENDER.CIRCLE, circle: PRESET.scan };
+        if (c.kind === "stun") return { ...base, renderKind: RENDER.CIRCLE, circle: PRESET.stun };
 
         return base;
     };
@@ -1712,7 +1711,7 @@ function StratBook() {
     };
 
     // --------------------------
-    // Placement (click-to-place)
+    // Placement
     // --------------------------
     const beginPlace = (item) => {
         setTool(TOOLS.PLACE);
@@ -1800,7 +1799,7 @@ function StratBook() {
     };
 
     // --------------------------
-    // Moving entities (pointer)
+    // Moving entities
     // --------------------------
     const startMoveEntity = (e, icon, kind = "icon") => {
         if (tool !== TOOLS.SELECT) return;
@@ -1874,7 +1873,7 @@ function StratBook() {
     };
 
     // --------------------------
-    // Selection edits (kept)
+    // Selection edits
     // --------------------------
     const updateSelectedIcon = (prop, value) => {
         if (selectedIconId === null) return;
@@ -1903,135 +1902,499 @@ function StratBook() {
     };
 
     // --------------------------
-    // Saving (kept + walls/circles)
+    // Saving (SAFE if Firestore missing/denied)
     // --------------------------
     const saveStrat = async () => {
-        const tempCanvas = document.createElement("canvas");
-        tempCanvas.width = 1024;
-        tempCanvas.height = 1024;
-        const ctx = tempCanvas.getContext("2d");
+        try {
+            const tempCanvas = document.createElement("canvas");
+            tempCanvas.width = 1024;
+            tempCanvas.height = 1024;
+            const ctx = tempCanvas.getContext("2d");
 
-        if (mapImages[selectedMap]) {
-            const img = new Image();
-            img.src = mapImages[selectedMap];
-            img.crossOrigin = "anonymous";
-            await new Promise((r) => { img.onload = r; img.onerror = r; });
-            ctx.drawImage(img, 0, 0, 1024, 1024);
-        }
-
-        ctx.drawImage(canvasRef.current, 0, 0);
-
-        // draw walls + circles first
-        for (const icon of mapIcons) {
-            if (icon.renderKind === RENDER.WALL) {
-                const x1 = (icon.x1 / 100) * 1024;
-                const y1 = (icon.y1 / 100) * 1024;
-                const x2 = (icon.x2 / 100) * 1024;
-                const y2 = (icon.y2 / 100) * 1024;
-
-                ctx.lineCap = "round";
-                ctx.strokeStyle = icon.wallColor ?? "rgba(255,255,255,0.14)";
-                ctx.lineWidth = (icon.thickness ?? 2.4) * 10;
-                ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.stroke();
-
-                ctx.strokeStyle = icon.wallOutline ?? "rgba(255,255,255,0.55)";
-                ctx.lineWidth = Math.max(2, (icon.thickness ?? 2.4) * 2);
-                ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.stroke();
+            if (mapImages[selectedMap]) {
+                const img = new Image();
+                img.src = mapImages[selectedMap];
+                img.crossOrigin = "anonymous";
+                await new Promise((r) => { img.onload = r; img.onerror = r; });
+                ctx.drawImage(img, 0, 0, 1024, 1024);
             }
 
-            if (icon.renderKind === RENDER.CIRCLE) {
-                const cx = (icon.cx / 100) * 1024;
-                const cy = (icon.cy / 100) * 1024;
-                const r = (icon.radius / 100) * 1024;
+            ctx.drawImage(canvasRef.current, 0, 0);
 
-                ctx.beginPath();
-                ctx.fillStyle = icon.fill ?? "rgba(255,255,255,0.18)";
-                ctx.strokeStyle = icon.outline ?? "rgba(255,255,255,0.55)";
-                ctx.lineWidth = 2;
-                ctx.arc(cx, cy, r, 0, Math.PI * 2);
-                ctx.fill();
-                ctx.stroke();
+            // walls + circles first
+            for (const icon of mapIcons) {
+                if (icon.renderKind === RENDER.WALL) {
+                    const x1 = (icon.x1 / 100) * 1024;
+                    const y1 = (icon.y1 / 100) * 1024;
+                    const x2 = (icon.x2 / 100) * 1024;
+                    const y2 = (icon.y2 / 100) * 1024;
+
+                    ctx.lineCap = "round";
+                    ctx.strokeStyle = icon.wallColor ?? "rgba(255,255,255,0.14)";
+                    ctx.lineWidth = (icon.thickness ?? 2.4) * 10;
+                    ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.stroke();
+
+                    ctx.strokeStyle = icon.wallOutline ?? "rgba(255,255,255,0.55)";
+                    ctx.lineWidth = Math.max(2, (icon.thickness ?? 2.4) * 2);
+                    ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.stroke();
+                }
+
+                if (icon.renderKind === RENDER.CIRCLE) {
+                    const cx = (icon.cx / 100) * 1024;
+                    const cy = (icon.cy / 100) * 1024;
+                    const r = (icon.radius / 100) * 1024;
+
+                    ctx.beginPath();
+                    ctx.fillStyle = icon.fill ?? "rgba(255,255,255,0.18)";
+                    ctx.strokeStyle = icon.outline ?? "rgba(255,255,255,0.55)";
+                    ctx.lineWidth = 2;
+                    ctx.arc(cx, cy, r, 0, Math.PI * 2);
+                    ctx.fill();
+                    ctx.stroke();
+                }
             }
-        }
 
-        // draw icons/labels/shapes
-        for (const icon of mapIcons) {
-            if (icon.type === "site_label") {
+            // icons/labels/shapes
+            for (const icon of mapIcons) {
+                if (icon.type === "site_label") {
+                    const px = (icon.x / 100) * 1024;
+                    const py = (icon.y / 100) * 1024;
+                    ctx.save();
+                    ctx.translate(px, py);
+                    ctx.font = "bold 60px Arial";
+                    ctx.fillStyle = "rgba(255, 255, 255, 0.8)";
+                    ctx.textAlign = "center";
+                    ctx.textBaseline = "middle";
+                    ctx.fillText(icon.label, 0, 0);
+                    ctx.restore();
+                    continue;
+                }
+
+                if (icon.renderKind === RENDER.WALL || icon.renderKind === RENDER.CIRCLE) continue;
+
                 const px = (icon.x / 100) * 1024;
                 const py = (icon.y / 100) * 1024;
                 ctx.save();
                 ctx.translate(px, py);
-                ctx.font = "bold 60px Arial";
-                ctx.fillStyle = "rgba(255, 255, 255, 0.8)";
-                ctx.textAlign = "center";
-                ctx.textBaseline = "middle";
-                ctx.fillText(icon.label, 0, 0);
+                ctx.rotate((Number(icon.rotation) || 0) * Math.PI / 180);
+                const scale = Number(icon.scale) || 1;
+                ctx.scale(scale, scale);
+
+                if (icon.type === "agent" && agentData[icon.name]?.icon) {
+                    const img = new Image();
+                    img.crossOrigin = "anonymous";
+                    img.src = agentData[icon.name].icon;
+                    await new Promise((r) => { img.onload = r; img.onerror = r; });
+                    ctx.beginPath(); ctx.arc(0, 0, 25, 0, Math.PI * 2); ctx.clip();
+                    ctx.drawImage(img, -25, -25, 50, 50);
+                    ctx.strokeStyle = "#fff"; ctx.lineWidth = 2; ctx.stroke();
+                } else if (icon.type === "ability") {
+                    const img = new Image();
+                    img.crossOrigin = "anonymous";
+                    img.src = icon.icon;
+                    await new Promise((r) => { img.onload = r; img.onerror = r; });
+                    ctx.drawImage(img, -20, -20, 40, 40);
+                } else {
+                    ctx.beginPath();
+                    if (icon.shape === "ring") { ctx.arc(0, 0, 20, 0, Math.PI * 2); ctx.fillStyle = icon.color; ctx.fill(); ctx.lineWidth = 3; ctx.strokeStyle = icon.border; ctx.stroke(); }
+                    else if (icon.shape === "square") { ctx.fillStyle = icon.color; ctx.rect(-15, -15, 30, 30); ctx.fill(); ctx.lineWidth = 2; ctx.strokeStyle = icon.border; ctx.stroke(); }
+                    else if (icon.shape === "rect") { ctx.fillStyle = icon.color; ctx.rect(-25, -8, 50, 16); ctx.fill(); ctx.lineWidth = 2; ctx.strokeStyle = icon.border; ctx.stroke(); }
+                    else if (icon.shape === "cross") { ctx.strokeStyle = icon.border; ctx.lineWidth = 4; ctx.moveTo(-15, -15); ctx.lineTo(15, 15); ctx.moveTo(15, -15); ctx.lineTo(-15, 15); ctx.stroke(); }
+                    else if (icon.shape === "diamond") { ctx.fillStyle = icon.color; ctx.moveTo(0, -20); ctx.lineTo(20, 0); ctx.lineTo(0, 20); ctx.lineTo(-20, 0); ctx.fill(); ctx.lineWidth = 2; ctx.strokeStyle = icon.border; ctx.stroke(); }
+                    else if (icon.shape === "triangle") { ctx.fillStyle = icon.color; ctx.moveTo(0, -15); ctx.lineTo(15, 15); ctx.lineTo(-15, 15); ctx.fill(); }
+                    else { ctx.fillStyle = icon.color; ctx.arc(0, 0, 15, 0, Math.PI * 2); ctx.fill(); }
+                }
+
                 ctx.restore();
-                continue;
             }
 
-            if (icon.renderKind === RENDER.WALL || icon.renderKind === RENDER.CIRCLE) continue;
-
-            const px = (icon.x / 100) * 1024;
-            const py = (icon.y / 100) * 1024;
-            ctx.save();
-            ctx.translate(px, py);
-            ctx.rotate((Number(icon.rotation) || 0) * Math.PI / 180);
-            const scale = Number(icon.scale) || 1;
-            ctx.scale(scale, scale);
-
-            if (icon.type === "agent" && agentData[icon.name]?.icon) {
-                const img = new Image();
-                img.crossOrigin = "anonymous";
-                img.src = agentData[icon.name].icon;
-                await new Promise((r) => { img.onload = r; img.onerror = r; });
-                ctx.beginPath(); ctx.arc(0, 0, 25, 0, Math.PI * 2); ctx.clip();
-                ctx.drawImage(img, -25, -25, 50, 50);
-                ctx.strokeStyle = "#fff"; ctx.lineWidth = 2; ctx.stroke();
-            } else if (icon.type === "ability") {
-                const img = new Image();
-                img.crossOrigin = "anonymous";
-                img.src = icon.icon;
-                await new Promise((r) => { img.onload = r; img.onerror = r; });
-                ctx.drawImage(img, -20, -20, 40, 40);
-            } else {
-                // fallback shapes
-                ctx.beginPath();
-                if (icon.shape === "ring") { ctx.arc(0, 0, 20, 0, Math.PI * 2); ctx.fillStyle = icon.color; ctx.fill(); ctx.lineWidth = 3; ctx.strokeStyle = icon.border; ctx.stroke(); }
-                else if (icon.shape === "square") { ctx.fillStyle = icon.color; ctx.rect(-15, -15, 30, 30); ctx.fill(); ctx.lineWidth = 2; ctx.strokeStyle = icon.border; ctx.stroke(); }
-                else if (icon.shape === "rect") { ctx.fillStyle = icon.color; ctx.rect(-25, -8, 50, 16); ctx.fill(); ctx.lineWidth = 2; ctx.strokeStyle = icon.border; ctx.stroke(); }
-                else if (icon.shape === "cross") { ctx.strokeStyle = icon.border; ctx.lineWidth = 4; ctx.moveTo(-15, -15); ctx.lineTo(15, 15); ctx.moveTo(15, -15); ctx.lineTo(-15, 15); ctx.stroke(); }
-                else if (icon.shape === "diamond") { ctx.fillStyle = icon.color; ctx.moveTo(0, -20); ctx.lineTo(20, 0); ctx.lineTo(0, 20); ctx.lineTo(-20, 0); ctx.fill(); ctx.lineWidth = 2; ctx.strokeStyle = icon.border; ctx.stroke(); }
-                else if (icon.shape === "triangle") { ctx.fillStyle = icon.color; ctx.moveTo(0, -15); ctx.lineTo(15, 15); ctx.lineTo(-15, 15); ctx.fill(); }
-                else { ctx.fillStyle = icon.color; ctx.arc(0, 0, 15, 0, Math.PI * 2); ctx.fill(); }
-            }
-
-            ctx.restore();
-        }
-
-        try {
             const dataUrl = tempCanvas.toDataURL("image/jpeg", 0.7);
+
+            const canWrite =
+                typeof db !== "undefined" &&
+                typeof addDoc !== "undefined" &&
+                typeof collection !== "undefined";
+
+            if (!canWrite) {
+                addToast("Saved locally (Firestore not configured)", "error");
+                // still allow user to view it immediately:
+                setViewingStrat(dataUrl);
+                return;
+            }
+
             await addDoc(collection(db, "strats"), { map: selectedMap, image: dataUrl, date: new Date().toISOString() });
             addToast("Strat Saved!");
         } catch (e) {
             console.error(e);
-            addToast("Error saving (Image too large)", "error");
+            addToast("Save failed (Firestore permission-denied or image too large)", "error");
         }
     };
 
     const deleteStrat = async (id) => {
-        if (viewingStrat) setViewingStrat(null);
-        await deleteDoc(doc(db, "strats", id));
-        addToast("Strategy Deleted");
+        try {
+            const canDelete = typeof db !== "undefined" && typeof deleteDoc !== "undefined" && typeof doc !== "undefined";
+            if (!canDelete) return addToast("Delete disabled (Firestore not configured)", "error");
+            if (viewingStrat) setViewingStrat(null);
+            await deleteDoc(doc(db, "strats", id));
+            addToast("Strategy Deleted");
+        } catch (e) {
+            console.error(e);
+            addToast("Delete failed (Firestore permission-denied)", "error");
+        }
     };
 
     // --------------------------
-    // UI (structure kept)
+    // UI (FULL)
     // --------------------------
     return (
         <div className="h-full flex flex-col gap-6">
-            {/* your UI below is unchanged from what you pasted */}
-            {/* keep the rest of your JSX exactly as-is */}
+            <div className="flex gap-4 h-[75vh]">
+                <Card className="w-64 flex flex-col gap-4 overflow-hidden !p-0">
+                    <div className="bg-neutral-900 p-4 border-b border-white/10 space-y-3">
+                        <h4 className="text-xs font-black text-red-500 uppercase tracking-widest">Tools</h4>
+
+                        <div className="flex gap-2 flex-wrap">
+                            <button
+                                onClick={() => { setTool(TOOLS.SELECT); setPlacingItem(null); setPlacingWallStart(null); }}
+                                className={`px-3 py-1 rounded text-xs font-bold border ${tool === TOOLS.SELECT ? "bg-red-600 border-red-400 text-white" : "bg-black border-white/10 text-neutral-300"}`}
+                            >
+                                Select
+                            </button>
+                            <button
+                                onClick={() => { setTool(TOOLS.DRAW); setPlacingItem(null); setPlacingWallStart(null); }}
+                                className={`px-3 py-1 rounded text-xs font-bold border ${tool === TOOLS.DRAW ? "bg-red-600 border-red-400 text-white" : "bg-black border-white/10 text-neutral-300"}`}
+                            >
+                                Draw
+                            </button>
+                            <button
+                                onClick={() => { setTool(TOOLS.ERASE); setPlacingItem(null); setPlacingWallStart(null); }}
+                                className={`px-3 py-1 rounded text-xs font-bold border ${tool === TOOLS.ERASE ? "bg-red-600 border-red-400 text-white" : "bg-black border-white/10 text-neutral-300"}`}
+                            >
+                                Erase
+                            </button>
+                        </div>
+
+                        <div className="flex items-center gap-2">
+                            <button onClick={() => setColor("#ef4444")} className={`w-6 h-6 rounded-full bg-red-500 border ${color === "#ef4444" ? "border-white" : "border-transparent"}`} />
+                            <button onClick={() => setColor("#3b82f6")} className={`w-6 h-6 rounded-full bg-blue-500 border ${color === "#3b82f6" ? "border-white" : "border-transparent"}`} />
+                            <button onClick={() => setColor("#ffffff")} className={`w-6 h-6 rounded-full bg-white border ${color === "#ffffff" ? "border-white" : "border-transparent"}`} />
+                            <div className="text-[10px] text-neutral-400 ml-auto">
+                                {tool === TOOLS.PLACE && placingItem ? "Placing…" : tool.toUpperCase()}
+                            </div>
+                        </div>
+
+                        <div>
+                            <h4 className="text-xs font-black text-red-500 uppercase tracking-widest mb-2">1. Map Markers</h4>
+                            <div className="flex gap-2 justify-center">
+                                {["A", "B", "C", "S"].map((l) => (
+                                    <button
+                                        key={l}
+                                        onClick={() => beginPlace({ type: "site_label", label: l })}
+                                        className="w-8 h-8 bg-white/10 rounded flex items-center justify-center text-xs font-bold hover:bg-white/20 border border-white/20"
+                                    >
+                                        {l}
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
+                    </div>
+
+                    <div className="flex-1 overflow-y-auto custom-scrollbar p-4 space-y-6">
+                        <div>
+                            <h4 className="text-xs font-black text-red-500 uppercase tracking-widest mb-2">2. Generic Util</h4>
+                            <div className="grid grid-cols-4 gap-2">
+                                {UTILITY_TYPES.map((u) => (
+                                    <button
+                                        key={u.id}
+                                        onClick={() => beginPlace({ type: "util", ...u, renderKind: RENDER.SHAPE })}
+                                        className="w-10 h-10 rounded border border-neutral-700 bg-black hover:border-white flex items-center justify-center"
+                                        title={u.label}
+                                    >
+                                        <div
+                                            className="w-6 h-6"
+                                            style={{
+                                                backgroundColor: u.color,
+                                                border: `2px solid ${u.border}`,
+                                                borderRadius: u.shape === "ring" ? "50%" : "2px",
+                                            }}
+                                        />
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
+
+                        <div>
+                            <h4 className="text-xs font-black text-red-500 uppercase tracking-widest mb-2">3. Abilities</h4>
+                            <Select value={selectedAgentForUtil} onChange={(e) => setSelectedAgentForUtil(e.target.value)} className="mb-2">
+                                {AGENT_NAMES.map((a) => <option key={a} value={a}>{a}</option>)}
+                            </Select>
+
+                            <div className="grid grid-cols-4 gap-2">
+                                {(agentData?.[selectedAgentForUtil]?.abilities ?? []).map((ability, i) => {
+                                    const item = abilityRender(selectedAgentForUtil, ability);
+                                    return (
+                                        <button
+                                            key={i}
+                                            onClick={() => beginPlace(item)}
+                                            className={`aspect-square bg-black border rounded hover:border-red-500 flex items-center justify-center p-1 group ${item.renderKind !== RENDER.ICON ? "border-blue-500/40" : "border-neutral-800"}`}
+                                            title={`${ability.name}${item.renderKind !== RENDER.ICON ? ` (${item.renderKind})` : ""}`}
+                                        >
+                                            <img src={ability.icon} alt={ability.name} className="w-full h-full object-contain opacity-70 group-hover:opacity-100 transition-opacity" />
+                                        </button>
+                                    );
+                                })}
+                            </div>
+
+                            {placingWallStart && <div className="mt-2 text-[10px] text-green-400">Wall: click the end point</div>}
+                        </div>
+
+                        <div>
+                            <h4 className="text-xs font-black text-red-500 uppercase tracking-widest mb-2">4. Agents</h4>
+                            <div className="grid grid-cols-4 gap-2">
+                                {AGENT_NAMES.map((a) => (
+                                    <button
+                                        key={a}
+                                        onClick={() => beginPlace({ type: "agent", name: a })}
+                                        className="w-10 h-10 rounded-full border border-neutral-700 bg-black hover:border-white overflow-hidden"
+                                        title={a}
+                                    >
+                                        <img src={agentData?.[a]?.icon} alt={a} className="w-full h-full object-cover" />
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
+                    </div>
+                </Card>
+
+                <Card className="flex-1 flex flex-col relative items-center justify-center bg-black/80 !p-2">
+                    <div className="w-full flex justify-between items-center mb-2 px-4 pt-2">
+                        <h3 className="text-2xl font-black text-white">
+                            STRATBOOK {viewingStrat && <span className="text-red-500 text-sm ml-2">(VIEWING)</span>}
+                        </h3>
+
+                        <div className="flex gap-2">
+                            {!viewingStrat ? (
+                                <>
+                                    <ButtonSecondary onClick={handleUndo} disabled={historyStep === 0} className="px-3" title="Undo">↩</ButtonSecondary>
+                                    <ButtonSecondary onClick={handleRedo} disabled={historyStep === history.length - 1} className="px-3" title="Redo">↪</ButtonSecondary>
+                                    <div className="w-px h-6 bg-white/20 mx-2" />
+                                    <ButtonSecondary onClick={clearCanvas} className="text-xs py-1 px-3">Clear</ButtonSecondary>
+                                    <ButtonPrimary onClick={saveStrat} className="text-xs py-1 px-3">Save</ButtonPrimary>
+                                </>
+                            ) : (
+                                <ButtonSecondary onClick={() => setViewingStrat(null)} className="text-xs bg-red-900/50 border-red-500 text-white">Close</ButtonSecondary>
+                            )}
+                        </div>
+                    </div>
+
+                    <div className="w-full flex overflow-x-auto gap-2 pb-4 mb-2 px-4 custom-scrollbar">
+                        {MAPS.map((m) => (
+                            <button
+                                key={m}
+                                onClick={() => { setSelectedMap(m); clearCanvas(); setViewingStrat(null); }}
+                                className={`px-3 py-1 rounded-full text-xs font-bold ${selectedMap === m ? "bg-red-600 text-white" : "bg-black text-neutral-500"}`}
+                            >
+                                {m}
+                            </button>
+                        ))}
+                    </div>
+
+                    <div
+                        ref={containerRef}
+                        className="relative h-full aspect-square bg-neutral-900 rounded-xl overflow-hidden border border-neutral-800 shadow-2xl mx-auto"
+                        onPointerDown={handleMapPointerDown}
+                        onPointerMove={onMovePointer}
+                        onPointerUp={endMove}
+                        onPointerLeave={endMove}
+                        onClick={() => setSelectedIconId(null)}
+                    >
+                        {mapImages?.[selectedMap] && (
+                            <img src={mapImages[selectedMap]} alt="Map" className="absolute inset-0 w-full h-full object-cover pointer-events-none" />
+                        )}
+
+                        {/* SVG overlays for walls + circles */}
+                        <svg className="absolute inset-0 w-full h-full z-5 pointer-events-none">
+                            {mapIcons.filter((i) => i.renderKind === RENDER.WALL).map((w) => (
+                                <g key={w.id}>
+                                    <line x1={`${w.x1}%`} y1={`${w.y1}%`} x2={`${w.x2}%`} y2={`${w.y2}%`} stroke={w.wallColor} strokeWidth={(w.thickness ?? 2.2) * 10} strokeLinecap="round" opacity="0.95" />
+                                    <line x1={`${w.x1}%`} y1={`${w.y1}%`} x2={`${w.x2}%`} y2={`${w.y2}%`} stroke={w.wallOutline} strokeWidth={Math.max(2, (w.thickness ?? 2.2) * 2)} strokeLinecap="round" opacity="0.9" />
+                                </g>
+                            ))}
+
+                            {mapIcons.filter((i) => i.renderKind === RENDER.CIRCLE).map((c) => (
+                                <g key={c.id}>
+                                    <circle cx={`${c.cx}%`} cy={`${c.cy}%`} r={`${c.radius}%`} fill={c.fill} stroke={c.outline} strokeWidth="2" />
+                                </g>
+                            ))}
+                        </svg>
+
+                        {/* Draw layer */}
+                        <canvas
+                            ref={canvasRef}
+                            width={1024}
+                            height={1024}
+                            className={`absolute inset-0 w-full h-full z-10 ${viewingStrat ? "hidden" : ""}`}
+                            style={{ touchAction: "none", cursor: tool === TOOLS.DRAW ? "crosshair" : "default" }}
+                            onPointerDown={startDraw}
+                            onPointerMove={draw}
+                            onPointerUp={stopDraw}
+                            onPointerLeave={stopDraw}
+                        />
+
+                        {/* DOM layer */}
+                        {!viewingStrat && mapIcons.map((icon) => {
+                            if (icon.renderKind === RENDER.WALL) {
+                                const cx = (icon.x1 + icon.x2) / 2;
+                                const cy = (icon.y1 + icon.y2) / 2;
+                                const isSel = selectedIconId === icon.id;
+
+                                return (
+                                    <React.Fragment key={icon.id}>
+                                        <div
+                                            className="absolute z-20"
+                                            style={{ left: `${cx}%`, top: `${cy}%`, transform: "translate(-50%,-50%)" }}
+                                            onPointerDown={(e) => startMoveEntity(e, icon, "icon")}
+                                            onClick={(e) => { e.stopPropagation(); setSelectedIconId(icon.id); }}
+                                        >
+                                            <div className={`w-3 h-3 rounded-full ${isSel ? "bg-green-400" : "bg-white/50"} shadow`} />
+                                        </div>
+
+                                        {isSel && (
+                                            <>
+                                                <div
+                                                    className="absolute z-30"
+                                                    style={{ left: `${icon.x1}%`, top: `${icon.y1}%`, transform: "translate(-50%,-50%)" }}
+                                                    onPointerDown={(e) => startMoveEntity(e, icon, "wallP1")}
+                                                >
+                                                    <div className="w-4 h-4 rounded-full bg-black border-2 border-green-400 shadow" />
+                                                </div>
+                                                <div
+                                                    className="absolute z-30"
+                                                    style={{ left: `${icon.x2}%`, top: `${icon.y2}%`, transform: "translate(-50%,-50%)" }}
+                                                    onPointerDown={(e) => startMoveEntity(e, icon, "wallP2")}
+                                                >
+                                                    <div className="w-4 h-4 rounded-full bg-black border-2 border-green-400 shadow" />
+                                                </div>
+                                            </>
+                                        )}
+                                    </React.Fragment>
+                                );
+                            }
+
+                            if (icon.renderKind === RENDER.CIRCLE) {
+                                const isSel = selectedIconId === icon.id;
+                                return (
+                                    <div
+                                        key={icon.id}
+                                        className="absolute z-20"
+                                        style={{ left: `${icon.cx}%`, top: `${icon.cy}%`, transform: "translate(-50%,-50%)" }}
+                                        onPointerDown={(e) => startMoveEntity(e, icon, "icon")}
+                                        onClick={(e) => { e.stopPropagation(); setSelectedIconId(icon.id); }}
+                                    >
+                                        <div className={`w-3 h-3 rounded-full ${isSel ? "bg-green-400" : "bg-white/50"} shadow`} />
+                                    </div>
+                                );
+                            }
+
+                            if (icon.type === "site_label") {
+                                return (
+                                    <div
+                                        key={icon.id}
+                                        className="absolute z-20 cursor-grab"
+                                        style={{ left: `${icon.x}%`, top: `${icon.y}%`, transform: "translate(-50%, -50%)" }}
+                                        onPointerDown={(e) => startMoveEntity(e, icon, "icon")}
+                                        onClick={(e) => { e.stopPropagation(); setSelectedIconId(icon.id); }}
+                                    >
+                                        <div className="text-4xl font-black text-white drop-shadow-lg select-none" style={{ textShadow: "0 0 10px black" }}>
+                                            {icon.label}
+                                        </div>
+                                    </div>
+                                );
+                            }
+
+                            const isSelected = selectedIconId === icon.id;
+
+                            return (
+                                <div
+                                    key={icon.id}
+                                    className={`absolute ${tool === TOOLS.SELECT ? "cursor-grab active:cursor-grabbing" : "cursor-default"} group ${isSelected ? "z-50" : "z-20"}`}
+                                    style={{
+                                        left: `${icon.x}%`,
+                                        top: `${icon.y}%`,
+                                        transform: `translate(-50%, -50%) rotate(${Number(icon.rotation || 0)}deg) scale(${Number(icon.scale || 1)})`,
+                                        transition: "transform 0.1s",
+                                    }}
+                                    onPointerDown={(e) => startMoveEntity(e, icon, "icon")}
+                                    onClick={(e) => { e.stopPropagation(); setSelectedIconId(icon.id); }}
+                                >
+                                    {icon.type === "agent" ? (
+                                        <img
+                                            src={agentData?.[icon.name]?.icon}
+                                            alt={icon.name}
+                                            className={`w-10 h-10 rounded-full border-2 shadow-md pointer-events-none bg-black ${isSelected ? "border-green-500" : "border-white"}`}
+                                        />
+                                    ) : icon.type === "ability" ? (
+                                        <img src={icon.icon} alt={icon.name} className={`w-8 h-8 drop-shadow-md pointer-events-none ${isSelected ? "brightness-125" : "opacity-90"}`} />
+                                    ) : (
+                                        renderShapeIcon(icon)
+                                    )}
+                                </div>
+                            );
+                        })}
+
+                        {viewingStrat && (
+                            <div className="absolute inset-0 z-30 bg-black flex items-center justify-center">
+                                <img src={viewingStrat} alt="Saved Strat" className="w-full h-full object-contain" />
+                            </div>
+                        )}
+
+                        {selectedIconId && (
+                            <div
+                                className="absolute bottom-4 left-1/2 -translate-x-1/2 bg-neutral-900/90 backdrop-blur border border-white/20 p-3 rounded-xl flex gap-4 items-center z-50 shadow-2xl animate-slide-in"
+                                onClick={(e) => e.stopPropagation()}
+                            >
+                                <div className="flex flex-col gap-1">
+                                    <label className="text-[9px] font-bold text-neutral-400 uppercase">Rotate</label>
+                                    <input type="range" min="0" max="360" onChange={(e) => updateSelectedIcon("rotation", Number(e.target.value))} className="w-24 accent-red-600" />
+                                </div>
+                                <div className="flex flex-col gap-1">
+                                    <label className="text-[9px] font-bold text-neutral-400 uppercase">Size</label>
+                                    <input type="range" min="0.5" max="3" step="0.1" onChange={(e) => updateSelectedIcon("scale", Number(e.target.value))} className="w-24 accent-red-600" />
+                                </div>
+                                <button onClick={deleteSelectedIcon} className="bg-red-600 hover:bg-red-700 text-white p-2 rounded-lg text-xs font-bold">
+                                    DELETE
+                                </button>
+                            </div>
+                        )}
+                    </div>
+                </Card>
+            </div>
+
+            <div className="grid grid-cols-1 gap-6">
+                <Card>
+                    <h4 className="text-lg font-bold text-white mb-4">SAVED STRATS</h4>
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4 max-h-60 overflow-y-auto custom-scrollbar">
+                        {savedStrats.map((s) => (
+                            <div
+                                key={s.id}
+                                onClick={() => setViewingStrat(s.image)}
+                                className="bg-black/50 p-2 rounded-lg border border-neutral-800 hover:border-red-500 cursor-pointer group relative aspect-square"
+                            >
+                                <img src={s.image} alt="saved" className="w-full h-full object-cover rounded opacity-60 group-hover:opacity-100" />
+                                <div className="absolute bottom-0 left-0 w-full bg-black/80 p-1 text-[9px] text-center text-white truncate">
+                                    {new Date(s.date).toLocaleDateString()}
+                                </div>
+                                <button
+                                    onClick={(e) => { e.stopPropagation(); deleteStrat(s.id); }}
+                                    className="absolute top-1 right-1 text-red-500 bg-black rounded-full w-5 h-5 flex items-center justify-center font-bold text-xs opacity-0 group-hover:opacity-100"
+                                >
+                                    ×
+                                </button>
+                            </div>
+                        ))}
+                    </div>
+                </Card>
+            </div>
         </div>
     );
 }
