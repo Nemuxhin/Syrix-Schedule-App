@@ -2685,7 +2685,7 @@ function StratBook() {
                     </div>
 
                     {/* RIGHT */}
-                    <div className="border-l border-white/10 bg-[#0b1116] overflow-hidden hidden lg:block">
+                    <div className="border-l border-white/10 bg-[#0b1116] overflow-hidden block">
                         <div className="h-full overflow-y-auto custom-scrollbar">
                             <div className="p-4 border-b border-white/10">
                                 <div className="text-white text-3xl font-black">Home</div>
