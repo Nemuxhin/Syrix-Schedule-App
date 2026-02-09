@@ -2684,7 +2684,74 @@ function StratBook() {
                         </div>
                     </div>
 
-                    
+                    {/* RIGHT */}
+                    <div className="border-l border-white/10 bg-[#0b1116] overflow-hidden hidden lg:block">
+                        <div className="h-full overflow-y-auto custom-scrollbar">
+                            <div className="p-4 border-b border-white/10">
+                                <div className="text-white text-3xl font-black">Home</div>
+                                <div className="text-white/40 text-xs font-bold mt-1 uppercase tracking-widest">
+                                    {selectedMap} • {side} • step {sequenceStep}
+                                </div>
+                            </div>
+
+                            <div className="p-4">
+                                <button
+                                    onClick={() => {
+                                        setViewingStrat(null);
+                                        addToast("Ready: place items on the map");
+                                    }}
+                                    className="w-full py-4 rounded-xl bg-white/10 hover:bg-white/15 border border-white/10 text-white font-black text-lg"
+                                >
+                                    Add Strategy
+                                </button>
+                            </div>
+
+                            <div className="p-4">
+                                <div className="text-[11px] text-white/50 font-black uppercase tracking-widest mb-2">
+                                    Saved Strats
+                                </div>
+                                <div className="grid grid-cols-2 gap-3 max-h-[70vh] overflow-y-auto custom-scrollbar">
+                                    {savedStrats.map((s) => (
+                                        <div
+                                            key={s.id}
+                                            onClick={() => setViewingStrat(s.image)}
+                                            className="bg-black/40 p-2 rounded-lg border border-white/10 hover:border-red-500 cursor-pointer group relative aspect-square"
+                                        >
+                                            <img
+                                                src={s.image}
+                                                alt="saved"
+                                                className="w-full h-full object-cover rounded opacity-70 group-hover:opacity-100"
+                                            />
+                                            <div className="absolute bottom-0 left-0 w-full bg-black/80 p-1 text-[9px] text-center text-white truncate">
+                                                {new Date(s.date).toLocaleDateString()}
+                                            </div>
+                                            <button
+                                                onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    deleteStrat(s.id);
+                                                }}
+                                                className="absolute top-1 right-1 text-red-500 bg-black rounded-full w-6 h-6 flex items-center justify-center font-black text-sm opacity-0 group-hover:opacity-100"
+                                            >
+                                                ×
+                                            </button>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+
+                            <div className="p-4 text-white/40 text-xs leading-relaxed">
+                                <div className="font-black text-white/60 mb-2">Tips</div>
+                                <ul className="list-disc pl-4 space-y-1">
+                                    <li>Pick an agent from the bottom bar (it also places the agent).</li>
+                                    <li>Abilities shown on the left match the currently selected agent.</li>
+                                    <li>Walls need 2 clicks.</li>
+                                    <li>Drag markers/abilities into 🗑 to delete.</li>
+                                </ul>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
 
 
 
