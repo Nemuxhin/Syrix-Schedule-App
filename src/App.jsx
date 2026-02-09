@@ -1349,8 +1349,10 @@ function TeamComps({ members }) {
 function StratBook() {
     const [selectedMap, setSelectedMap] = useState(MAPS[0]);
     const [selectedAgentForUtil, setSelectedAgentForUtil] = useState(AGENT_NAMES[0]);
+
     const canvasRef = useRef(null);
     const containerRef = useRef(null);
+
     const { mapImages, agentData } = useValorantData();
     const [color, setColor] = useState("#ef4444");
     const addToast = useToast();
@@ -1388,20 +1390,6 @@ function StratBook() {
     // --- Saved Strats ---
     const [savedStrats, setSavedStrats] = useState([]);
     const [viewingStrat, setViewingStrat] = useState(null);
-    const normKey = (s) => String(s ?? "").toLowerCase().replace(/\s+/g, " ").trim();
-
-    const agentIconSrc = (name) => {
-        if (!agentData) return null;
-
-        // direct hit
-        const direct = agentData[name]?.icon;
-        if (direct) return direct;
-
-        // normalized hit (handles "KAY/O" vs "Kayo" etc.)
-        const target = normKey(name);
-        const foundKey = Object.keys(agentData).find((k) => normKey(k) === target);
-        return foundKey ? agentData[foundKey]?.icon ?? null : null;
-    };
 
     // --------------------------
     // Safe helpers
@@ -1414,38 +1402,34 @@ function StratBook() {
         return String(Date.now() + Math.random());
     };
 
+    const normKey = (s) => String(s ?? "").toLowerCase().replace(/\s+/g, " ").trim();
+
+    // ✅ FIX: robust agent icon resolver (handles key mismatches + fallback)
+    const agentIconSrc = (name) => {
+        if (!agentData) return null;
+
+        // direct hit
+        const direct = agentData?.[name]?.icon;
+        if (direct) return direct;
+
+        // normalized hit
+        const target = normKey(name);
+        const foundKey = Object.keys(agentData).find((k) => normKey(k) === target);
+        return foundKey ? agentData?.[foundKey]?.icon ?? null : null;
+    };
+
     const renderShapeIcon = (icon) => {
         if (icon.shape === "ring") {
-            return (
-                <div
-                    className="w-12 h-12 rounded-full border-4 shadow-sm"
-                    style={{ backgroundColor: icon.color, borderColor: icon.border }}
-                />
-            );
+            return <div className="w-12 h-12 rounded-full border-4 shadow-sm" style={{ backgroundColor: icon.color, borderColor: icon.border }} />;
         }
         if (icon.shape === "triangle") {
-            return (
-                <div
-                    className="w-0 h-0 border-l-[10px] border-l-transparent border-r-[10px] border-r-transparent border-b-[20px]"
-                    style={{ borderBottomColor: icon.border }}
-                />
-            );
+            return <div className="w-0 h-0 border-l-[10px] border-l-transparent border-r-[10px] border-r-transparent border-b-[20px]" style={{ borderBottomColor: icon.border }} />;
         }
         if (icon.shape === "square") {
-            return (
-                <div
-                    className="w-8 h-8 border-2 shadow-md"
-                    style={{ backgroundColor: icon.color, borderColor: icon.border }}
-                />
-            );
+            return <div className="w-8 h-8 border-2 shadow-md" style={{ backgroundColor: icon.color, borderColor: icon.border }} />;
         }
         if (icon.shape === "rect") {
-            return (
-                <div
-                    className="w-16 h-4 border-2 shadow-md"
-                    style={{ backgroundColor: icon.color, borderColor: icon.border }}
-                />
-            );
+            return <div className="w-16 h-4 border-2 shadow-md" style={{ backgroundColor: icon.color, borderColor: icon.border }} />;
         }
         if (icon.shape === "cross") {
             return (
@@ -1455,12 +1439,7 @@ function StratBook() {
             );
         }
         if (icon.shape === "diamond") {
-            return (
-                <div
-                    className="w-12 h-12 transform rotate-45 border-2 shadow-md"
-                    style={{ backgroundColor: icon.color, borderColor: icon.border }}
-                />
-            );
+            return <div className="w-12 h-12 transform rotate-45 border-2 shadow-md" style={{ backgroundColor: icon.color, borderColor: icon.border }} />;
         }
         return <div className="w-6 h-6 transform rotate-45" style={{ backgroundColor: icon.color }} />;
     };
@@ -1665,37 +1644,12 @@ function StratBook() {
             if (hit) return hit;
         }
 
-        if (hasAny(n, ["wall", "screen", "tide", "lane", "barrier", "blaze"])) {
-            return { kind: "wall", wall: WALL_PRESET.neutral };
-        }
-        if (hasAny(n, ["smoke", "cloud", "cover", "nebula", "shroud", "cove", "mist", "veil", "poison cloud"])) {
-            return { kind: "smoke" };
-        }
-        if (
-            hasAny(n, [
-                "molly",
-                "incendiary",
-                "fire",
-                "hot hands",
-                "snake bite",
-                "snakebite",
-                "nanoswarm",
-                "acid",
-                "burn",
-                "mosh",
-            ])
-        ) {
-            return { kind: "molly" };
-        }
-        if (hasAny(n, ["slow", "chill", "decay", "vulnerable", "seize"])) {
-            return { kind: "slow" };
-        }
-        if (hasAny(n, ["recon", "scan", "reveal", "haunt", "dart", "eye", "seek", "trail"])) {
-            return { kind: "scan" };
-        }
-        if (hasAny(n, ["stun", "concuss", "flash", "blind", "daze"])) {
-            return { kind: "stun" };
-        }
+        if (hasAny(n, ["wall", "screen", "tide", "lane", "barrier", "blaze"])) return { kind: "wall", wall: WALL_PRESET.neutral };
+        if (hasAny(n, ["smoke", "cloud", "cover", "nebula", "shroud", "cove", "mist", "veil", "poison cloud"])) return { kind: "smoke" };
+        if (hasAny(n, ["molly", "incendiary", "fire", "hot hands", "snake bite", "snakebite", "nanoswarm", "acid", "burn", "mosh"])) return { kind: "molly" };
+        if (hasAny(n, ["slow", "chill", "decay", "vulnerable", "seize"])) return { kind: "slow" };
+        if (hasAny(n, ["recon", "scan", "reveal", "haunt", "dart", "eye", "seek", "trail"])) return { kind: "scan" };
+        if (hasAny(n, ["stun", "concuss", "flash", "blind", "daze"])) return { kind: "stun" };
 
         return { kind: "icon" };
     };
@@ -1814,15 +1768,7 @@ function StratBook() {
                 return;
             }
 
-            const newIcon = {
-                id: uid(),
-                ...placingItem,
-                renderKind: placingItem.renderKind ?? RENDER.ICON,
-                x,
-                y,
-                rotation: 0,
-                scale: 1,
-            };
+            const newIcon = { id: uid(), ...placingItem, renderKind: placingItem.renderKind ?? RENDER.ICON, x, y, rotation: 0, scale: 1 };
             addToHistory([...mapIcons, newIcon], drawLines);
             setPlacingItem(null);
             setTool(TOOLS.SELECT);
@@ -1991,7 +1937,6 @@ function StratBook() {
 
             ctx.drawImage(canvasRef.current, 0, 0);
 
-            // walls + circles first
             for (const icon of mapIcons) {
                 if (icon.renderKind === RENDER.WALL) {
                     const x1 = (icon.x1 / 100) * 1024;
@@ -2030,7 +1975,6 @@ function StratBook() {
                 }
             }
 
-            // icons/labels/shapes
             for (const icon of mapIcons) {
                 if (icon.type === "site_label") {
                     const px = (icon.x / 100) * 1024;
@@ -2052,25 +1996,43 @@ function StratBook() {
                 const py = (icon.y / 100) * 1024;
                 ctx.save();
                 ctx.translate(px, py);
-                ctx.rotate(((Number(icon.rotation) || 0) * Math.PI) / 180);
+                ctx.rotate((Number(icon.rotation) || 0) * Math.PI / 180);
                 const scale = Number(icon.scale) || 1;
                 ctx.scale(scale, scale);
 
-                if (icon.type === "agent" && agentData[icon.name]?.icon) {
-                    const img = new Image();
-                    img.crossOrigin = "anonymous";
-                    img.src = agentData[icon.name].icon;
-                    await new Promise((r) => {
-                        img.onload = r;
-                        img.onerror = r;
-                    });
-                    ctx.beginPath();
-                    ctx.arc(0, 0, 25, 0, Math.PI * 2);
-                    ctx.clip();
-                    ctx.drawImage(img, -25, -25, 50, 50);
-                    ctx.strokeStyle = "#fff";
-                    ctx.lineWidth = 2;
-                    ctx.stroke();
+                if (icon.type === "agent") {
+                    const src = agentIconSrc(icon.name);
+                    if (src) {
+                        const img = new Image();
+                        img.crossOrigin = "anonymous";
+                        img.src = src;
+                        await new Promise((r) => {
+                            img.onload = r;
+                            img.onerror = r;
+                        });
+                        ctx.beginPath();
+                        ctx.arc(0, 0, 25, 0, Math.PI * 2);
+                        ctx.clip();
+                        ctx.drawImage(img, -25, -25, 50, 50);
+                        ctx.strokeStyle = "#fff";
+                        ctx.lineWidth = 2;
+                        ctx.stroke();
+                    } else {
+                        ctx.fillStyle = "#111";
+                        ctx.beginPath();
+                        ctx.arc(0, 0, 24, 0, Math.PI * 2);
+                        ctx.fill();
+                        ctx.fillStyle = "rgba(255,255,255,0.85)";
+                        ctx.font = "bold 22px Arial";
+                        ctx.textAlign = "center";
+                        ctx.textBaseline = "middle";
+                        ctx.fillText(String(icon.name).slice(0, 1).toUpperCase(), 0, 1);
+                        ctx.strokeStyle = "#fff";
+                        ctx.lineWidth = 2;
+                        ctx.beginPath();
+                        ctx.arc(0, 0, 24, 0, Math.PI * 2);
+                        ctx.stroke();
+                    }
                 } else if (icon.type === "ability") {
                     const img = new Image();
                     img.crossOrigin = "anonymous";
@@ -2179,7 +2141,6 @@ function StratBook() {
     // --------------------------
     return (
         <div className="w-full h-[100dvh] flex flex-col bg-[#0b1116] overflow-hidden">
-            {/* Main grid */}
             <div className="flex-1 grid grid-cols-1 lg:grid-cols-[320px_1fr_320px] overflow-hidden">
                 {/* LEFT */}
                 <div className="border-r border-white/10 bg-[#0b1116] overflow-hidden">
@@ -2206,7 +2167,7 @@ function StratBook() {
                                     </select>
                                 </div>
 
-                                {/* Attack/Defense (REAL) */}
+                                {/* Attack/Defense */}
                                 <button
                                     onClick={() => setSide((s) => (s === "attack" ? "defense" : "attack"))}
                                     className={`w-24 h-[44px] rounded-lg border font-black text-xs ${side === "attack"
@@ -2239,9 +2200,7 @@ function StratBook() {
                                         <button
                                             key={idx}
                                             onClick={() => setSequenceStep(step)}
-                                            className={`h-12 rounded-lg font-black border ${active
-                                                    ? "bg-red-600/70 border-red-300 text-white"
-                                                    : "bg-white/5 border-white/10 text-white/80 hover:bg-white/10"
+                                            className={`h-12 rounded-lg font-black border ${active ? "bg-red-600/70 border-red-300 text-white" : "bg-white/5 border-white/10 text-white/80 hover:bg-white/10"
                                                 }`}
                                             title={`Sequence ${step}`}
                                         >
@@ -2288,9 +2247,7 @@ function StratBook() {
                                         setPlacingItem(null);
                                         setPlacingWallStart(null);
                                     }}
-                                    className={`h-12 rounded-lg border font-black ${tool === TOOLS.SELECT
-                                            ? "bg-red-700/70 border-red-300 text-white"
-                                            : "bg-white/5 border-white/10 text-white/70 hover:bg-white/10"
+                                    className={`h-12 rounded-lg border font-black ${tool === TOOLS.SELECT ? "bg-red-700/70 border-red-300 text-white" : "bg-white/5 border-white/10 text-white/70 hover:bg-white/10"
                                         }`}
                                     title="Select"
                                 >
@@ -2303,9 +2260,7 @@ function StratBook() {
                                         setPlacingItem(null);
                                         setPlacingWallStart(null);
                                     }}
-                                    className={`h-12 rounded-lg border font-black ${tool === TOOLS.DRAW
-                                            ? "bg-red-700/70 border-red-300 text-white"
-                                            : "bg-white/5 border-white/10 text-white/70 hover:bg-white/10"
+                                    className={`h-12 rounded-lg border font-black ${tool === TOOLS.DRAW ? "bg-red-700/70 border-red-300 text-white" : "bg-white/5 border-white/10 text-white/70 hover:bg-white/10"
                                         }`}
                                     title="Draw"
                                 >
@@ -2318,11 +2273,9 @@ function StratBook() {
                                         setPlacingItem(null);
                                         setPlacingWallStart(null);
                                     }}
-                                    className={`h-12 rounded-lg border font-black ${tool === TOOLS.ERASE
-                                            ? "bg-red-700/70 border-red-300 text-white"
-                                            : "bg-white/5 border-white/10 text-white/70 hover:bg-white/10"
+                                    className={`h-12 rounded-lg border font-black ${tool === TOOLS.ERASE ? "bg-red-700/70 border-red-300 text-white" : "bg-white/5 border-white/10 text-white/70 hover:bg-white/10"
                                         }`}
-                                    title="Erase (click selected then delete)"
+                                    title="Erase (select then delete)"
                                 >
                                     ⌫
                                 </button>
@@ -2346,41 +2299,31 @@ function StratBook() {
                                 </button>
                             </div>
 
-                            {/* Colors */}
+                            {/* Colors (red theme) */}
                             <div className="flex items-center gap-2 mt-3">
-                                <button
-                                    onClick={() => setColor("#ef4444")}
-                                    className={`w-7 h-7 rounded-full bg-red-500 border ${color === "#ef4444" ? "border-white" : "border-transparent"}`}
-                                />
-                                <button
-                                    onClick={() => setColor("#f97316")}
-                                    className={`w-7 h-7 rounded-full bg-orange-500 border ${color === "#f97316" ? "border-white" : "border-transparent"}`}
-                                />
-                                <button
-                                    onClick={() => setColor("#ffffff")}
-                                    className={`w-7 h-7 rounded-full bg-white border ${color === "#ffffff" ? "border-white" : "border-transparent"}`}
-                                />
-                                <div className="ml-auto text-[10px] text-white/40 font-bold">
-                                    {tool === TOOLS.PLACE && placingItem ? "PLACING..." : tool.toUpperCase()}
-                                </div>
+                                <button onClick={() => setColor("#ef4444")} className={`w-7 h-7 rounded-full bg-red-500 border ${color === "#ef4444" ? "border-white" : "border-transparent"}`} />
+                                <button onClick={() => setColor("#f97316")} className={`w-7 h-7 rounded-full bg-orange-500 border ${color === "#f97316" ? "border-white" : "border-transparent"}`} />
+                                <button onClick={() => setColor("#ffffff")} className={`w-7 h-7 rounded-full bg-white border ${color === "#ffffff" ? "border-white" : "border-transparent"}`} />
+                                <div className="ml-auto text-[10px] text-white/40 font-bold">{tool === TOOLS.PLACE && placingItem ? "PLACING..." : tool.toUpperCase()}</div>
                             </div>
 
                             {/* Palette */}
                             <div className="mt-5 space-y-4">
                                 <div>
-                                    <div className="text-[11px] text-white/50 font-black uppercase tracking-widest mb-2">Abilities</div>
-
-                                    {/* Keeping this dropdown is optional; bottom bar also changes selectedAgentForUtil */}
-                                    <Select value={selectedAgentForUtil} onChange={(e) => setSelectedAgentForUtil(e.target.value)} className="mb-2">
-                                        {AGENT_NAMES.map((a) => (
-                                            <option key={a} value={a}>
-                                                {a}
-                                            </option>
-                                        ))}
-                                    </Select>
+                                    <div className="flex items-center justify-between mb-2">
+                                        <div className="text-[11px] text-white/50 font-black uppercase tracking-widest">Abilities</div>
+                                        <div className="text-[11px] text-white/60 font-black truncate">
+                                            {selectedAgentForUtil}
+                                        </div>
+                                    </div>
 
                                     <div className="grid grid-cols-5 gap-2">
-                                        {(agentData?.[selectedAgentForUtil]?.abilities ?? []).map((ability, i) => {
+                                        {(agentData?.[selectedAgentForUtil]?.abilities ?? (() => {
+                                            // fallback: try normalized lookup if direct key missing
+                                            const target = normKey(selectedAgentForUtil);
+                                            const foundKey = agentData ? Object.keys(agentData).find((k) => normKey(k) === target) : null;
+                                            return foundKey ? agentData?.[foundKey]?.abilities ?? [] : [];
+                                        })()).map((ability, i) => {
                                             const item = abilityRender(selectedAgentForUtil, ability);
                                             const special = item.renderKind !== RENDER.ICON;
                                             return (
@@ -2400,7 +2343,7 @@ function StratBook() {
                                     {placingWallStart && <div className="mt-2 text-[10px] text-green-400">Wall: click the end point</div>}
                                 </div>
 
-                                {/* ✅ REMOVED: Agents panel from left side */}
+                                {/* ✅ REMOVED: Agents grid from the LEFT panel */}
 
                                 <div>
                                     <div className="text-[11px] text-white/50 font-black uppercase tracking-widest mb-2">Generic Util</div>
@@ -2464,11 +2407,7 @@ function StratBook() {
                             💾
                         </button>
 
-                        <button
-                            onClick={clearCanvas}
-                            className="w-12 h-12 rounded-lg bg-red-700/60 border border-red-300/40 hover:bg-red-700 text-white font-black"
-                            title="Clear"
-                        >
+                        <button onClick={clearCanvas} className="w-12 h-12 rounded-lg bg-red-700/60 border border-red-300/40 hover:bg-red-700 text-white font-black" title="Clear">
                             ⟲
                         </button>
                     </div>
@@ -2510,35 +2449,21 @@ function StratBook() {
 
                             {/* SVG overlays */}
                             <svg className="absolute inset-0 w-full h-full z-10 pointer-events-none">
-                                {mapIcons.filter((i) => i.renderKind === RENDER.WALL).map((w) => (
-                                    <g key={w.id}>
-                                        <line
-                                            x1={`${w.x1}%`}
-                                            y1={`${w.y1}%`}
-                                            x2={`${w.x2}%`}
-                                            y2={`${w.y2}%`}
-                                            stroke={w.wallColor}
-                                            strokeWidth={(w.thickness ?? 2.2) * 10}
-                                            strokeLinecap="round"
-                                            opacity="0.95"
-                                        />
-                                        <line
-                                            x1={`${w.x1}%`}
-                                            y1={`${w.y1}%`}
-                                            x2={`${w.x2}%`}
-                                            y2={`${w.y2}%`}
-                                            stroke={w.wallOutline}
-                                            strokeWidth={Math.max(2, (w.thickness ?? 2.2) * 2)}
-                                            strokeLinecap="round"
-                                            opacity="0.9"
-                                        />
-                                    </g>
-                                ))}
-                                {mapIcons.filter((i) => i.renderKind === RENDER.CIRCLE).map((c) => (
-                                    <g key={c.id}>
-                                        <circle cx={`${c.cx}%`} cy={`${c.cy}%`} r={`${c.radius}%`} fill={c.fill} stroke={c.outline} strokeWidth="2" />
-                                    </g>
-                                ))}
+                                {mapIcons
+                                    .filter((i) => i.renderKind === RENDER.WALL)
+                                    .map((w) => (
+                                        <g key={w.id}>
+                                            <line x1={`${w.x1}%`} y1={`${w.y1}%`} x2={`${w.x2}%`} y2={`${w.y2}%`} stroke={w.wallColor} strokeWidth={(w.thickness ?? 2.2) * 10} strokeLinecap="round" opacity="0.95" />
+                                            <line x1={`${w.x1}%`} y1={`${w.y1}%`} x2={`${w.x2}%`} y2={`${w.y2}%`} stroke={w.wallOutline} strokeWidth={Math.max(2, (w.thickness ?? 2.2) * 2)} strokeLinecap="round" opacity="0.9" />
+                                        </g>
+                                    ))}
+                                {mapIcons
+                                    .filter((i) => i.renderKind === RENDER.CIRCLE)
+                                    .map((c) => (
+                                        <g key={c.id}>
+                                            <circle cx={`${c.cx}%`} cy={`${c.cy}%`} r={`${c.radius}%`} fill={c.fill} stroke={c.outline} strokeWidth="2" />
+                                        </g>
+                                    ))}
                             </svg>
 
                             {/* Draw layer */}
@@ -2636,6 +2561,7 @@ function StratBook() {
                                     }
 
                                     const isSelected = selectedIconId === icon.id;
+
                                     return (
                                         <div
                                             key={icon.id}
@@ -2654,18 +2580,28 @@ function StratBook() {
                                             }}
                                         >
                                             {icon.type === "agent" ? (
-                                                <img
-                                                    src={agentData?.[icon.name]?.icon}
-                                                    alt={icon.name}
-                                                    className={`w-10 h-10 rounded-full border-2 shadow-md pointer-events-none bg-black ${isSelected ? "border-green-500" : "border-white"
-                                                        }`}
-                                                />
+                                                (() => {
+                                                    const src = agentIconSrc(icon.name);
+                                                    return src ? (
+                                                        <img
+                                                            src={src}
+                                                            alt={icon.name}
+                                                            className={`w-10 h-10 rounded-full border-2 shadow-md pointer-events-none bg-black ${isSelected ? "border-green-500" : "border-white"}`}
+                                                            onError={(e) => {
+                                                                e.currentTarget.style.display = "none";
+                                                            }}
+                                                        />
+                                                    ) : (
+                                                        <div
+                                                            className={`w-10 h-10 rounded-full border-2 shadow-md bg-black flex items-center justify-center font-black text-white/80 ${isSelected ? "border-green-500" : "border-white"
+                                                                }`}
+                                                        >
+                                                            {String(icon.name).slice(0, 1).toUpperCase()}
+                                                        </div>
+                                                    );
+                                                })()
                                             ) : icon.type === "ability" ? (
-                                                <img
-                                                    src={icon.icon}
-                                                    alt={icon.name}
-                                                    className={`w-8 h-8 drop-shadow-md pointer-events-none ${isSelected ? "brightness-125" : "opacity-90"}`}
-                                                />
+                                                <img src={icon.icon} alt={icon.name} className={`w-8 h-8 drop-shadow-md pointer-events-none ${isSelected ? "brightness-125" : "opacity-90"}`} />
                                             ) : (
                                                 renderShapeIcon(icon)
                                             )}
@@ -2679,7 +2615,7 @@ function StratBook() {
                                 </div>
                             )}
 
-                            {/* Inspector */}
+                            {/* Inspector popup */}
                             {selectedIconId && (
                                 <div
                                     className="absolute bottom-3 left-1/2 -translate-x-1/2 z-50 bg-neutral-900/90 backdrop-blur border border-white/20 p-3 rounded-xl flex gap-4 items-center shadow-2xl"
@@ -2687,24 +2623,11 @@ function StratBook() {
                                 >
                                     <div className="flex flex-col gap-1">
                                         <label className="text-[9px] font-bold text-neutral-400 uppercase">Rotate</label>
-                                        <input
-                                            type="range"
-                                            min="0"
-                                            max="360"
-                                            onChange={(e) => updateSelectedIcon("rotation", Number(e.target.value))}
-                                            className="w-24 accent-red-600"
-                                        />
+                                        <input type="range" min="0" max="360" onChange={(e) => updateSelectedIcon("rotation", Number(e.target.value))} className="w-24 accent-red-600" />
                                     </div>
                                     <div className="flex flex-col gap-1">
                                         <label className="text-[9px] font-bold text-neutral-400 uppercase">Size</label>
-                                        <input
-                                            type="range"
-                                            min="0.5"
-                                            max="3"
-                                            step="0.1"
-                                            onChange={(e) => updateSelectedIcon("scale", Number(e.target.value))}
-                                            className="w-24 accent-red-600"
-                                        />
+                                        <input type="range" min="0.5" max="3" step="0.1" onChange={(e) => updateSelectedIcon("scale", Number(e.target.value))} className="w-24 accent-red-600" />
                                     </div>
                                     <button onClick={deleteSelectedIcon} className="bg-red-600 hover:bg-red-700 text-white p-2 rounded-lg text-xs font-bold">
                                         DELETE
@@ -2714,7 +2637,7 @@ function StratBook() {
                         </div>
                     </div>
 
-                    {/* ✅ Bottom agent bar (ONLY agent placement + ability agent selection) */}
+                    {/* ✅ Bottom agent bar (ONLY place agents here) */}
                     <div className="absolute bottom-0 left-0 right-0 z-50 border-t border-white/10 bg-black/60 backdrop-blur">
                         <div className="flex items-center gap-4 px-4 md:px-6 py-3">
                             <div className="text-white/70 font-bold">Ally</div>
@@ -2724,20 +2647,37 @@ function StratBook() {
 
                             <div className="flex-1 overflow-x-auto custom-scrollbar">
                                 <div className="flex gap-2">
-                                    {AGENT_NAMES.map((a) => (
-                                        <button
-                                            key={a}
-                                            onClick={() => {
-                                                setSelectedAgentForUtil(a);              // update abilities palette agent
-                                                beginPlace({ type: "agent", name: a });  // place agent token
-                                            }}
-                                            className={`w-16 h-16 rounded-lg overflow-hidden border ${selectedAgentForUtil === a ? "border-red-400" : "border-white/10"
-                                                } bg-black`}
-                                            title={a}
-                                        >
-                                            <img src={agentData?.[a]?.icon} alt={a} className="w-full h-full object-cover" />
-                                        </button>
-                                    ))}
+                                    {AGENT_NAMES.map((a) => {
+                                        const src = agentIconSrc(a);
+                                        const active = selectedAgentForUtil === a;
+
+                                        return (
+                                            <button
+                                                key={a}
+                                                onClick={() => {
+                                                    setSelectedAgentForUtil(a);
+                                                    beginPlace({ type: "agent", name: a }); // ✅ click agent in bottom bar to place it
+                                                }}
+                                                className={`w-16 h-16 rounded-lg overflow-hidden border ${active ? "border-red-400" : "border-white/10"} bg-black flex items-center justify-center`}
+                                                title={a}
+                                            >
+                                                {src ? (
+                                                    <img
+                                                        src={src}
+                                                        alt={a}
+                                                        className="w-full h-full object-cover"
+                                                        onError={(e) => {
+                                                            e.currentTarget.style.display = "none";
+                                                        }}
+                                                    />
+                                                ) : (
+                                                    <div className="w-full h-full flex items-center justify-center text-white/80 font-black text-xl">
+                                                        {String(a).slice(0, 1).toUpperCase()}
+                                                    </div>
+                                                )}
+                                            </button>
+                                        );
+                                    })}
                                 </div>
                             </div>
                         </div>
@@ -2796,9 +2736,10 @@ function StratBook() {
                         <div className="p-4 text-white/40 text-xs leading-relaxed">
                             <div className="font-black text-white/60 mb-2">Tips</div>
                             <ul className="list-disc pl-4 space-y-1">
-                                <li>Click an ability to place it. Walls need 2 clicks.</li>
+                                <li>Pick an agent from the bottom bar (it also places the agent).</li>
+                                <li>Abilities shown on the left match the currently selected agent.</li>
+                                <li>Walls need 2 clicks.</li>
                                 <li>Drag markers/abilities into 🗑 to delete.</li>
-                                <li>Use Draw tool for pathing.</li>
                             </ul>
                         </div>
                     </div>
