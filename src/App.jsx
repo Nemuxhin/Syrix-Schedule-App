@@ -1352,22 +1352,22 @@ function StratBook() {
     const canvasRef = useRef(null);
     const containerRef = useRef(null);
     const { mapImages, agentData } = useValorantData();
-    const [color, setColor] = useState('#ef4444');
+    const [color, setColor] = useState("#ef4444");
     const addToast = useToast();
 
     // --- ValoPlanner-style TOOL MODES ---
-    const TOOLS = { SELECT: 'select', DRAW: 'draw', ERASE: 'erase', PLACE: 'place' };
-    const RENDER = { ICON: 'icon', WALL: 'wall', CIRCLE: 'circle', LABEL: 'label', SHAPE: 'shape' };
+    const TOOLS = { SELECT: "select", DRAW: "draw", ERASE: "erase", PLACE: "place" };
+    const RENDER = { ICON: "icon", WALL: "wall", CIRCLE: "circle", LABEL: "label", SHAPE: "shape" };
 
     const [tool, setTool] = useState(TOOLS.SELECT);
-    const [placingItem, setPlacingItem] = useState(null); // click palette -> set this
-    const [placingWallStart, setPlacingWallStart] = useState(null); // {x,y} for 2-click wall placement
+    const [placingItem, setPlacingItem] = useState(null);
+    const [placingWallStart, setPlacingWallStart] = useState(null); // {x,y}
 
-    // --- STATE TRACKING (keep your structure) ---
+    // --- STATE TRACKING (kept) ---
     const [mapIcons, setMapIcons] = useState([]);
     const [drawLines, setDrawLines] = useState([]);
 
-    // --- HISTORY STACK (keep your structure, but now only commit at end of actions) ---
+    // --- HISTORY STACK (kept) ---
     const [history, setHistory] = useState([{ icons: [], lines: [] }]);
     const [historyStep, setHistoryStep] = useState(0);
 
@@ -1375,7 +1375,7 @@ function StratBook() {
     const [isDrawing, setIsDrawing] = useState(false);
     const [currentLine, setCurrentLine] = useState([]);
 
-    // --- Selection / Moving (pointer based) ---
+    // --- Selection / Moving ---
     const [selectedIconId, setSelectedIconId] = useState(null);
     const [moving, setMoving] = useState(null);
     // moving = { id, kind:'icon'|'wallP1'|'wallP2', startClientX, startClientY, rect, origX, origY }
@@ -1385,39 +1385,92 @@ function StratBook() {
     const [viewingStrat, setViewingStrat] = useState(null);
 
     // --------------------------
-    // Firestore (keep your logic)
+    // ✅ FIX: safer icon shape renderer (prevents nested ternary paste bugs)
+    // --------------------------
+    const renderShapeIcon = (icon) => {
+        if (icon.shape === "ring") {
+            return (
+                <div
+                    className="w-12 h-12 rounded-full border-4 shadow-sm backdrop-blur-sm"
+                    style={{ backgroundColor: icon.color, borderColor: icon.border }}
+                />
+            );
+        }
+        if (icon.shape === "triangle") {
+            return (
+                <div
+                    className="w-0 h-0 border-l-[10px] border-l-transparent border-r-[10px] border-r-transparent border-b-[20px]"
+                    style={{ borderBottomColor: icon.border }}
+                />
+            );
+        }
+        if (icon.shape === "square") {
+            return (
+                <div
+                    className="w-8 h-8 border-2 shadow-md backdrop-blur-sm"
+                    style={{ backgroundColor: icon.color, borderColor: icon.border }}
+                />
+            );
+        }
+        if (icon.shape === "rect") {
+            return (
+                <div
+                    className="w-16 h-4 border-2 shadow-md backdrop-blur-sm"
+                    style={{ backgroundColor: icon.color, borderColor: icon.border }}
+                />
+            );
+        }
+        if (icon.shape === "cross") {
+            return (
+                <div className="text-3xl font-black leading-none drop-shadow-md" style={{ color: icon.border }}>
+                    X
+                </div>
+            );
+        }
+        if (icon.shape === "diamond") {
+            return (
+                <div
+                    className="w-12 h-12 transform rotate-45 border-2 shadow-md backdrop-blur-sm"
+                    style={{ backgroundColor: icon.color, borderColor: icon.border }}
+                />
+            );
+        }
+        return <div className="w-6 h-6 transform rotate-45" style={{ backgroundColor: icon.color }} />;
+    };
+
+    // --------------------------
+    // Firestore (kept + safer)
     // --------------------------
     useEffect(() => {
-        const qStrats = query(collection(db, 'strats'), where("map", "==", selectedMap));
+        const qStrats = query(collection(db, "strats"), where("map", "==", selectedMap));
         const unsubStrats = onSnapshot(
             qStrats,
             (snap) => {
                 const s = [];
-                snap.forEach(doc => s.push({ id: doc.id, ...doc.data() }));
+                snap.forEach((docSnap) => s.push({ id: docSnap.id, ...docSnap.data() }));
                 s.sort((a, b) => new Date(b.date) - new Date(a.date));
                 setSavedStrats(s);
             },
             (err) => {
-                // Prevent blank page if permissions are wrong
                 console.error(err);
-                addToast('Firestore permission error (reads disabled)', 'error');
+                addToast("Firestore permission error (reads disabled)", "error");
             }
         );
-        return () => { unsubStrats(); };
+        return () => unsubStrats();
     }, [selectedMap]);
 
     // --------------------------
-    // Canvas redraw (same idea)
+    // Canvas redraw (kept)
     // --------------------------
     useEffect(() => {
-        const ctx = canvasRef.current?.getContext('2d');
+        const ctx = canvasRef.current?.getContext("2d");
         if (!ctx) return;
 
         ctx.clearRect(0, 0, 1024, 1024);
-        ctx.lineCap = 'round';
-        ctx.lineJoin = 'round';
+        ctx.lineCap = "round";
+        ctx.lineJoin = "round";
 
-        drawLines.forEach(line => {
+        drawLines.forEach((line) => {
             if (!line.points || line.points.length < 2) return;
             ctx.beginPath();
             ctx.strokeStyle = line.color;
@@ -1438,11 +1491,12 @@ function StratBook() {
     }, [drawLines, currentLine, selectedMap, color]);
 
     // --------------------------
-    // History helpers (same structure, safer)
+    // History (kept)
     // --------------------------
     const addToHistory = (newIcons, newLines) => {
         const newHistory = history.slice(0, historyStep + 1);
         newHistory.push({ icons: newIcons, lines: newLines });
+
         setHistory(newHistory);
         setHistoryStep(newHistory.length - 1);
         setMapIcons(newIcons);
@@ -1477,7 +1531,7 @@ function StratBook() {
         const rect = canvasRef.current.getBoundingClientRect();
         return {
             x: (e.clientX - rect.left) * (1024 / rect.width),
-            y: (e.clientY - rect.top) * (1024 / rect.height)
+            y: (e.clientY - rect.top) * (1024 / rect.height),
         };
     };
 
@@ -1486,42 +1540,38 @@ function StratBook() {
         return {
             x: clamp(((e.clientX - rect.left) / rect.width) * 100, 0, 100),
             y: clamp(((e.clientY - rect.top) / rect.height) * 100, 0, 100),
-            rect
+            rect,
         };
     };
 
     // --------------------------
-    // Ability -> special rendering
-    // (Add more mappings anytime)
+    // Ability special rendering
     // --------------------------
     const abilityRender = (agentName, ability) => {
-        // Defaults to icon
-        const base = { type: 'ability', name: ability.name, icon: ability.icon, renderKind: RENDER.ICON };
+        const base = { type: "ability", name: ability.name, icon: ability.icon, renderKind: RENDER.ICON };
 
-        // Viper wall example (match by ability name)
-        if (agentName === 'Viper' && /toxic screen/i.test(ability.name)) {
+        if (agentName === "Viper" && /toxic screen/i.test(ability.name)) {
             return {
                 ...base,
                 renderKind: RENDER.WALL,
-                wall: { thickness: 2.2, color: 'rgba(60,255,122,0.40)', outline: 'rgba(60,255,122,0.85)' }
+                wall: { thickness: 2.2, color: "rgba(60,255,122,0.40)", outline: "rgba(60,255,122,0.85)" },
             };
         }
-
-        // Harbor wall example
-        if (agentName === 'Harbor' && /high tide/i.test(ability.name)) {
+        if (agentName === "Harbor" && /high tide/i.test(ability.name)) {
             return {
                 ...base,
                 renderKind: RENDER.WALL,
-                wall: { thickness: 2.4, color: 'rgba(0,200,255,0.30)', outline: 'rgba(0,240,255,0.85)' }
+                wall: { thickness: 2.4, color: "rgba(0,200,255,0.30)", outline: "rgba(0,240,255,0.85)" },
             };
         }
-
-        // Smokes (simple circle) — Brim/Omen examples
-        if ((agentName === 'Brimstone' && /sky smoke/i.test(ability.name)) || (agentName === 'Omen' && /dark cover/i.test(ability.name))) {
+        if (
+            (agentName === "Brimstone" && /sky smoke/i.test(ability.name)) ||
+            (agentName === "Omen" && /dark cover/i.test(ability.name))
+        ) {
             return {
                 ...base,
                 renderKind: RENDER.CIRCLE,
-                circle: { radius: 8.5, color: 'rgba(255,255,255,0.18)', outline: 'rgba(255,255,255,0.55)' }
+                circle: { radius: 8.5, color: "rgba(255,255,255,0.18)", outline: "rgba(255,255,255,0.55)" },
             };
         }
 
@@ -1529,7 +1579,7 @@ function StratBook() {
     };
 
     // --------------------------
-    // Drawing (ValoPlanner mode-gated)
+    // Drawing (tool gated)
     // --------------------------
     const startDraw = (e) => {
         if (tool !== TOOLS.DRAW) return;
@@ -1543,7 +1593,7 @@ function StratBook() {
     const draw = (e) => {
         if (!isDrawing) return;
         const pos = getCanvasPos(e);
-        setCurrentLine(prev => [...prev, pos]);
+        setCurrentLine((prev) => [...prev, pos]);
     };
 
     const stopDraw = () => {
@@ -1557,7 +1607,7 @@ function StratBook() {
     };
 
     // --------------------------
-    // Placement (ValoPlanner click-to-place)
+    // Placement (click-to-place)
     // --------------------------
     const beginPlace = (item) => {
         setTool(TOOLS.PLACE);
@@ -1569,15 +1619,11 @@ function StratBook() {
     const handleMapPointerDown = (e) => {
         if (viewingStrat) return;
         if (!containerRef.current) return;
-
-        // If drawing, canvas will handle it
         if (tool === TOOLS.DRAW) return;
 
         const { x, y } = getMapPercentPos(e);
 
-        // PLACE MODE
         if (tool === TOOLS.PLACE && placingItem) {
-            // Wall placement: 2 clicks (start/end)
             if (placingItem.renderKind === RENDER.WALL) {
                 if (!placingWallStart) {
                     setPlacingWallStart({ x, y });
@@ -1585,7 +1631,7 @@ function StratBook() {
                 }
                 const wall = {
                     id: uid(),
-                    type: 'ability',
+                    type: "ability",
                     name: placingItem.name,
                     icon: placingItem.icon,
                     renderKind: RENDER.WALL,
@@ -1594,30 +1640,28 @@ function StratBook() {
                     x2: x,
                     y2: y,
                     thickness: placingItem.wall?.thickness ?? 2.2,
-                    wallColor: placingItem.wall?.color ?? 'rgba(60,255,122,0.35)',
-                    wallOutline: placingItem.wall?.outline ?? 'rgba(60,255,122,0.85)'
+                    wallColor: placingItem.wall?.color ?? "rgba(60,255,122,0.35)",
+                    wallOutline: placingItem.wall?.outline ?? "rgba(60,255,122,0.85)",
                 };
-                const newIcons = [...mapIcons, wall];
-                addToHistory(newIcons, drawLines);
+                addToHistory([...mapIcons, wall], drawLines);
                 setPlacingWallStart(null);
                 setPlacingItem(null);
                 setTool(TOOLS.SELECT);
                 return;
             }
 
-            // Circle placement
             if (placingItem.renderKind === RENDER.CIRCLE) {
                 const circle = {
                     id: uid(),
-                    type: 'ability',
+                    type: "ability",
                     name: placingItem.name,
                     icon: placingItem.icon,
                     renderKind: RENDER.CIRCLE,
                     cx: x,
                     cy: y,
                     radius: placingItem.circle?.radius ?? 8.5,
-                    fill: placingItem.circle?.color ?? 'rgba(255,255,255,0.18)',
-                    outline: placingItem.circle?.outline ?? 'rgba(255,255,255,0.55)'
+                    fill: placingItem.circle?.color ?? "rgba(255,255,255,0.18)",
+                    outline: placingItem.circle?.outline ?? "rgba(255,255,255,0.55)",
                 };
                 addToHistory([...mapIcons, circle], drawLines);
                 setPlacingItem(null);
@@ -1625,8 +1669,7 @@ function StratBook() {
                 return;
             }
 
-            // Label placement
-            if (placingItem.type === 'site_label') {
+            if (placingItem.type === "site_label") {
                 const label = { id: uid(), ...placingItem, renderKind: RENDER.LABEL, x, y };
                 addToHistory([...mapIcons, label], drawLines);
                 setPlacingItem(null);
@@ -1634,7 +1677,6 @@ function StratBook() {
                 return;
             }
 
-            // Default icon placement (agent/ability/util/shapes)
             const newIcon = { id: uid(), ...placingItem, renderKind: placingItem.renderKind ?? RENDER.ICON, x, y, rotation: 0, scale: 1 };
             addToHistory([...mapIcons, newIcon], drawLines);
             setPlacingItem(null);
@@ -1642,7 +1684,6 @@ function StratBook() {
             return;
         }
 
-        // ERASE MODE (delete selected / nearest)
         if (tool === TOOLS.ERASE) {
             if (selectedIconId) {
                 deleteSelectedIcon();
@@ -1650,14 +1691,13 @@ function StratBook() {
             }
         }
 
-        // SELECT MODE click empty
         setSelectedIconId(null);
     };
 
     // --------------------------
-    // Moving entities (pointer based, no HTML drag/drop)
+    // Moving entities (pointer)
     // --------------------------
-    const startMoveEntity = (e, icon, kind = 'icon') => {
+    const startMoveEntity = (e, icon, kind = "icon") => {
         if (tool !== TOOLS.SELECT) return;
         if (viewingStrat) return;
 
@@ -1666,13 +1706,11 @@ function StratBook() {
 
         const { rect } = getMapPercentPos(e);
 
-        // Determine starting anchor for move
         let origX = icon.x, origY = icon.y;
         if (icon.renderKind === RENDER.CIRCLE) { origX = icon.cx; origY = icon.cy; }
         if (icon.renderKind === RENDER.WALL) { origX = (icon.x1 + icon.x2) / 2; origY = (icon.y1 + icon.y2) / 2; }
-
-        if (kind === 'wallP1') { origX = icon.x1; origY = icon.y1; }
-        if (kind === 'wallP2') { origX = icon.x2; origY = icon.y2; }
+        if (kind === "wallP1") { origX = icon.x1; origY = icon.y1; }
+        if (kind === "wallP2") { origX = icon.x2; origY = icon.y2; }
 
         setMoving({
             id: icon.id,
@@ -1681,7 +1719,7 @@ function StratBook() {
             startClientY: e.clientY,
             rect,
             origX,
-            origY
+            origY,
         });
 
         e.currentTarget.setPointerCapture?.(e.pointerId);
@@ -1693,55 +1731,55 @@ function StratBook() {
         const dx = ((e.clientX - moving.startClientX) / moving.rect.width) * 100;
         const dy = ((e.clientY - moving.startClientY) / moving.rect.height) * 100;
 
-        setMapIcons(prev => prev.map(icon => {
-            if (icon.id !== moving.id) return icon;
+        setMapIcons((prev) =>
+            prev.map((icon) => {
+                if (icon.id !== moving.id) return icon;
 
-            const nx = clamp(moving.origX + dx, 0, 100);
-            const ny = clamp(moving.origY + dy, 0, 100);
+                const nx = clamp(moving.origX + dx, 0, 100);
+                const ny = clamp(moving.origY + dy, 0, 100);
 
-            if (moving.kind === 'wallP1') return { ...icon, x1: nx, y1: ny };
-            if (moving.kind === 'wallP2') return { ...icon, x2: nx, y2: ny };
+                if (moving.kind === "wallP1") return { ...icon, x1: nx, y1: ny };
+                if (moving.kind === "wallP2") return { ...icon, x2: nx, y2: ny };
 
-            if (icon.renderKind === RENDER.CIRCLE) return { ...icon, cx: nx, cy: ny };
+                if (icon.renderKind === RENDER.CIRCLE) return { ...icon, cx: nx, cy: ny };
 
-            if (icon.renderKind === RENDER.WALL) {
-                // move wall by shifting both endpoints
-                const cx = (icon.x1 + icon.x2) / 2;
-                const cy = (icon.y1 + icon.y2) / 2;
-                const tx = nx - cx;
-                const ty = ny - cy;
-                return {
-                    ...icon,
-                    x1: clamp(icon.x1 + tx, 0, 100),
-                    y1: clamp(icon.y1 + ty, 0, 100),
-                    x2: clamp(icon.x2 + tx, 0, 100),
-                    y2: clamp(icon.y2 + ty, 0, 100),
-                };
-            }
+                if (icon.renderKind === RENDER.WALL) {
+                    const cx = (icon.x1 + icon.x2) / 2;
+                    const cy = (icon.y1 + icon.y2) / 2;
+                    const tx = nx - cx;
+                    const ty = ny - cy;
+                    return {
+                        ...icon,
+                        x1: clamp(icon.x1 + tx, 0, 100),
+                        y1: clamp(icon.y1 + ty, 0, 100),
+                        x2: clamp(icon.x2 + tx, 0, 100),
+                        y2: clamp(icon.y2 + ty, 0, 100),
+                    };
+                }
 
-            return { ...icon, x: nx, y: ny };
-        }));
+                return { ...icon, x: nx, y: ny };
+            })
+        );
     };
 
     const endMove = () => {
         if (!moving) return;
         setMoving(null);
-        // Commit move to history ONCE
         addToHistory(mapIcons, drawLines);
     };
 
     // --------------------------
-    // Icon editing (keep your controls, but store numbers)
+    // Selection edits (kept)
     // --------------------------
     const updateSelectedIcon = (prop, value) => {
         if (selectedIconId === null) return;
-        const v = (prop === 'rotation' || prop === 'scale') ? Number(value) : value;
-        setMapIcons(prev => prev.map(icon => icon.id === selectedIconId ? { ...icon, [prop]: v } : icon));
+        const v = prop === "rotation" || prop === "scale" ? Number(value) : value;
+        setMapIcons((prev) => prev.map((icon) => (icon.id === selectedIconId ? { ...icon, [prop]: v } : icon)));
     };
 
     const deleteSelectedIcon = () => {
         if (!selectedIconId) return;
-        const newIcons = mapIcons.filter(icon => icon.id !== selectedIconId);
+        const newIcons = mapIcons.filter((icon) => icon.id !== selectedIconId);
         addToHistory(newIcons, drawLines);
         setSelectedIconId(null);
     };
@@ -1756,18 +1794,18 @@ function StratBook() {
         setTool(TOOLS.SELECT);
         setPlacingItem(null);
         setPlacingWallStart(null);
-        addToast('Canvas Cleared');
+        addToast("Canvas Cleared");
     };
 
     // --------------------------
-    // Saving (keep your logic, but include walls/circles/labels too)
+    // Saving (kept + walls/circles)
     // --------------------------
     const saveStrat = async () => {
-        const tempCanvas = document.createElement('canvas');
-        tempCanvas.width = 1024; tempCanvas.height = 1024;
-        const ctx = tempCanvas.getContext('2d');
+        const tempCanvas = document.createElement("canvas");
+        tempCanvas.width = 1024;
+        tempCanvas.height = 1024;
+        const ctx = tempCanvas.getContext("2d");
 
-        // Map background
         if (mapImages[selectedMap]) {
             const img = new Image();
             img.src = mapImages[selectedMap];
@@ -1776,10 +1814,9 @@ function StratBook() {
             ctx.drawImage(img, 0, 0, 1024, 1024);
         }
 
-        // Draw freehand
         ctx.drawImage(canvasRef.current, 0, 0);
 
-        // Draw walls/circles first (so icons appear above)
+        // draw walls + circles first
         for (const icon of mapIcons) {
             if (icon.renderKind === RENDER.WALL) {
                 const x1 = (icon.x1 / 100) * 1024;
@@ -1787,12 +1824,12 @@ function StratBook() {
                 const x2 = (icon.x2 / 100) * 1024;
                 const y2 = (icon.y2 / 100) * 1024;
 
-                ctx.lineCap = 'round';
-                ctx.strokeStyle = icon.wallColor ?? 'rgba(60,255,122,0.35)';
+                ctx.lineCap = "round";
+                ctx.strokeStyle = icon.wallColor ?? "rgba(60,255,122,0.35)";
                 ctx.lineWidth = (icon.thickness ?? 2.2) * 10;
                 ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.stroke();
 
-                ctx.strokeStyle = icon.wallOutline ?? 'rgba(60,255,122,0.85)';
+                ctx.strokeStyle = icon.wallOutline ?? "rgba(60,255,122,0.85)";
                 ctx.lineWidth = Math.max(2, (icon.thickness ?? 2.2) * 2);
                 ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.stroke();
             }
@@ -1803,8 +1840,8 @@ function StratBook() {
                 const r = (icon.radius / 100) * 1024;
 
                 ctx.beginPath();
-                ctx.fillStyle = icon.fill ?? 'rgba(255,255,255,0.18)';
-                ctx.strokeStyle = icon.outline ?? 'rgba(255,255,255,0.55)';
+                ctx.fillStyle = icon.fill ?? "rgba(255,255,255,0.18)";
+                ctx.strokeStyle = icon.outline ?? "rgba(255,255,255,0.55)";
                 ctx.lineWidth = 2;
                 ctx.arc(cx, cy, r, 0, Math.PI * 2);
                 ctx.fill();
@@ -1812,10 +1849,9 @@ function StratBook() {
             }
         }
 
-        // Draw icons/labels/shapes
+        // draw icons/labels/shapes
         for (const icon of mapIcons) {
-            // labels (A/B/C/S)
-            if (icon.type === 'site_label') {
+            if (icon.type === "site_label") {
                 const px = (icon.x / 100) * 1024;
                 const py = (icon.y / 100) * 1024;
                 ctx.save();
@@ -1829,7 +1865,6 @@ function StratBook() {
                 continue;
             }
 
-            // skip walls/circles (already drawn)
             if (icon.renderKind === RENDER.WALL || icon.renderKind === RENDER.CIRCLE) continue;
 
             const px = (icon.x / 100) * 1024;
@@ -1840,25 +1875,29 @@ function StratBook() {
             const scale = Number(icon.scale) || 1;
             ctx.scale(scale, scale);
 
-            if (icon.type === 'agent' && agentData[icon.name]?.icon) {
-                const img = new Image(); img.crossOrigin = "anonymous"; img.src = agentData[icon.name].icon;
-                await new Promise(r => { img.onload = r; img.onerror = r; });
+            if (icon.type === "agent" && agentData[icon.name]?.icon) {
+                const img = new Image();
+                img.crossOrigin = "anonymous";
+                img.src = agentData[icon.name].icon;
+                await new Promise((r) => { img.onload = r; img.onerror = r; });
                 ctx.beginPath(); ctx.arc(0, 0, 25, 0, Math.PI * 2); ctx.clip();
                 ctx.drawImage(img, -25, -25, 50, 50);
-                ctx.strokeStyle = '#fff'; ctx.lineWidth = 2; ctx.stroke();
-            } else if (icon.type === 'ability') {
-                const img = new Image(); img.crossOrigin = "anonymous"; img.src = icon.icon;
-                await new Promise(r => { img.onload = r; img.onerror = r; });
+                ctx.strokeStyle = "#fff"; ctx.lineWidth = 2; ctx.stroke();
+            } else if (icon.type === "ability") {
+                const img = new Image();
+                img.crossOrigin = "anonymous";
+                img.src = icon.icon;
+                await new Promise((r) => { img.onload = r; img.onerror = r; });
                 ctx.drawImage(img, -20, -20, 40, 40);
             } else {
-                // your generic shapes util
+                // fallback shapes
                 ctx.beginPath();
-                if (icon.shape === 'ring') { ctx.arc(0, 0, 20, 0, Math.PI * 2); ctx.fillStyle = icon.color; ctx.fill(); ctx.lineWidth = 3; ctx.strokeStyle = icon.border; ctx.stroke(); }
-                else if (icon.shape === 'square') { ctx.fillStyle = icon.color; ctx.rect(-15, -15, 30, 30); ctx.fill(); ctx.lineWidth = 2; ctx.strokeStyle = icon.border; ctx.stroke(); }
-                else if (icon.shape === 'rect') { ctx.fillStyle = icon.color; ctx.rect(-25, -8, 50, 16); ctx.fill(); ctx.lineWidth = 2; ctx.strokeStyle = icon.border; ctx.stroke(); }
-                else if (icon.shape === 'cross') { ctx.strokeStyle = icon.border; ctx.lineWidth = 4; ctx.moveTo(-15, -15); ctx.lineTo(15, 15); ctx.moveTo(15, -15); ctx.lineTo(-15, 15); ctx.stroke(); }
-                else if (icon.shape === 'diamond') { ctx.fillStyle = icon.color; ctx.moveTo(0, -20); ctx.lineTo(20, 0); ctx.lineTo(0, 20); ctx.lineTo(-20, 0); ctx.fill(); ctx.lineWidth = 2; ctx.strokeStyle = icon.border; ctx.stroke(); }
-                else if (icon.shape === 'triangle') { ctx.fillStyle = icon.color; ctx.moveTo(0, -15); ctx.lineTo(15, 15); ctx.lineTo(-15, 15); ctx.fill(); }
+                if (icon.shape === "ring") { ctx.arc(0, 0, 20, 0, Math.PI * 2); ctx.fillStyle = icon.color; ctx.fill(); ctx.lineWidth = 3; ctx.strokeStyle = icon.border; ctx.stroke(); }
+                else if (icon.shape === "square") { ctx.fillStyle = icon.color; ctx.rect(-15, -15, 30, 30); ctx.fill(); ctx.lineWidth = 2; ctx.strokeStyle = icon.border; ctx.stroke(); }
+                else if (icon.shape === "rect") { ctx.fillStyle = icon.color; ctx.rect(-25, -8, 50, 16); ctx.fill(); ctx.lineWidth = 2; ctx.strokeStyle = icon.border; ctx.stroke(); }
+                else if (icon.shape === "cross") { ctx.strokeStyle = icon.border; ctx.lineWidth = 4; ctx.moveTo(-15, -15); ctx.lineTo(15, 15); ctx.moveTo(15, -15); ctx.lineTo(-15, 15); ctx.stroke(); }
+                else if (icon.shape === "diamond") { ctx.fillStyle = icon.color; ctx.moveTo(0, -20); ctx.lineTo(20, 0); ctx.lineTo(0, 20); ctx.lineTo(-20, 0); ctx.fill(); ctx.lineWidth = 2; ctx.strokeStyle = icon.border; ctx.stroke(); }
+                else if (icon.shape === "triangle") { ctx.fillStyle = icon.color; ctx.moveTo(0, -15); ctx.lineTo(15, 15); ctx.lineTo(-15, 15); ctx.fill(); }
                 else { ctx.fillStyle = icon.color; ctx.arc(0, 0, 15, 0, Math.PI * 2); ctx.fill(); }
             }
 
@@ -1866,57 +1905,68 @@ function StratBook() {
         }
 
         try {
-            const dataUrl = tempCanvas.toDataURL('image/jpeg', 0.7);
-            await addDoc(collection(db, 'strats'), { map: selectedMap, image: dataUrl, date: new Date().toISOString() });
-            addToast('Strat Saved!');
+            const dataUrl = tempCanvas.toDataURL("image/jpeg", 0.7);
+            await addDoc(collection(db, "strats"), { map: selectedMap, image: dataUrl, date: new Date().toISOString() });
+            addToast("Strat Saved!");
         } catch (e) {
             console.error(e);
-            addToast('Error saving (Image too large)', 'error');
+            addToast("Error saving (Image too large)", "error");
         }
     };
 
     const deleteStrat = async (id) => {
         if (viewingStrat) setViewingStrat(null);
-        await deleteDoc(doc(db, 'strats', id));
-        addToast('Strategy Deleted');
+        await deleteDoc(doc(db, "strats", id));
+        addToast("Strategy Deleted");
     };
 
     // --------------------------
-    // UI
-    // - Keep your structure (left palette + center board + saved)
-    // - Replace drag/drop with click-to-place tool
+    // UI (structure kept)
     // --------------------------
     return (
         <div className="h-full flex flex-col gap-6">
             <div className="flex gap-4 h-[75vh]">
-
-                {/* LEFT PALETTE */}
                 <Card className="w-64 flex flex-col gap-4 overflow-hidden !p-0">
                     <div className="bg-neutral-900 p-4 border-b border-white/10 space-y-3">
                         <h4 className="text-xs font-black text-red-500 uppercase tracking-widest">Tools</h4>
 
                         <div className="flex gap-2 flex-wrap">
-                            <button onClick={() => { setTool(TOOLS.SELECT); setPlacingItem(null); setPlacingWallStart(null); }} className={`px-3 py-1 rounded text-xs font-bold border ${tool === TOOLS.SELECT ? 'bg-red-600 border-red-400 text-white' : 'bg-black border-white/10 text-neutral-300'}`}>Select</button>
-                            <button onClick={() => { setTool(TOOLS.DRAW); setPlacingItem(null); setPlacingWallStart(null); }} className={`px-3 py-1 rounded text-xs font-bold border ${tool === TOOLS.DRAW ? 'bg-red-600 border-red-400 text-white' : 'bg-black border-white/10 text-neutral-300'}`}>Draw</button>
-                            <button onClick={() => { setTool(TOOLS.ERASE); setPlacingItem(null); setPlacingWallStart(null); }} className={`px-3 py-1 rounded text-xs font-bold border ${tool === TOOLS.ERASE ? 'bg-red-600 border-red-400 text-white' : 'bg-black border-white/10 text-neutral-300'}`}>Erase</button>
+                            <button
+                                onClick={() => { setTool(TOOLS.SELECT); setPlacingItem(null); setPlacingWallStart(null); }}
+                                className={`px-3 py-1 rounded text-xs font-bold border ${tool === TOOLS.SELECT ? "bg-red-600 border-red-400 text-white" : "bg-black border-white/10 text-neutral-300"}`}
+                            >
+                                Select
+                            </button>
+                            <button
+                                onClick={() => { setTool(TOOLS.DRAW); setPlacingItem(null); setPlacingWallStart(null); }}
+                                className={`px-3 py-1 rounded text-xs font-bold border ${tool === TOOLS.DRAW ? "bg-red-600 border-red-400 text-white" : "bg-black border-white/10 text-neutral-300"}`}
+                            >
+                                Draw
+                            </button>
+                            <button
+                                onClick={() => { setTool(TOOLS.ERASE); setPlacingItem(null); setPlacingWallStart(null); }}
+                                className={`px-3 py-1 rounded text-xs font-bold border ${tool === TOOLS.ERASE ? "bg-red-600 border-red-400 text-white" : "bg-black border-white/10 text-neutral-300"}`}
+                            >
+                                Erase
+                            </button>
                         </div>
 
                         <div className="flex items-center gap-2">
-                            <button onClick={() => setColor('#ef4444')} className={`w-6 h-6 rounded-full bg-red-500 border ${color === '#ef4444' ? 'border-white' : 'border-transparent'}`}></button>
-                            <button onClick={() => setColor('#3b82f6')} className={`w-6 h-6 rounded-full bg-blue-500 border ${color === '#3b82f6' ? 'border-white' : 'border-transparent'}`}></button>
-                            <button onClick={() => setColor('#ffffff')} className={`w-6 h-6 rounded-full bg-white border ${color === '#ffffff' ? 'border-white' : 'border-transparent'}`}></button>
+                            <button onClick={() => setColor("#ef4444")} className={`w-6 h-6 rounded-full bg-red-500 border ${color === "#ef4444" ? "border-white" : "border-transparent"}`}></button>
+                            <button onClick={() => setColor("#3b82f6")} className={`w-6 h-6 rounded-full bg-blue-500 border ${color === "#3b82f6" ? "border-white" : "border-transparent"}`}></button>
+                            <button onClick={() => setColor("#ffffff")} className={`w-6 h-6 rounded-full bg-white border ${color === "#ffffff" ? "border-white" : "border-transparent"}`}></button>
                             <div className="text-[10px] text-neutral-400 ml-auto">
-                                {tool === TOOLS.PLACE && placingItem ? 'Placing…' : tool.toUpperCase()}
+                                {tool === TOOLS.PLACE && placingItem ? "Placing…" : tool.toUpperCase()}
                             </div>
                         </div>
 
                         <div>
-                            <h4 className="text-xs font-black text-red-500 uppercase tracking-widest mb-2">Map Markers</h4>
+                            <h4 className="text-xs font-black text-red-500 uppercase tracking-widest mb-2">1. Map Markers</h4>
                             <div className="flex gap-2 justify-center">
-                                {['A', 'B', 'C', 'S'].map(l => (
+                                {["A", "B", "C", "S"].map((l) => (
                                     <button
                                         key={l}
-                                        onClick={() => beginPlace({ type: 'site_label', label: l })}
+                                        onClick={() => beginPlace({ type: "site_label", label: l })}
                                         className="w-8 h-8 bg-white/10 rounded flex items-center justify-center text-xs font-bold hover:bg-white/20 border border-white/20"
                                     >
                                         {l}
@@ -1927,28 +1977,26 @@ function StratBook() {
                     </div>
 
                     <div className="flex-1 overflow-y-auto custom-scrollbar p-4 space-y-6">
-                        {/* UTILITIES PALETTE (keep, but click-to-place) */}
                         <div>
-                            <h4 className="text-xs font-black text-red-500 uppercase tracking-widest mb-2">Generic Util</h4>
+                            <h4 className="text-xs font-black text-red-500 uppercase tracking-widest mb-2">2. Generic Util</h4>
                             <div className="grid grid-cols-4 gap-2">
-                                {UTILITY_TYPES.map(u => (
+                                {UTILITY_TYPES.map((u) => (
                                     <button
                                         key={u.id}
-                                        onClick={() => beginPlace({ type: 'util', ...u, renderKind: RENDER.SHAPE })}
+                                        onClick={() => beginPlace({ type: "util", ...u, renderKind: RENDER.SHAPE })}
                                         className="w-10 h-10 rounded border border-neutral-700 bg-black hover:border-white flex items-center justify-center"
                                         title={u.label}
                                     >
-                                        <div className="w-6 h-6" style={{ backgroundColor: u.color, border: `2px solid ${u.border}`, borderRadius: u.shape === 'ring' ? '50%' : '2px' }} />
+                                        <div className="w-6 h-6" style={{ backgroundColor: u.color, border: `2px solid ${u.border}`, borderRadius: u.shape === "ring" ? "50%" : "2px" }} />
                                     </button>
                                 ))}
                             </div>
                         </div>
 
-                        {/* ABILITIES PALETTE (keep, but special render for walls/circles) */}
                         <div>
-                            <h4 className="text-xs font-black text-red-500 uppercase tracking-widest mb-2">Abilities</h4>
-                            <Select value={selectedAgentForUtil} onChange={e => setSelectedAgentForUtil(e.target.value)} className="mb-2">
-                                {AGENT_NAMES.map(a => <option key={a} value={a}>{a}</option>)}
+                            <h4 className="text-xs font-black text-red-500 uppercase tracking-widest mb-2">3. Abilities</h4>
+                            <Select value={selectedAgentForUtil} onChange={(e) => setSelectedAgentForUtil(e.target.value)} className="mb-2">
+                                {AGENT_NAMES.map((a) => <option key={a} value={a}>{a}</option>)}
                             </Select>
 
                             <div className="grid grid-cols-4 gap-2">
@@ -1958,8 +2006,8 @@ function StratBook() {
                                         <button
                                             key={i}
                                             onClick={() => beginPlace(item)}
-                                            className={`aspect-square bg-black border rounded hover:border-red-500 flex items-center justify-center p-1 group ${item.renderKind !== RENDER.ICON ? 'border-blue-500/40' : 'border-neutral-800'}`}
-                                            title={`${ability.name}${item.renderKind !== RENDER.ICON ? ` (${item.renderKind})` : ''}`}
+                                            className={`aspect-square bg-black border rounded hover:border-red-500 flex items-center justify-center p-1 group ${item.renderKind !== RENDER.ICON ? "border-blue-500/40" : "border-neutral-800"}`}
+                                            title={`${ability.name}${item.renderKind !== RENDER.ICON ? ` (${item.renderKind})` : ""}`}
                                         >
                                             <img src={ability.icon} alt={ability.name} className="w-full h-full object-contain opacity-70 group-hover:opacity-100 transition-opacity" />
                                         </button>
@@ -1967,21 +2015,16 @@ function StratBook() {
                                 })}
                             </div>
 
-                            {placingWallStart && (
-                                <div className="mt-2 text-[10px] text-green-400">
-                                    Wall: click the end point
-                                </div>
-                            )}
+                            {placingWallStart && <div className="mt-2 text-[10px] text-green-400">Wall: click the end point</div>}
                         </div>
 
-                        {/* AGENTS PALETTE (keep, click-to-place) */}
                         <div>
-                            <h4 className="text-xs font-black text-red-500 uppercase tracking-widest mb-2">Agents</h4>
+                            <h4 className="text-xs font-black text-red-500 uppercase tracking-widest mb-2">4. Agents</h4>
                             <div className="grid grid-cols-4 gap-2">
-                                {AGENT_NAMES.map(a => (
+                                {AGENT_NAMES.map((a) => (
                                     <button
                                         key={a}
-                                        onClick={() => beginPlace({ type: 'agent', name: a })}
+                                        onClick={() => beginPlace({ type: "agent", name: a })}
                                         className="w-10 h-10 rounded-full border border-neutral-700 bg-black hover:border-white overflow-hidden"
                                         title={a}
                                     >
@@ -1993,7 +2036,6 @@ function StratBook() {
                     </div>
                 </Card>
 
-                {/* CENTER BOARD */}
                 <Card className="flex-1 flex flex-col relative items-center justify-center bg-black/80 !p-2">
                     <div className="w-full flex justify-between items-center mb-2 px-4 pt-2">
                         <h3 className="text-2xl font-black text-white">
@@ -2016,11 +2058,11 @@ function StratBook() {
                     </div>
 
                     <div className="w-full flex overflow-x-auto gap-2 pb-4 mb-2 px-4 custom-scrollbar">
-                        {MAPS.map(m => (
+                        {MAPS.map((m) => (
                             <button
                                 key={m}
                                 onClick={() => { setSelectedMap(m); clearCanvas(); setViewingStrat(null); }}
-                                className={`px-3 py-1 rounded-full text-xs font-bold ${selectedMap === m ? 'bg-red-600 text-white' : 'bg-black text-neutral-500'}`}
+                                className={`px-3 py-1 rounded-full text-xs font-bold ${selectedMap === m ? "bg-red-600 text-white" : "bg-black text-neutral-500"}`}
                             >
                                 {m}
                             </button>
@@ -2040,64 +2082,64 @@ function StratBook() {
                             <img src={mapImages[selectedMap]} alt="Map" className="absolute inset-0 w-full h-full object-cover pointer-events-none" />
                         )}
 
-                        {/* WALL + CIRCLE OVERLAY (SVG) */}
                         <svg className="absolute inset-0 w-full h-full z-5 pointer-events-none">
-                            {/* Walls */}
-                            {mapIcons.filter(i => i.renderKind === RENDER.WALL).map(w => (
+                            {mapIcons.filter((i) => i.renderKind === RENDER.WALL).map((w) => (
                                 <g key={w.id}>
-                                    <line x1={`${w.x1}%`} y1={`${w.y1}%`} x2={`${w.x2}%`} y2={`${w.y2}%`}
-                                        stroke={w.wallColor} strokeWidth={(w.thickness ?? 2.2) * 10} strokeLinecap="round" opacity="0.95" />
-                                    <line x1={`${w.x1}%`} y1={`${w.y1}%`} x2={`${w.x2}%`} y2={`${w.y2}%`}
-                                        stroke={w.wallOutline} strokeWidth={Math.max(2, (w.thickness ?? 2.2) * 2)} strokeLinecap="round" opacity="0.9" />
+                                    <line x1={`${w.x1}%`} y1={`${w.y1}%`} x2={`${w.x2}%`} y2={`${w.y2}%`} stroke={w.wallColor} strokeWidth={(w.thickness ?? 2.2) * 10} strokeLinecap="round" opacity="0.95" />
+                                    <line x1={`${w.x1}%`} y1={`${w.y1}%`} x2={`${w.x2}%`} y2={`${w.y2}%`} stroke={w.wallOutline} strokeWidth={Math.max(2, (w.thickness ?? 2.2) * 2)} strokeLinecap="round" opacity="0.9" />
                                 </g>
                             ))}
-                            {/* Circles */}
-                            {mapIcons.filter(i => i.renderKind === RENDER.CIRCLE).map(c => (
+
+                            {mapIcons.filter((i) => i.renderKind === RENDER.CIRCLE).map((c) => (
                                 <g key={c.id}>
                                     <circle cx={`${c.cx}%`} cy={`${c.cy}%`} r={`${c.radius}%`} fill={c.fill} stroke={c.outline} strokeWidth="2" />
                                 </g>
                             ))}
                         </svg>
 
-                        {/* DRAW CANVAS */}
                         <canvas
                             ref={canvasRef}
                             width={1024}
                             height={1024}
-                            className={`absolute inset-0 w-full h-full z-10 ${viewingStrat ? 'hidden' : ''}`}
-                            style={{ touchAction: 'none', cursor: tool === TOOLS.DRAW ? 'crosshair' : 'default' }}
+                            className={`absolute inset-0 w-full h-full z-10 ${viewingStrat ? "hidden" : ""}`}
+                            style={{ touchAction: "none", cursor: tool === TOOLS.DRAW ? "crosshair" : "default" }}
                             onPointerDown={startDraw}
                             onPointerMove={draw}
                             onPointerUp={stopDraw}
                             onPointerLeave={stopDraw}
                         />
 
-                        {/* ICONS LAYER */}
                         {!viewingStrat && mapIcons.map((icon) => {
-                            // WALL: show move handle + endpoint handles when selected
                             if (icon.renderKind === RENDER.WALL) {
                                 const cx = (icon.x1 + icon.x2) / 2;
                                 const cy = (icon.y1 + icon.y2) / 2;
                                 const isSel = selectedIconId === icon.id;
+
                                 return (
                                     <React.Fragment key={icon.id}>
-                                        {/* center handle for moving */}
                                         <div
                                             className="absolute z-20"
-                                            style={{ left: `${cx}%`, top: `${cy}%`, transform: 'translate(-50%,-50%)' }}
-                                            onPointerDown={(e) => startMoveEntity(e, icon, 'icon')}
+                                            style={{ left: `${cx}%`, top: `${cy}%`, transform: "translate(-50%,-50%)" }}
+                                            onPointerDown={(e) => startMoveEntity(e, icon, "icon")}
+                                            onClick={(e) => { e.stopPropagation(); setSelectedIconId(icon.id); }}
                                         >
-                                            <div className={`w-3 h-3 rounded-full ${isSel ? 'bg-green-400' : 'bg-white/50'} shadow`} />
+                                            <div className={`w-3 h-3 rounded-full ${isSel ? "bg-green-400" : "bg-white/50"} shadow`} />
                                         </div>
 
                                         {isSel && (
                                             <>
-                                                <div className="absolute z-30" style={{ left: `${icon.x1}%`, top: `${icon.y1}%`, transform: 'translate(-50%,-50%)' }}
-                                                    onPointerDown={(e) => startMoveEntity(e, icon, 'wallP1')}>
+                                                <div
+                                                    className="absolute z-30"
+                                                    style={{ left: `${icon.x1}%`, top: `${icon.y1}%`, transform: "translate(-50%,-50%)" }}
+                                                    onPointerDown={(e) => startMoveEntity(e, icon, "wallP1")}
+                                                >
                                                     <div className="w-4 h-4 rounded-full bg-black border-2 border-green-400 shadow" />
                                                 </div>
-                                                <div className="absolute z-30" style={{ left: `${icon.x2}%`, top: `${icon.y2}%`, transform: 'translate(-50%,-50%)' }}
-                                                    onPointerDown={(e) => startMoveEntity(e, icon, 'wallP2')}>
+                                                <div
+                                                    className="absolute z-30"
+                                                    style={{ left: `${icon.x2}%`, top: `${icon.y2}%`, transform: "translate(-50%,-50%)" }}
+                                                    onPointerDown={(e) => startMoveEntity(e, icon, "wallP2")}
+                                                >
                                                     <div className="w-4 h-4 rounded-full bg-black border-2 border-green-400 shadow" />
                                                 </div>
                                             </>
@@ -2106,66 +2148,63 @@ function StratBook() {
                                 );
                             }
 
-                            // CIRCLE: small move handle
                             if (icon.renderKind === RENDER.CIRCLE) {
                                 const isSel = selectedIconId === icon.id;
                                 return (
                                     <div
                                         key={icon.id}
                                         className="absolute z-20"
-                                        style={{ left: `${icon.cx}%`, top: `${icon.cy}%`, transform: 'translate(-50%,-50%)' }}
-                                        onPointerDown={(e) => startMoveEntity(e, icon, 'icon')}
+                                        style={{ left: `${icon.cx}%`, top: `${icon.cy}%`, transform: "translate(-50%,-50%)" }}
+                                        onPointerDown={(e) => startMoveEntity(e, icon, "icon")}
                                         onClick={(e) => { e.stopPropagation(); setSelectedIconId(icon.id); }}
                                     >
-                                        <div className={`w-3 h-3 rounded-full ${isSel ? 'bg-green-400' : 'bg-white/50'} shadow`} />
+                                        <div className={`w-3 h-3 rounded-full ${isSel ? "bg-green-400" : "bg-white/50"} shadow`} />
                                     </div>
                                 );
                             }
 
-                            // Label
-                            if (icon.type === 'site_label') {
+                            if (icon.type === "site_label") {
                                 return (
                                     <div
                                         key={icon.id}
                                         className="absolute z-20 cursor-grab"
-                                        style={{ left: `${icon.x}%`, top: `${icon.y}%`, transform: 'translate(-50%, -50%)' }}
-                                        onPointerDown={(e) => startMoveEntity(e, icon, 'icon')}
+                                        style={{ left: `${icon.x}%`, top: `${icon.y}%`, transform: "translate(-50%, -50%)" }}
+                                        onPointerDown={(e) => startMoveEntity(e, icon, "icon")}
                                         onClick={(e) => { e.stopPropagation(); setSelectedIconId(icon.id); }}
                                     >
-                                        <div className="text-4xl font-black text-white drop-shadow-lg select-none" style={{ textShadow: '0 0 10px black' }}>
+                                        <div className="text-4xl font-black text-white drop-shadow-lg select-none" style={{ textShadow: "0 0 10px black" }}>
                                             {icon.label}
                                         </div>
                                     </div>
                                 );
                             }
 
-                            // Normal icon-like entities
                             const isSelected = selectedIconId === icon.id;
+
                             return (
                                 <div
                                     key={icon.id}
-                                    className={`absolute ${tool === TOOLS.SELECT ? 'cursor-grab active:cursor-grabbing' : 'cursor-default'} group ${isSelected ? 'z-50' : 'z-20'}`}
+                                    className={`absolute ${tool === TOOLS.SELECT ? "cursor-grab active:cursor-grabbing" : "cursor-default"} group ${isSelected ? "z-50" : "z-20"}`}
                                     style={{
-                                        left: `${icon.x}%`, top: `${icon.y}%`,
+                                        left: `${icon.x}%`,
+                                        top: `${icon.y}%`,
                                         transform: `translate(-50%, -50%) rotate(${Number(icon.rotation || 0)}deg) scale(${Number(icon.scale || 1)})`,
-                                        transition: 'transform 0.1s'
+                                        transition: "transform 0.1s",
                                     }}
-                                    onPointerDown={(e) => startMoveEntity(e, icon, 'icon')}
+                                    onPointerDown={(e) => startMoveEntity(e, icon, "icon")}
                                     onClick={(e) => { e.stopPropagation(); setSelectedIconId(icon.id); }}
                                 >
-                                    {icon.type === 'agent' ? (
-                                        <img src={agentData[icon.name]?.icon} alt={icon.name} className={`w-10 h-10 rounded-full border-2 shadow-md pointer-events-none bg-black ${isSelected ? 'border-green-500' : 'border-white'}`} />
-                                    ) : icon.type === 'ability' ? (
-                                        <img src={icon.icon} alt={icon.name} className={`w-8 h-8 drop-shadow-md pointer-events-none ${isSelected ? 'brightness-125' : 'opacity-90'}`} />
+                                    {icon.type === "agent" ? (
+                                        <img
+                                            src={agentData[icon.name]?.icon}
+                                            alt={icon.name}
+                                            className={`w-10 h-10 rounded-full border-2 shadow-md pointer-events-none bg-black ${isSelected ? "border-green-500" : "border-white"}`}
+                                        />
+                                    ) : icon.type === "ability" ? (
+                                        <img src={icon.icon} alt={icon.name} className={`w-8 h-8 drop-shadow-md pointer-events-none ${isSelected ? "brightness-125" : "opacity-90"}`} />
                                     ) : (
-                                        (icon.shape === 'ring' ? <div className="w-12 h-12 rounded-full border-4 shadow-sm backdrop-blur-sm" style={{ backgroundColor: icon.color, borderColor: icon.border }} /> :
-                                            icon.shape === 'triangle' ? <div className="w-0 h-0 border-l-[10px] border-l-transparent border-r-[10px] border-r-transparent border-b-[20px]" style={{ borderBottomColor: icon.border }} /> :
-                                                icon.shape === 'square' ? <div className="w-8 h-8 border-2 shadow-md backdrop-blur-sm" style={{ backgroundColor: icon.color, borderColor: icon.border }} /> :
-                                                    icon.shape === 'rect' ? <div className="w-16 h-4 border-2 shadow-md backdrop-blur-sm" style={{ backgroundColor: icon.color, borderColor: icon.border }} /> :
-                                                        icon.shape === 'cross' ? <div className="text-3xl font-black leading-none drop-shadow-md" style={{ color: icon.border }}>X</div> :
-                                                            icon.shape === 'diamond' ? <div className="w-12 h-12 transform rotate-45 border-2 shadow-md backdrop-blur-sm" style={{ backgroundColor: icon.color, borderColor: icon.border }} /> :
-                                                                <div className="w-6 h-6 transform rotate-45" style={{ backgroundColor: icon.color }} />
-                                        )
+                                        renderShapeIcon(icon)
+                                    )}
                                 </div>
                             );
                         })}
@@ -2176,26 +2215,25 @@ function StratBook() {
                             </div>
                         )}
 
-                        {/* Selected controls (keep your floating panel, but numeric + delete) */}
                         {selectedIconId && (
-                            <div className="absolute bottom-4 left-1/2 -translate-x-1/2 bg-neutral-900/90 backdrop-blur border border-white/20 p-3 rounded-xl flex gap-4 items-center z-50 shadow-2xl animate-slide-in" onClick={e => e.stopPropagation()}>
+                            <div className="absolute bottom-4 left-1/2 -translate-x-1/2 bg-neutral-900/90 backdrop-blur border border-white/20 p-3 rounded-xl flex gap-4 items-center z-50 shadow-2xl animate-slide-in" onClick={(e) => e.stopPropagation()}>
                                 <div className="flex flex-col gap-1">
                                     <label className="text-[9px] font-bold text-neutral-400 uppercase">Rotate</label>
-                                    <input type="range" min="0" max="360" onChange={(e) => updateSelectedIcon('rotation', Number(e.target.value))} className="w-24 accent-red-600" />
+                                    <input type="range" min="0" max="360" onChange={(e) => updateSelectedIcon("rotation", Number(e.target.value))} className="w-24 accent-red-600" />
                                 </div>
                                 <div className="flex flex-col gap-1">
                                     <label className="text-[9px] font-bold text-neutral-400 uppercase">Size</label>
-                                    <input type="range" min="0.5" max="3" step="0.1" onChange={(e) => updateSelectedIcon('scale', Number(e.target.value))} className="w-24 accent-red-600" />
+                                    <input type="range" min="0.5" max="3" step="0.1" onChange={(e) => updateSelectedIcon("scale", Number(e.target.value))} className="w-24 accent-red-600" />
                                 </div>
-                                <button onClick={deleteSelectedIcon} className="bg-red-600 hover:bg-red-700 text-white p-2 rounded-lg text-xs font-bold">DELETE</button>
+                                <button onClick={deleteSelectedIcon} className="bg-red-600 hover:bg-red-700 text-white p-2 rounded-lg text-xs font-bold">
+                                    DELETE
+                                </button>
                             </div>
                         )}
-
                     </div>
                 </Card>
             </div>
 
-            {/* SAVED STRATS */}
             <div className="grid grid-cols-1 gap-6">
                 <Card>
                     <h4 className="text-lg font-bold text-white mb-4">SAVED STRATS</h4>
