@@ -1388,6 +1388,20 @@ function StratBook() {
     // --- Saved Strats ---
     const [savedStrats, setSavedStrats] = useState([]);
     const [viewingStrat, setViewingStrat] = useState(null);
+    const normKey = (s) => String(s ?? "").toLowerCase().replace(/\s+/g, " ").trim();
+
+    const agentIconSrc = (name) => {
+        if (!agentData) return null;
+
+        // direct hit
+        const direct = agentData[name]?.icon;
+        if (direct) return direct;
+
+        // normalized hit (handles "KAY/O" vs "Kayo" etc.)
+        const target = normKey(name);
+        const foundKey = Object.keys(agentData).find((k) => normKey(k) === target);
+        return foundKey ? agentData[foundKey]?.icon ?? null : null;
+    };
 
     // --------------------------
     // Safe helpers
