@@ -2165,7 +2165,7 @@ function StratBook() {
                                                         icon.shape === 'cross' ? <div className="text-3xl font-black leading-none drop-shadow-md" style={{ color: icon.border }}>X</div> :
                                                             icon.shape === 'diamond' ? <div className="w-12 h-12 transform rotate-45 border-2 shadow-md backdrop-blur-sm" style={{ backgroundColor: icon.color, borderColor: icon.border }} /> :
                                                                 <div className="w-6 h-6 transform rotate-45" style={{ backgroundColor: icon.color }} />
-                                        )}
+                                        )
                                 </div>
                             );
                         })}
