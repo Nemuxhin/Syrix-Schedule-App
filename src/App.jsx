@@ -2047,67 +2047,105 @@ function StratBook() {
     // UI (FULL)
     // --------------------------
     return (
-        <div className="h-full flex flex-col gap-6">
-            <div className="flex gap-4 h-[75vh]">
-                <Card className="w-64 flex flex-col gap-4 overflow-hidden !p-0">
-                    <div className="bg-neutral-900 p-4 border-b border-white/10 space-y-3">
-                        <h4 className="text-xs font-black text-red-500 uppercase tracking-widest">Tools</h4>
+        <div className="h-full w-full flex flex-col bg-black">
+            {/* TOP BAR */}
+            <div className="h-12 flex items-center justify-between px-4 border-b border-white/10 bg-neutral-950">
+                <div className="flex items-center gap-3">
+                    <div className="text-white font-black tracking-wide">STRATBOOK</div>
+                    <div className="text-[11px] text-neutral-400">ValoPlanner-style layout</div>
+                </div>
 
-                        <div className="flex gap-2 flex-wrap">
-                            <button
-                                onClick={() => { setTool(TOOLS.SELECT); setPlacingItem(null); setPlacingWallStart(null); }}
-                                className={`px-3 py-1 rounded text-xs font-bold border ${tool === TOOLS.SELECT ? "bg-red-600 border-red-400 text-white" : "bg-black border-white/10 text-neutral-300"}`}
-                            >
-                                Select
-                            </button>
-                            <button
-                                onClick={() => { setTool(TOOLS.DRAW); setPlacingItem(null); setPlacingWallStart(null); }}
-                                className={`px-3 py-1 rounded text-xs font-bold border ${tool === TOOLS.DRAW ? "bg-red-600 border-red-400 text-white" : "bg-black border-white/10 text-neutral-300"}`}
-                            >
-                                Draw
-                            </button>
-                            <button
-                                onClick={() => { setTool(TOOLS.ERASE); setPlacingItem(null); setPlacingWallStart(null); }}
-                                className={`px-3 py-1 rounded text-xs font-bold border ${tool === TOOLS.ERASE ? "bg-red-600 border-red-400 text-white" : "bg-black border-white/10 text-neutral-300"}`}
-                            >
-                                Erase
-                            </button>
-                        </div>
+                <div className="flex items-center gap-2">
+                    <ButtonSecondary onClick={handleUndo} disabled={historyStep === 0} className="px-3" title="Undo">
+                        ↩
+                    </ButtonSecondary>
+                    <ButtonSecondary onClick={handleRedo} disabled={historyStep === history.length - 1} className="px-3" title="Redo">
+                        ↪
+                    </ButtonSecondary>
 
-                        <div className="flex items-center gap-2">
-                            <button onClick={() => setColor("#ef4444")} className={`w-6 h-6 rounded-full bg-red-500 border ${color === "#ef4444" ? "border-white" : "border-transparent"}`} />
-                            <button onClick={() => setColor("#3b82f6")} className={`w-6 h-6 rounded-full bg-blue-500 border ${color === "#3b82f6" ? "border-white" : "border-transparent"}`} />
-                            <button onClick={() => setColor("#ffffff")} className={`w-6 h-6 rounded-full bg-white border ${color === "#ffffff" ? "border-white" : "border-transparent"}`} />
-                            <div className="text-[10px] text-neutral-400 ml-auto">
-                                {tool === TOOLS.PLACE && placingItem ? "Placing…" : tool.toUpperCase()}
-                            </div>
-                        </div>
+                    <div className="w-px h-6 bg-white/15 mx-2" />
 
+                    <ButtonSecondary onClick={clearCanvas} className="text-xs py-1 px-3">
+                        Clear
+                    </ButtonSecondary>
+                    <ButtonPrimary onClick={saveStrat} className="text-xs py-1 px-3">
+                        Save
+                    </ButtonPrimary>
+                </div>
+            </div>
+
+            {/* MAIN GRID */}
+            <div className="flex-1 grid grid-cols-[56px_280px_1fr_320px] gap-0">
+                {/* TOOL RAIL */}
+                <div className="border-r border-white/10 bg-neutral-950 flex flex-col items-center py-3 gap-3">
+                    <button
+                        onClick={() => { setTool(TOOLS.SELECT); setPlacingItem(null); setPlacingWallStart(null); }}
+                        className={`w-10 h-10 rounded-lg border flex items-center justify-center text-xs font-black
+            ${tool === TOOLS.SELECT ? "bg-red-600 border-red-400 text-white" : "bg-black border-white/10 text-neutral-300 hover:border-white/30"}`}
+                        title="Select"
+                    >
+                        ⬚
+                    </button>
+                    <button
+                        onClick={() => { setTool(TOOLS.DRAW); setPlacingItem(null); setPlacingWallStart(null); }}
+                        className={`w-10 h-10 rounded-lg border flex items-center justify-center text-xs font-black
+            ${tool === TOOLS.DRAW ? "bg-red-600 border-red-400 text-white" : "bg-black border-white/10 text-neutral-300 hover:border-white/30"}`}
+                        title="Draw"
+                    >
+                        ✎
+                    </button>
+                    <button
+                        onClick={() => { setTool(TOOLS.ERASE); setPlacingItem(null); setPlacingWallStart(null); }}
+                        className={`w-10 h-10 rounded-lg border flex items-center justify-center text-xs font-black
+            ${tool === TOOLS.ERASE ? "bg-red-600 border-red-400 text-white" : "bg-black border-white/10 text-neutral-300 hover:border-white/30"}`}
+                        title="Erase"
+                    >
+                        ⌫
+                    </button>
+
+                    <div className="w-8 h-px bg-white/10 my-2" />
+
+                    <button onClick={() => setColor("#ef4444")} className={`w-8 h-8 rounded-full bg-red-500 border ${color === "#ef4444" ? "border-white" : "border-transparent"}`} title="Red" />
+                    <button onClick={() => setColor("#3b82f6")} className={`w-8 h-8 rounded-full bg-blue-500 border ${color === "#3b82f6" ? "border-white" : "border-transparent"}`} title="Blue" />
+                    <button onClick={() => setColor("#ffffff")} className={`w-8 h-8 rounded-full bg-white border ${color === "#ffffff" ? "border-white" : "border-transparent"}`} title="White" />
+
+                    <div className="mt-auto text-[9px] text-neutral-500 pb-2">
+                        {tool === TOOLS.PLACE && placingItem ? "PLACING" : tool.toUpperCase()}
+                    </div>
+                </div>
+
+                {/* LEFT PALETTE */}
+                <div className="border-r border-white/10 bg-neutral-950 flex flex-col">
+                    <div className="p-3 border-b border-white/10">
+                        <div className="text-[11px] font-black text-red-500 uppercase tracking-widest">Palette</div>
+                    </div>
+
+                    <div className="flex-1 overflow-y-auto custom-scrollbar p-3 space-y-6">
+                        {/* Labels */}
                         <div>
-                            <h4 className="text-xs font-black text-red-500 uppercase tracking-widest mb-2">1. Map Markers</h4>
-                            <div className="flex gap-2 justify-center">
+                            <div className="text-[11px] font-black text-neutral-300 mb-2">Site Labels</div>
+                            <div className="flex gap-2">
                                 {["A", "B", "C", "S"].map((l) => (
                                     <button
                                         key={l}
                                         onClick={() => beginPlace({ type: "site_label", label: l })}
-                                        className="w-8 h-8 bg-white/10 rounded flex items-center justify-center text-xs font-bold hover:bg-white/20 border border-white/20"
+                                        className="w-10 h-10 bg-white/5 rounded-lg border border-white/10 hover:border-white/30 text-white font-black"
                                     >
                                         {l}
                                     </button>
                                 ))}
                             </div>
                         </div>
-                    </div>
 
-                    <div className="flex-1 overflow-y-auto custom-scrollbar p-4 space-y-6">
+                        {/* Shapes */}
                         <div>
-                            <h4 className="text-xs font-black text-red-500 uppercase tracking-widest mb-2">2. Generic Util</h4>
-                            <div className="grid grid-cols-4 gap-2">
+                            <div className="text-[11px] font-black text-neutral-300 mb-2">Generic Util</div>
+                            <div className="grid grid-cols-5 gap-2">
                                 {UTILITY_TYPES.map((u) => (
                                     <button
                                         key={u.id}
                                         onClick={() => beginPlace({ type: "util", ...u, renderKind: RENDER.SHAPE })}
-                                        className="w-10 h-10 rounded border border-neutral-700 bg-black hover:border-white flex items-center justify-center"
+                                        className="w-10 h-10 rounded-lg border border-white/10 bg-black hover:border-white/30 flex items-center justify-center"
                                         title={u.label}
                                     >
                                         <div
@@ -2123,20 +2161,22 @@ function StratBook() {
                             </div>
                         </div>
 
+                        {/* Abilities */}
                         <div>
-                            <h4 className="text-xs font-black text-red-500 uppercase tracking-widest mb-2">3. Abilities</h4>
+                            <div className="text-[11px] font-black text-neutral-300 mb-2">Abilities</div>
                             <Select value={selectedAgentForUtil} onChange={(e) => setSelectedAgentForUtil(e.target.value)} className="mb-2">
                                 {AGENT_NAMES.map((a) => <option key={a} value={a}>{a}</option>)}
                             </Select>
 
-                            <div className="grid grid-cols-4 gap-2">
+                            <div className="grid grid-cols-5 gap-2">
                                 {(agentData?.[selectedAgentForUtil]?.abilities ?? []).map((ability, i) => {
                                     const item = abilityRender(selectedAgentForUtil, ability);
                                     return (
                                         <button
                                             key={i}
                                             onClick={() => beginPlace(item)}
-                                            className={`aspect-square bg-black border rounded hover:border-red-500 flex items-center justify-center p-1 group ${item.renderKind !== RENDER.ICON ? "border-blue-500/40" : "border-neutral-800"}`}
+                                            className={`aspect-square bg-black border rounded-lg hover:border-red-500 flex items-center justify-center p-1 group
+                      ${item.renderKind !== RENDER.ICON ? "border-blue-500/40" : "border-white/10"}`}
                                             title={`${ability.name}${item.renderKind !== RENDER.ICON ? ` (${item.renderKind})` : ""}`}
                                         >
                                             <img src={ability.icon} alt={ability.name} className="w-full h-full object-contain opacity-70 group-hover:opacity-100 transition-opacity" />
@@ -2148,14 +2188,15 @@ function StratBook() {
                             {placingWallStart && <div className="mt-2 text-[10px] text-green-400">Wall: click the end point</div>}
                         </div>
 
+                        {/* Agents */}
                         <div>
-                            <h4 className="text-xs font-black text-red-500 uppercase tracking-widest mb-2">4. Agents</h4>
-                            <div className="grid grid-cols-4 gap-2">
+                            <div className="text-[11px] font-black text-neutral-300 mb-2">Agents</div>
+                            <div className="grid grid-cols-5 gap-2">
                                 {AGENT_NAMES.map((a) => (
                                     <button
                                         key={a}
                                         onClick={() => beginPlace({ type: "agent", name: a })}
-                                        className="w-10 h-10 rounded-full border border-neutral-700 bg-black hover:border-white overflow-hidden"
+                                        className="w-10 h-10 rounded-full border border-white/10 bg-black hover:border-white/30 overflow-hidden"
                                         title={a}
                                     >
                                         <img src={agentData?.[a]?.icon} alt={a} className="w-full h-full object-cover" />
@@ -2164,236 +2205,228 @@ function StratBook() {
                             </div>
                         </div>
                     </div>
-                </Card>
+                </div>
 
-                <Card className="flex-1 flex flex-col relative items-center justify-center bg-black/80 !p-2">
-                    <div className="w-full flex justify-between items-center mb-2 px-4 pt-2">
-                        <h3 className="text-2xl font-black text-white">
-                            STRATBOOK {viewingStrat && <span className="text-red-500 text-sm ml-2">(VIEWING)</span>}
-                        </h3>
-
-                        <div className="flex gap-2">
-                            {!viewingStrat ? (
-                                <>
-                                    <ButtonSecondary onClick={handleUndo} disabled={historyStep === 0} className="px-3" title="Undo">↩</ButtonSecondary>
-                                    <ButtonSecondary onClick={handleRedo} disabled={historyStep === history.length - 1} className="px-3" title="Redo">↪</ButtonSecondary>
-                                    <div className="w-px h-6 bg-white/20 mx-2" />
-                                    <ButtonSecondary onClick={clearCanvas} className="text-xs py-1 px-3">Clear</ButtonSecondary>
-                                    <ButtonPrimary onClick={saveStrat} className="text-xs py-1 px-3">Save</ButtonPrimary>
-                                </>
-                            ) : (
-                                <ButtonSecondary onClick={() => setViewingStrat(null)} className="text-xs bg-red-900/50 border-red-500 text-white">Close</ButtonSecondary>
-                            )}
-                        </div>
-                    </div>
-
-                    <div className="w-full flex overflow-x-auto gap-2 pb-4 mb-2 px-4 custom-scrollbar">
+                {/* CENTER MAP */}
+                <div className="bg-neutral-950 flex flex-col">
+                    <div className="p-3 border-b border-white/10 flex items-center gap-2 overflow-x-auto custom-scrollbar">
                         {MAPS.map((m) => (
                             <button
                                 key={m}
                                 onClick={() => { setSelectedMap(m); clearCanvas(); setViewingStrat(null); }}
-                                className={`px-3 py-1 rounded-full text-xs font-bold ${selectedMap === m ? "bg-red-600 text-white" : "bg-black text-neutral-500"}`}
+                                className={`px-3 py-1 rounded-full text-xs font-bold ${selectedMap === m ? "bg-red-600 text-white" : "bg-black text-neutral-400 border border-white/10 hover:border-white/30"}`}
                             >
                                 {m}
                             </button>
                         ))}
+                        <div className="ml-auto text-[11px] text-neutral-500">
+                            {viewingStrat ? "Viewing saved strat" : "Edit mode"}
+                        </div>
                     </div>
 
-                    <div
-                        ref={containerRef}
-                        className="relative h-full aspect-square bg-neutral-900 rounded-xl overflow-hidden border border-neutral-800 shadow-2xl mx-auto"
-                        onPointerDown={handleMapPointerDown}
-                        onPointerMove={onMovePointer}
-                        onPointerUp={endMove}
-                        onPointerLeave={endMove}
-                        onClick={() => setSelectedIconId(null)}
-                    >
-                        {mapImages?.[selectedMap] && (
-                            <img src={mapImages[selectedMap]} alt="Map" className="absolute inset-0 w-full h-full object-cover pointer-events-none" />
-                        )}
+                    <div className="flex-1 p-4">
+                        <div
+                            ref={containerRef}
+                            className="relative h-full aspect-square mx-auto rounded-xl overflow-hidden border border-white/10 bg-neutral-900 shadow-2xl"
+                            onPointerDown={handleMapPointerDown}
+                            onPointerMove={onMovePointer}
+                            onPointerUp={endMove}
+                            onPointerLeave={endMove}
+                            onClick={() => setSelectedIconId(null)}
+                        >
+                            {mapImages?.[selectedMap] && (
+                                <img src={mapImages[selectedMap]} alt="Map" className="absolute inset-0 w-full h-full object-cover pointer-events-none" />
+                            )}
 
-                        {/* SVG overlays for walls + circles */}
-                        <svg className="absolute inset-0 w-full h-full z-5 pointer-events-none">
-                            {mapIcons.filter((i) => i.renderKind === RENDER.WALL).map((w) => (
-                                <g key={w.id}>
-                                    <line x1={`${w.x1}%`} y1={`${w.y1}%`} x2={`${w.x2}%`} y2={`${w.y2}%`} stroke={w.wallColor} strokeWidth={(w.thickness ?? 2.2) * 10} strokeLinecap="round" opacity="0.95" />
-                                    <line x1={`${w.x1}%`} y1={`${w.y1}%`} x2={`${w.x2}%`} y2={`${w.y2}%`} stroke={w.wallOutline} strokeWidth={Math.max(2, (w.thickness ?? 2.2) * 2)} strokeLinecap="round" opacity="0.9" />
-                                </g>
-                            ))}
+                            {/* SVG overlays */}
+                            <svg className="absolute inset-0 w-full h-full z-5 pointer-events-none">
+                                {mapIcons.filter((i) => i.renderKind === RENDER.WALL).map((w) => (
+                                    <g key={w.id}>
+                                        <line x1={`${w.x1}%`} y1={`${w.y1}%`} x2={`${w.x2}%`} y2={`${w.y2}%`} stroke={w.wallColor} strokeWidth={(w.thickness ?? 2.2) * 10} strokeLinecap="round" opacity="0.95" />
+                                        <line x1={`${w.x1}%`} y1={`${w.y1}%`} x2={`${w.x2}%`} y2={`${w.y2}%`} stroke={w.wallOutline} strokeWidth={Math.max(2, (w.thickness ?? 2.2) * 2)} strokeLinecap="round" opacity="0.9" />
+                                    </g>
+                                ))}
+                                {mapIcons.filter((i) => i.renderKind === RENDER.CIRCLE).map((c) => (
+                                    <g key={c.id}>
+                                        <circle cx={`${c.cx}%`} cy={`${c.cy}%`} r={`${c.radius}%`} fill={c.fill} stroke={c.outline} strokeWidth="2" />
+                                    </g>
+                                ))}
+                            </svg>
 
-                            {mapIcons.filter((i) => i.renderKind === RENDER.CIRCLE).map((c) => (
-                                <g key={c.id}>
-                                    <circle cx={`${c.cx}%`} cy={`${c.cy}%`} r={`${c.radius}%`} fill={c.fill} stroke={c.outline} strokeWidth="2" />
-                                </g>
-                            ))}
-                        </svg>
+                            {/* Draw layer */}
+                            <canvas
+                                ref={canvasRef}
+                                width={1024}
+                                height={1024}
+                                className={`absolute inset-0 w-full h-full z-10 ${viewingStrat ? "hidden" : ""}`}
+                                style={{ touchAction: "none", cursor: tool === TOOLS.DRAW ? "crosshair" : "default" }}
+                                onPointerDown={startDraw}
+                                onPointerMove={draw}
+                                onPointerUp={stopDraw}
+                                onPointerLeave={stopDraw}
+                            />
 
-                        {/* Draw layer */}
-                        <canvas
-                            ref={canvasRef}
-                            width={1024}
-                            height={1024}
-                            className={`absolute inset-0 w-full h-full z-10 ${viewingStrat ? "hidden" : ""}`}
-                            style={{ touchAction: "none", cursor: tool === TOOLS.DRAW ? "crosshair" : "default" }}
-                            onPointerDown={startDraw}
-                            onPointerMove={draw}
-                            onPointerUp={stopDraw}
-                            onPointerLeave={stopDraw}
-                        />
+                            {/* Entities layer (same logic as before) */}
+                            {!viewingStrat && mapIcons.map((icon) => {
+                                // keep your existing rendering logic exactly:
+                                if (icon.renderKind === RENDER.WALL) {
+                                    const cx = (icon.x1 + icon.x2) / 2;
+                                    const cy = (icon.y1 + icon.y2) / 2;
+                                    const isSel = selectedIconId === icon.id;
 
-                        {/* DOM layer */}
-                        {!viewingStrat && mapIcons.map((icon) => {
-                            if (icon.renderKind === RENDER.WALL) {
-                                const cx = (icon.x1 + icon.x2) / 2;
-                                const cy = (icon.y1 + icon.y2) / 2;
-                                const isSel = selectedIconId === icon.id;
+                                    return (
+                                        <React.Fragment key={icon.id}>
+                                            <div
+                                                className="absolute z-20"
+                                                style={{ left: `${cx}%`, top: `${cy}%`, transform: "translate(-50%,-50%)" }}
+                                                onPointerDown={(e) => startMoveEntity(e, icon, "icon")}
+                                                onClick={(e) => { e.stopPropagation(); setSelectedIconId(icon.id); }}
+                                            >
+                                                <div className={`w-3 h-3 rounded-full ${isSel ? "bg-green-400" : "bg-white/50"} shadow`} />
+                                            </div>
 
-                                return (
-                                    <React.Fragment key={icon.id}>
+                                            {isSel && (
+                                                <>
+                                                    <div
+                                                        className="absolute z-30"
+                                                        style={{ left: `${icon.x1}%`, top: `${icon.y1}%`, transform: "translate(-50%,-50%)" }}
+                                                        onPointerDown={(e) => startMoveEntity(e, icon, "wallP1")}
+                                                    >
+                                                        <div className="w-4 h-4 rounded-full bg-black border-2 border-green-400 shadow" />
+                                                    </div>
+                                                    <div
+                                                        className="absolute z-30"
+                                                        style={{ left: `${icon.x2}%`, top: `${icon.y2}%`, transform: "translate(-50%,-50%)" }}
+                                                        onPointerDown={(e) => startMoveEntity(e, icon, "wallP2")}
+                                                    >
+                                                        <div className="w-4 h-4 rounded-full bg-black border-2 border-green-400 shadow" />
+                                                    </div>
+                                                </>
+                                            )}
+                                        </React.Fragment>
+                                    );
+                                }
+
+                                if (icon.renderKind === RENDER.CIRCLE) {
+                                    const isSel = selectedIconId === icon.id;
+                                    return (
                                         <div
+                                            key={icon.id}
                                             className="absolute z-20"
-                                            style={{ left: `${cx}%`, top: `${cy}%`, transform: "translate(-50%,-50%)" }}
+                                            style={{ left: `${icon.cx}%`, top: `${icon.cy}%`, transform: "translate(-50%,-50%)" }}
                                             onPointerDown={(e) => startMoveEntity(e, icon, "icon")}
                                             onClick={(e) => { e.stopPropagation(); setSelectedIconId(icon.id); }}
                                         >
                                             <div className={`w-3 h-3 rounded-full ${isSel ? "bg-green-400" : "bg-white/50"} shadow`} />
                                         </div>
+                                    );
+                                }
 
-                                        {isSel && (
-                                            <>
-                                                <div
-                                                    className="absolute z-30"
-                                                    style={{ left: `${icon.x1}%`, top: `${icon.y1}%`, transform: "translate(-50%,-50%)" }}
-                                                    onPointerDown={(e) => startMoveEntity(e, icon, "wallP1")}
-                                                >
-                                                    <div className="w-4 h-4 rounded-full bg-black border-2 border-green-400 shadow" />
-                                                </div>
-                                                <div
-                                                    className="absolute z-30"
-                                                    style={{ left: `${icon.x2}%`, top: `${icon.y2}%`, transform: "translate(-50%,-50%)" }}
-                                                    onPointerDown={(e) => startMoveEntity(e, icon, "wallP2")}
-                                                >
-                                                    <div className="w-4 h-4 rounded-full bg-black border-2 border-green-400 shadow" />
-                                                </div>
-                                            </>
-                                        )}
-                                    </React.Fragment>
-                                );
-                            }
-
-                            if (icon.renderKind === RENDER.CIRCLE) {
-                                const isSel = selectedIconId === icon.id;
-                                return (
-                                    <div
-                                        key={icon.id}
-                                        className="absolute z-20"
-                                        style={{ left: `${icon.cx}%`, top: `${icon.cy}%`, transform: "translate(-50%,-50%)" }}
-                                        onPointerDown={(e) => startMoveEntity(e, icon, "icon")}
-                                        onClick={(e) => { e.stopPropagation(); setSelectedIconId(icon.id); }}
-                                    >
-                                        <div className={`w-3 h-3 rounded-full ${isSel ? "bg-green-400" : "bg-white/50"} shadow`} />
-                                    </div>
-                                );
-                            }
-
-                            if (icon.type === "site_label") {
-                                return (
-                                    <div
-                                        key={icon.id}
-                                        className="absolute z-20 cursor-grab"
-                                        style={{ left: `${icon.x}%`, top: `${icon.y}%`, transform: "translate(-50%, -50%)" }}
-                                        onPointerDown={(e) => startMoveEntity(e, icon, "icon")}
-                                        onClick={(e) => { e.stopPropagation(); setSelectedIconId(icon.id); }}
-                                    >
-                                        <div className="text-4xl font-black text-white drop-shadow-lg select-none" style={{ textShadow: "0 0 10px black" }}>
-                                            {icon.label}
+                                if (icon.type === "site_label") {
+                                    return (
+                                        <div
+                                            key={icon.id}
+                                            className="absolute z-20 cursor-grab"
+                                            style={{ left: `${icon.x}%`, top: `${icon.y}%`, transform: "translate(-50%, -50%)" }}
+                                            onPointerDown={(e) => startMoveEntity(e, icon, "icon")}
+                                            onClick={(e) => { e.stopPropagation(); setSelectedIconId(icon.id); }}
+                                        >
+                                            <div className="text-4xl font-black text-white drop-shadow-lg select-none" style={{ textShadow: "0 0 10px black" }}>
+                                                {icon.label}
+                                            </div>
                                         </div>
+                                    );
+                                }
+
+                                const isSelected = selectedIconId === icon.id;
+
+                                return (
+                                    <div
+                                        key={icon.id}
+                                        className={`absolute ${tool === TOOLS.SELECT ? "cursor-grab active:cursor-grabbing" : "cursor-default"} group ${isSelected ? "z-50" : "z-20"}`}
+                                        style={{
+                                            left: `${icon.x}%`,
+                                            top: `${icon.y}%`,
+                                            transform: `translate(-50%, -50%) rotate(${Number(icon.rotation || 0)}deg) scale(${Number(icon.scale || 1)})`,
+                                            transition: "transform 0.1s",
+                                        }}
+                                        onPointerDown={(e) => startMoveEntity(e, icon, "icon")}
+                                        onClick={(e) => { e.stopPropagation(); setSelectedIconId(icon.id); }}
+                                    >
+                                        {icon.type === "agent" ? (
+                                            <img
+                                                src={agentData?.[icon.name]?.icon}
+                                                alt={icon.name}
+                                                className={`w-10 h-10 rounded-full border-2 shadow-md pointer-events-none bg-black ${isSelected ? "border-green-500" : "border-white"}`}
+                                            />
+                                        ) : icon.type === "ability" ? (
+                                            <img src={icon.icon} alt={icon.name} className={`w-8 h-8 drop-shadow-md pointer-events-none ${isSelected ? "brightness-125" : "opacity-90"}`} />
+                                        ) : (
+                                            renderShapeIcon(icon)
+                                        )}
                                     </div>
                                 );
-                            }
+                            })}
 
-                            const isSelected = selectedIconId === icon.id;
-
-                            return (
-                                <div
-                                    key={icon.id}
-                                    className={`absolute ${tool === TOOLS.SELECT ? "cursor-grab active:cursor-grabbing" : "cursor-default"} group ${isSelected ? "z-50" : "z-20"}`}
-                                    style={{
-                                        left: `${icon.x}%`,
-                                        top: `${icon.y}%`,
-                                        transform: `translate(-50%, -50%) rotate(${Number(icon.rotation || 0)}deg) scale(${Number(icon.scale || 1)})`,
-                                        transition: "transform 0.1s",
-                                    }}
-                                    onPointerDown={(e) => startMoveEntity(e, icon, "icon")}
-                                    onClick={(e) => { e.stopPropagation(); setSelectedIconId(icon.id); }}
-                                >
-                                    {icon.type === "agent" ? (
-                                        <img
-                                            src={agentData?.[icon.name]?.icon}
-                                            alt={icon.name}
-                                            className={`w-10 h-10 rounded-full border-2 shadow-md pointer-events-none bg-black ${isSelected ? "border-green-500" : "border-white"}`}
-                                        />
-                                    ) : icon.type === "ability" ? (
-                                        <img src={icon.icon} alt={icon.name} className={`w-8 h-8 drop-shadow-md pointer-events-none ${isSelected ? "brightness-125" : "opacity-90"}`} />
-                                    ) : (
-                                        renderShapeIcon(icon)
-                                    )}
+                            {viewingStrat && (
+                                <div className="absolute inset-0 z-30 bg-black flex items-center justify-center">
+                                    <img src={viewingStrat} alt="Saved Strat" className="w-full h-full object-contain" />
                                 </div>
-                            );
-                        })}
+                            )}
+                        </div>
+                    </div>
+                </div>
 
-                        {viewingStrat && (
-                            <div className="absolute inset-0 z-30 bg-black flex items-center justify-center">
-                                <img src={viewingStrat} alt="Saved Strat" className="w-full h-full object-contain" />
+                {/* RIGHT INSPECTOR */}
+                <div className="border-l border-white/10 bg-neutral-950 flex flex-col">
+                    <div className="p-3 border-b border-white/10">
+                        <div className="text-[11px] font-black text-red-500 uppercase tracking-widest">Inspector</div>
+                    </div>
+
+                    <div className="flex-1 p-3 overflow-y-auto custom-scrollbar">
+                        {!selectedIconId ? (
+                            <div className="text-sm text-neutral-400">
+                                Select something on the map to edit it.
                             </div>
-                        )}
+                        ) : (
+                            <div className="space-y-4">
+                                <div className="text-white font-bold text-sm">Selected</div>
 
-                        {selectedIconId && (
-                            <div
-                                className="absolute bottom-4 left-1/2 -translate-x-1/2 bg-neutral-900/90 backdrop-blur border border-white/20 p-3 rounded-xl flex gap-4 items-center z-50 shadow-2xl animate-slide-in"
-                                onClick={(e) => e.stopPropagation()}
-                            >
-                                <div className="flex flex-col gap-1">
-                                    <label className="text-[9px] font-bold text-neutral-400 uppercase">Rotate</label>
-                                    <input type="range" min="0" max="360" onChange={(e) => updateSelectedIcon("rotation", Number(e.target.value))} className="w-24 accent-red-600" />
+                                <div className="bg-black/40 border border-white/10 rounded-xl p-3 space-y-3">
+                                    <div className="flex flex-col gap-1">
+                                        <label className="text-[10px] font-bold text-neutral-400 uppercase">Rotate</label>
+                                        <input type="range" min="0" max="360" onChange={(e) => updateSelectedIcon("rotation", Number(e.target.value))} className="w-full accent-red-600" />
+                                    </div>
+                                    <div className="flex flex-col gap-1">
+                                        <label className="text-[10px] font-bold text-neutral-400 uppercase">Size</label>
+                                        <input type="range" min="0.5" max="3" step="0.1" onChange={(e) => updateSelectedIcon("scale", Number(e.target.value))} className="w-full accent-red-600" />
+                                    </div>
+
+                                    <button onClick={deleteSelectedIcon} className="w-full bg-red-600 hover:bg-red-700 text-white py-2 rounded-lg text-xs font-bold">
+                                        DELETE
+                                    </button>
                                 </div>
-                                <div className="flex flex-col gap-1">
-                                    <label className="text-[9px] font-bold text-neutral-400 uppercase">Size</label>
-                                    <input type="range" min="0.5" max="3" step="0.1" onChange={(e) => updateSelectedIcon("scale", Number(e.target.value))} className="w-24 accent-red-600" />
-                                </div>
-                                <button onClick={deleteSelectedIcon} className="bg-red-600 hover:bg-red-700 text-white p-2 rounded-lg text-xs font-bold">
-                                    DELETE
-                                </button>
                             </div>
                         )}
                     </div>
-                </Card>
-            </div>
 
-            <div className="grid grid-cols-1 gap-6">
-                <Card>
-                    <h4 className="text-lg font-bold text-white mb-4">SAVED STRATS</h4>
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4 max-h-60 overflow-y-auto custom-scrollbar">
-                        {savedStrats.map((s) => (
-                            <div
-                                key={s.id}
-                                onClick={() => setViewingStrat(s.image)}
-                                className="bg-black/50 p-2 rounded-lg border border-neutral-800 hover:border-red-500 cursor-pointer group relative aspect-square"
-                            >
-                                <img src={s.image} alt="saved" className="w-full h-full object-cover rounded opacity-60 group-hover:opacity-100" />
-                                <div className="absolute bottom-0 left-0 w-full bg-black/80 p-1 text-[9px] text-center text-white truncate">
-                                    {new Date(s.date).toLocaleDateString()}
-                                </div>
+                    {/* SAVED STRATS MINI GRID */}
+                    <div className="border-t border-white/10 p-3">
+                        <div className="text-[11px] font-black text-neutral-300 mb-2">Saved</div>
+                        <div className="grid grid-cols-3 gap-2 max-h-40 overflow-y-auto custom-scrollbar">
+                            {savedStrats.map((s) => (
                                 <button
-                                    onClick={(e) => { e.stopPropagation(); deleteStrat(s.id); }}
-                                    className="absolute top-1 right-1 text-red-500 bg-black rounded-full w-5 h-5 flex items-center justify-center font-bold text-xs opacity-0 group-hover:opacity-100"
+                                    key={s.id}
+                                    onClick={() => setViewingStrat(s.image)}
+                                    className="aspect-square rounded-lg overflow-hidden border border-white/10 hover:border-red-500"
+                                    title={new Date(s.date).toLocaleDateString()}
                                 >
-                                    ×
+                                    <img src={s.image} alt="saved" className="w-full h-full object-cover" />
                                 </button>
-                            </div>
-                        ))}
+                            ))}
+                        </div>
                     </div>
-                </Card>
+                </div>
             </div>
         </div>
     );
