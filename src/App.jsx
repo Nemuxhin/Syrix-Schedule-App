@@ -2637,52 +2637,54 @@ function StratBook() {
                         </div>
                     </div>
 
-                    {/* ✅ Bottom agent bar (ONLY place agents here) */}
-                    <div className="absolute bottom-0 left-0 right-0 z-50 border-t border-white/10 bg-black/60 backdrop-blur">
-                        <div className="flex items-center gap-4 px-4 md:px-6 py-3">
-                            <div className="text-white/70 font-bold">Ally</div>
-                            <div className="w-14 h-7 rounded-full bg-red-400/20 border border-red-300/30 relative">
-                                <div className="w-6 h-6 rounded-full bg-red-400 absolute right-0 top-0.5 translate-x-[-2px]" />
-                            </div>
+                    {/* Bottom agent bar */}
+                    <div className="absolute bottom-0 left-0 right-0 z-50 border-t border-white/10 bg-black/70 backdrop-blur">
+                      <div className="flex items-center gap-4 px-4 md:px-6 py-3">
+                        <div className="text-white/70 font-bold shrink-0">Ally</div>
 
-                            <div className="flex-1 overflow-x-auto custom-scrollbar">
-                                <div className="flex gap-2">
-                                    {AGENT_NAMES.map((a) => {
-                                        const src = agentIconSrc(a);
-                                        const active = selectedAgentForUtil === a;
-
-                                        return (
-                                            <button
-                                                key={a}
-                                                onClick={() => {
-                                                    setSelectedAgentForUtil(a);
-                                                    beginPlace({ type: "agent", name: a }); // ✅ click agent in bottom bar to place it
-                                                }}
-                                                className={`w-16 h-16 rounded-lg overflow-hidden border ${active ? "border-red-400" : "border-white/10"} bg-black flex items-center justify-center`}
-                                                title={a}
-                                            >
-                                                {src ? (
-                                                    <img
-                                                        src={src}
-                                                        alt={a}
-                                                        className="w-full h-full object-cover"
-                                                        onError={(e) => {
-                                                            e.currentTarget.style.display = "none";
-                                                        }}
-                                                    />
-                                                ) : (
-                                                    <div className="w-full h-full flex items-center justify-center text-white/80 font-black text-xl">
-                                                        {String(a).slice(0, 1).toUpperCase()}
-                                                    </div>
-                                                )}
-                                            </button>
-                                        );
-                                    })}
-                                </div>
-                            </div>
+                        <div className="w-14 h-7 shrink-0 rounded-full bg-red-400/20 border border-red-300/30 relative">
+                          <div className="w-6 h-6 rounded-full bg-red-400 absolute right-0 top-0.5 translate-x-[-2px]" />
                         </div>
+
+                        <div className="flex-1 overflow-x-auto custom-scrollbar">
+                          <div className="flex gap-2 items-center">
+                            {AGENT_NAMES.map((a) => {
+                              const src = agentData?.[a]?.icon;
+
+                              return (
+                                <button
+                                  key={a}
+                                  type="button"
+                                  onClick={() => setSelectedAgentForUtil(a)}
+                                  className={`w-16 h-16 shrink-0 rounded-lg overflow-hidden border bg-black flex items-center justify-center ${
+                                    selectedAgentForUtil === a ? "border-red-400" : "border-white/10"
+                                  }`}
+                                  title={a}
+                                >
+                                  {src ? (
+                                    <img
+                                      src={src}
+                                      alt={a}
+                                      className="w-full h-full object-cover block"
+                                      loading="lazy"
+                                      draggable={false}
+                                      onError={(e) => {
+                                        // fallback if an icon URL fails
+                                        e.currentTarget.style.display = "none";
+                                      }}
+                                    />
+                                  ) : (
+                                    <div className="w-full h-full flex items-center justify-center text-white/80 font-black bg-white/10">
+                                      {String(a).slice(0, 2).toUpperCase()}
+                                    </div>
+                                  )}
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      </div>
                     </div>
-                </div>
 
                 {/* RIGHT */}
                 <div className="border-l border-white/10 bg-[#0b1116] overflow-hidden hidden lg:block">
