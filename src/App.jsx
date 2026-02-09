@@ -2045,6 +2045,7 @@ function StratBook() {
     // UI (RED THEME + FIT SCREEN + REAL FUNCTIONALITY)
     // --------------------------
     return (
+        <div className="w-full h-[100dvh] flex flex-col bg-[#0b1116] overflow-hidden">
             {/* Main grid */}
             <div className="flex-1 grid grid-cols-1 lg:grid-cols-[320px_1fr_320px] overflow-hidden">
                 {/* LEFT */}
