@@ -2752,6 +2752,7 @@ function StratBook() {
                     </div>
                 </div>
             </div>
+        </div>
 
 
 
