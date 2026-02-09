@@ -1435,7 +1435,7 @@ const makeEmptyStep = () => ({
 // ------------------------
 // Main Component
 // ------------------------
-export default function StratBook({
+function StratBook({
     MAPS,
     AGENT_NAMES,
     useValorantData,
