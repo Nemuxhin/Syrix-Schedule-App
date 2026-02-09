@@ -1346,394 +1346,1345 @@ function TeamComps({ members }) {
     );
 }
 
-function StratBook() {
-    const [selectedMap, setSelectedMap] = useState(MAPS[0]);
-    const [selectedAgentForUtil, setSelectedAgentForUtil] = useState(AGENT_NAMES[0]);
-    const canvasRef = useRef(null);
-    const containerRef = useRef(null);
+import React, { useEffect, useMemo, useRef, useState } from "react";
+
+/**
+ * StratBook v2 (ValoPlanner-like)
+ * Features:
+ * - Tool modes: select / draw / erase / place
+ * - Pointer events for move + draw (works on mobile)
+ * - Sequence steps (1-10) with per-step state
+ * - Playback (simple animation through steps)
+ * - Undo/Redo per step
+ * - Special util rendering: walls (Viper/Harbor), circles (smokes), icons, labels
+ * - Export image per step (map + drawings + shapes + icons)
+ *
+ * Expects from your project:
+ * - MAPS (array of map names)
+ * - AGENT_NAMES
+ * - useValorantData() -> { mapImages, agentData }
+ * - Card, ButtonPrimary, ButtonSecondary, Select, useToast
+ *
+ * Optional:
+ * - Firestore save/load (keep or remove)
+ */
+
+// ---- OPTIONAL FIREBASE (keep if you already have these imports in your app) ----
+// import { addDoc, collection, deleteDoc, doc, onSnapshot, query, where } from "firebase/firestore";
+// import { db } from "./firebase";
+
+// ------------------------
+// Utility helpers
+// ------------------------
+const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+const uuid = () => (crypto?.randomUUID ? crypto.randomUUID() : String(Date.now() + Math.random()));
+
+// Tool modes similar to ValoPlanner
+const TOOLS = {
+    SELECT: "select",
+    DRAW: "draw",
+    ERASE: "erase",
+    PLACE: "place",
+};
+
+// Render kinds
+const RENDER = {
+    ICON: "icon",
+    WALL: "wall",
+    CIRCLE: "circle",
+    LABEL: "label",
+};
+
+// Example generic util types (keep yours or swap)
+const DEFAULT_UTILITY_TYPES = [
+    { id: "smoke_generic", label: "Smoke", renderKind: RENDER.CIRCLE, radius: 8.5, color: "rgba(255,255,255,0.18)", outline: "rgba(255,255,255,0.45)" },
+    { id: "danger", label: "Danger", renderKind: RENDER.CIRCLE, radius: 6.0, color: "rgba(239,68,68,0.18)", outline: "rgba(239,68,68,0.55)" },
+];
+
+// Ability render mapping (expand as you want)
+const ABILITY_RENDER = {
+    Viper: {
+        // Toxic Screen
+        "Toxic Screen": { renderKind: RENDER.WALL, thickness: 2.2, color: "rgba(60,255,122,0.40)", outline: "rgba(60,255,122,0.85)" },
+    },
+    Harbor: {
+        // High Tide
+        "High Tide": { renderKind: RENDER.WALL, thickness: 2.4, color: "rgba(0,200,255,0.30)", outline: "rgba(0,240,255,0.85)" },
+    },
+    Sage: {
+        // Barrier Orb (treat as short wall segment)
+        "Barrier Orb": { renderKind: RENDER.WALL, thickness: 3.0, color: "rgba(120,255,220,0.25)", outline: "rgba(180,255,240,0.8)", defaultLength: 10 },
+    },
+    Brimstone: {
+        // Sky Smoke (place a circle)
+        "Sky Smoke": { renderKind: RENDER.CIRCLE, radius: 8.5, color: "rgba(220,220,220,0.18)", outline: "rgba(255,255,255,0.55)" },
+    },
+    Omen: {
+        // Dark Cover
+        "Dark Cover": { renderKind: RENDER.CIRCLE, radius: 8.5, color: "rgba(150,120,255,0.15)", outline: "rgba(200,180,255,0.5)" },
+    },
+};
+
+// Sequence defaults
+const MAX_STEPS = 10;
+const makeEmptyStep = () => ({
+    icons: [],
+    lines: [], // freehand drawing lines {color, width, points:[{x,y} in 0..1024]}
+    history: [{ icons: [], lines: [] }],
+    historyStep: 0,
+});
+
+// ------------------------
+// Main Component
+// ------------------------
+export default function StratBook({
+    MAPS,
+    AGENT_NAMES,
+    useValorantData,
+    Card,
+    ButtonPrimary,
+    ButtonSecondary,
+    Select,
+    useToast,
+    // Optional: pass your UTILITY_TYPES if you already have them
+    UTILITY_TYPES = DEFAULT_UTILITY_TYPES,
+    // Optional: Firestore hooks
+    enableFirestore = false,
+    firestore = null, // { db, addDoc, collection, deleteDoc, doc, onSnapshot, query, where }
+}) {
     const { mapImages, agentData } = useValorantData();
-    const [color, setColor] = useState('#ef4444');
     const addToast = useToast();
 
-    // --- STATE TRACKING ---
-    const [mapIcons, setMapIcons] = useState([]);
-    const [drawLines, setDrawLines] = useState([]); // Store drawing paths
+    const [selectedMap, setSelectedMap] = useState(MAPS[0]);
 
-    // --- HISTORY STACK (Stores snapshots of BOTH icons and lines) ---
-    // Initial state: empty icons, empty lines
-    const [history, setHistory] = useState([{ icons: [], lines: [] }]);
-    const [historyStep, setHistoryStep] = useState(0);
-    // ----------------------
+    // Left palette selection
+    const [selectedAgentForUtil, setSelectedAgentForUtil] = useState(AGENT_NAMES[0]);
 
+    // ValoPlanner-like mode + placing state
+    const [tool, setTool] = useState(TOOLS.SELECT);
+    const [placingItem, setPlacingItem] = useState(null); // {kind, ...} for PLACE mode
+    const [placingWall, setPlacingWall] = useState(null); // { base, start:{x,y} } second-click placement
+
+    // Sequence steps
+    const [sequenceStep, setSequenceStep] = useState(1); // 1..10
+    const [steps, setSteps] = useState(() => Array.from({ length: MAX_STEPS }, () => makeEmptyStep()));
+
+    // Playback
+    const [isPlaying, setIsPlaying] = useState(false);
+    const playTimer = useRef(null);
+
+    // Drawing
+    const canvasRef = useRef(null);
+    const containerRef = useRef(null);
+    const [drawColor, setDrawColor] = useState("#ef4444");
+    const [drawWidth, setDrawWidth] = useState(3);
     const [isDrawing, setIsDrawing] = useState(false);
-    const [currentLine, setCurrentLine] = useState([]); // The line currently being drawn
+    const [currentLine, setCurrentLine] = useState([]);
 
-    const [dragItem, setDragItem] = useState(null);
-    const [movingIconIndex, setMovingIconIndex] = useState(null);
-    const [selectedIconId, setSelectedIconId] = useState(null);
+    // Pointer move state for icons / handles
+    const [selectedId, setSelectedId] = useState(null);
+    const [moving, setMoving] = useState(null); // {id, startX, startY, rect, origX, origY, kind:'icon'|'wall-handle', handle:'p1'|'p2'}
 
+    // Saved strategies (optional firestore)
     const [savedStrats, setSavedStrats] = useState([]);
     const [viewingStrat, setViewingStrat] = useState(null);
 
-    // 1. Fetch Strats
+    // Current step state helpers
+    const stepIndex = sequenceStep - 1;
+    const stepState = steps[stepIndex];
+    const icons = stepState.icons;
+    const lines = stepState.lines;
+
+    const selectedEntity = useMemo(() => icons.find((i) => i.id === selectedId) ?? null, [icons, selectedId]);
+
+    // ------------------------
+    // History helpers (per-step)
+    // ------------------------
+    const commitStep = (updater) => {
+        setSteps((prev) => {
+            const next = [...prev];
+            const s = { ...next[stepIndex] };
+            const { icons: curIcons, lines: curLines, history, historyStep } = s;
+
+            const updated = updater({ icons: curIcons, lines: curLines });
+
+            const newHistory = history.slice(0, historyStep + 1);
+            newHistory.push({ icons: updated.icons, lines: updated.lines });
+
+            next[stepIndex] = {
+                ...s,
+                icons: updated.icons,
+                lines: updated.lines,
+                history: newHistory,
+                historyStep: newHistory.length - 1,
+            };
+            return next;
+        });
+    };
+
+    const setStepLive = (updater) => {
+        // For smooth moving without spamming history
+        setSteps((prev) => {
+            const next = [...prev];
+            const s = { ...next[stepIndex] };
+            const updated = updater({ icons: s.icons, lines: s.lines });
+            next[stepIndex] = { ...s, icons: updated.icons, lines: updated.lines };
+            return next;
+        });
+    };
+
+    const undo = () => {
+        setSteps((prev) => {
+            const next = [...prev];
+            const s = { ...next[stepIndex] };
+            if (s.historyStep === 0) return prev;
+
+            const prevStep = s.historyStep - 1;
+            const snap = s.history[prevStep];
+            next[stepIndex] = { ...s, icons: snap.icons, lines: snap.lines, historyStep: prevStep };
+            return next;
+        });
+    };
+
+    const redo = () => {
+        setSteps((prev) => {
+            const next = [...prev];
+            const s = { ...next[stepIndex] };
+            if (s.historyStep >= s.history.length - 1) return prev;
+
+            const nextStep = s.historyStep + 1;
+            const snap = s.history[nextStep];
+            next[stepIndex] = { ...s, icons: snap.icons, lines: snap.lines, historyStep: nextStep };
+            return next;
+        });
+    };
+
+    // ------------------------
+    // Canvas redraw
+    // ------------------------
     useEffect(() => {
-        const qStrats = query(collection(db, 'strats'), where("map", "==", selectedMap));
-        const unsubStrats = onSnapshot(qStrats, (snap) => {
+        const ctx = canvasRef.current?.getContext("2d");
+        if (!ctx) return;
+
+        ctx.clearRect(0, 0, 1024, 1024);
+        ctx.lineCap = "round";
+        ctx.lineJoin = "round";
+
+        // Draw saved lines
+        for (const l of lines) {
+            if (!l.points || l.points.length < 2) continue;
+            ctx.beginPath();
+            ctx.strokeStyle = l.color;
+            ctx.lineWidth = l.width ?? 3;
+            ctx.moveTo(l.points[0].x, l.points[0].y);
+            for (let i = 1; i < l.points.length; i++) ctx.lineTo(l.points[i].x, l.points[i].y);
+            ctx.stroke();
+        }
+
+        // Draw current in-progress
+        if (currentLine.length > 1) {
+            ctx.beginPath();
+            ctx.strokeStyle = drawColor;
+            ctx.lineWidth = drawWidth;
+            ctx.moveTo(currentLine[0].x, currentLine[0].y);
+            for (let i = 1; i < currentLine.length; i++) ctx.lineTo(currentLine[i].x, currentLine[i].y);
+            ctx.stroke();
+        }
+    }, [lines, currentLine, drawColor, drawWidth, selectedMap, stepIndex]);
+
+    // ------------------------
+    // Optional Firestore: load saved strats per map
+    // ------------------------
+    useEffect(() => {
+        if (!enableFirestore || !firestore?.db) return;
+
+        const { db, onSnapshot, query, collection, where } = firestore;
+        const qStrats = query(collection(db, "strats"), where("map", "==", selectedMap));
+        const unsub = onSnapshot(qStrats, (snap) => {
             const s = [];
-            snap.forEach(doc => s.push({ id: doc.id, ...doc.data() }));
+            snap.forEach((d) => s.push({ id: d.id, ...d.data() }));
             s.sort((a, b) => new Date(b.date) - new Date(a.date));
             setSavedStrats(s);
         });
-        return () => { unsubStrats(); };
-    }, [selectedMap]);
+        return () => unsub?.();
+    }, [enableFirestore, firestore, selectedMap]);
 
-    // 2. REDRAW CANVAS whenever Lines or Map changes
-    useEffect(() => {
-        const ctx = canvasRef.current?.getContext('2d');
-        if (!ctx) return;
-
-        // Clear and set dimensions
-        ctx.clearRect(0, 0, 1024, 1024);
-        ctx.lineCap = 'round';
-        ctx.lineJoin = 'round';
-
-        // Redraw all saved lines from history
-        drawLines.forEach(line => {
-            if (line.points.length < 2) return;
-            ctx.beginPath();
-            ctx.strokeStyle = line.color;
-            ctx.lineWidth = 3;
-            ctx.moveTo(line.points[0].x, line.points[0].y);
-            for (let i = 1; i < line.points.length; i++) {
-                ctx.lineTo(line.points[i].x, line.points[i].y);
-            }
-            ctx.stroke();
-        });
-
-        // Redraw the line currently being drawn (if any)
-        if (currentLine.length > 0) {
-            ctx.beginPath();
-            ctx.strokeStyle = color;
-            ctx.lineWidth = 3;
-            ctx.moveTo(currentLine[0].x, currentLine[0].y);
-            for (let i = 1; i < currentLine.length; i++) {
-                ctx.lineTo(currentLine[i].x, currentLine[i].y);
-            }
-            ctx.stroke();
-        }
-    }, [drawLines, currentLine, selectedMap]); // Trigger redraw when these change
-
-    // --- HISTORY LOGIC ---
-    const addToHistory = (newIcons, newLines) => {
-        const newHistory = history.slice(0, historyStep + 1);
-        newHistory.push({ icons: newIcons, lines: newLines });
-
-        setHistory(newHistory);
-        setHistoryStep(newHistory.length - 1);
-
-        setMapIcons(newIcons);
-        setDrawLines(newLines);
+    // ------------------------
+    // Position helpers
+    // ------------------------
+    const getMapPercentPos = (e) => {
+        const rect = containerRef.current.getBoundingClientRect();
+        const x = ((e.clientX - rect.left) / rect.width) * 100;
+        const y = ((e.clientY - rect.top) / rect.height) * 100;
+        return { x: clamp(x, 0, 100), y: clamp(y, 0, 100), rect };
     };
 
-    const handleUndo = () => {
-        if (historyStep === 0) return;
-        const prevStep = historyStep - 1;
-        setHistoryStep(prevStep);
-        setMapIcons(history[prevStep].icons);
-        setDrawLines(history[prevStep].lines);
-    };
-
-    const handleRedo = () => {
-        if (historyStep === history.length - 1) return;
-        const nextStep = historyStep + 1;
-        setHistoryStep(nextStep);
-        setMapIcons(history[nextStep].icons);
-        setDrawLines(history[nextStep].lines);
-    };
-
-    // --- DRAWING HANDLERS ---
-    const getPos = (e) => {
-        if (!canvasRef.current) return { x: 0, y: 0 };
+    const getCanvasPos = (e) => {
         const rect = canvasRef.current.getBoundingClientRect();
-        // Handle both Mouse and Touch events
-        const clientX = e.nativeEvent ? (e.nativeEvent.touches ? e.nativeEvent.touches[0].clientX : e.nativeEvent.clientX) : e.touches[0].clientX;
-        const clientY = e.nativeEvent ? (e.nativeEvent.touches ? e.nativeEvent.touches[0].clientY : e.nativeEvent.clientY) : e.touches[0].clientY;
-
-        // Scale to 1024x1024 canvas coordinate system
         return {
-            x: (clientX - rect.left) * (1024 / rect.width),
-            y: (clientY - rect.top) * (1024 / rect.height)
+            x: (e.clientX - rect.left) * (1024 / rect.width),
+            y: (e.clientY - rect.top) * (1024 / rect.height),
         };
     };
 
-    const startDraw = (e) => {
-        if (movingIconIndex !== null || selectedIconId !== null) return;
+    // ------------------------
+    // Placing palette items (ValoPlanner-like)
+    // ------------------------
+    const startPlacing = (item) => {
+        setTool(TOOLS.PLACE);
+        setPlacingItem(item);
+        setPlacingWall(null);
+    };
+
+    const resolveAbilityItem = (agentName, ability) => {
+        const mapping = ABILITY_RENDER?.[agentName]?.[ability.name];
+        if (mapping?.renderKind === RENDER.WALL) {
+            return {
+                type: "ability",
+                agent: agentName,
+                name: ability.name,
+                icon: ability.icon,
+                renderKind: RENDER.WALL,
+                thickness: mapping.thickness ?? 2.2,
+                color: mapping.color ?? "rgba(255,255,255,0.25)",
+                outline: mapping.outline ?? "rgba(255,255,255,0.55)",
+                defaultLength: mapping.defaultLength ?? null,
+            };
+        }
+        if (mapping?.renderKind === RENDER.CIRCLE) {
+            return {
+                type: "ability",
+                agent: agentName,
+                name: ability.name,
+                icon: ability.icon,
+                renderKind: RENDER.CIRCLE,
+                radius: mapping.radius ?? 8.5,
+                color: mapping.color ?? "rgba(255,255,255,0.18)",
+                outline: mapping.outline ?? "rgba(255,255,255,0.55)",
+            };
+        }
+        // Default: icon ability
+        return {
+            type: "ability",
+            agent: agentName,
+            name: ability.name,
+            icon: ability.icon,
+            renderKind: RENDER.ICON,
+        };
+    };
+
+    // ------------------------
+    // Map click: place item / select / erase
+    // ------------------------
+    const onMapPointerDown = (e) => {
+        if (viewingStrat) return;
+        // If drawing, canvas handles it
+        if (tool === TOOLS.DRAW) return;
+
+        const { x, y } = getMapPercentPos(e);
+
+        // Place mode
+        if (tool === TOOLS.PLACE && placingItem) {
+            // WALL: two-click placement OR click-to-place with default length if provided
+            if (placingItem.renderKind === RENDER.WALL) {
+                if (!placingWall) {
+                    // first click sets start
+                    setPlacingWall({ base: placingItem, start: { x, y } });
+                    return;
+                }
+                // second click commits
+                const wall = {
+                    id: uuid(),
+                    ...placingWall.base,
+                    renderKind: RENDER.WALL,
+                    x1: placingWall.start.x,
+                    y1: placingWall.start.y,
+                    x2: x,
+                    y2: y,
+                };
+                commitStep(({ icons, lines }) => ({ icons: [...icons, wall], lines }));
+                setPlacingWall(null);
+                setPlacingItem(null);
+                setTool(TOOLS.SELECT);
+                return;
+            }
+
+            // CIRCLE: place with center
+            if (placingItem.renderKind === RENDER.CIRCLE) {
+                const circle = {
+                    id: uuid(),
+                    ...placingItem,
+                    cx: x,
+                    cy: y,
+                };
+                commitStep(({ icons, lines }) => ({ icons: [...icons, circle], lines }));
+                setPlacingItem(null);
+                setTool(TOOLS.SELECT);
+                return;
+            }
+
+            // LABEL (A/B/C/S)
+            if (placingItem.renderKind === RENDER.LABEL) {
+                const label = { id: uuid(), ...placingItem, x, y };
+                commitStep(({ icons, lines }) => ({ icons: [...icons, label], lines }));
+                setPlacingItem(null);
+                setTool(TOOLS.SELECT);
+                return;
+            }
+
+            // ICON (agent/util/ability)
+            const icon = { id: uuid(), ...placingItem, x, y, rotation: 0, scale: 1 };
+            commitStep(({ icons, lines }) => ({ icons: [...icons, icon], lines }));
+            setPlacingItem(null);
+            setTool(TOOLS.SELECT);
+            return;
+        }
+
+        // Erase mode: delete nearest entity
+        if (tool === TOOLS.ERASE) {
+            const nearest = findNearestEntity(icons, { x, y });
+            if (nearest) {
+                commitStep(({ icons, lines }) => ({ icons: icons.filter((i) => i.id !== nearest.id), lines }));
+                if (selectedId === nearest.id) setSelectedId(null);
+            }
+            return;
+        }
+
+        // Select mode: click empty deselect
+        setSelectedId(null);
+    };
+
+    // nearest entity helper (simple distance)
+    const findNearestEntity = (all, pos) => {
+        let best = null;
+        let bestD = Infinity;
+        for (const i of all) {
+            const p = entityCenter(i);
+            const dx = (p.x - pos.x);
+            const dy = (p.y - pos.y);
+            const d = dx * dx + dy * dy;
+            if (d < bestD) {
+                bestD = d;
+                best = i;
+            }
+        }
+        // threshold roughly 3% of map
+        return bestD < 9 ? best : null;
+    };
+
+    const entityCenter = (i) => {
+        if (i.renderKind === RENDER.WALL) return { x: (i.x1 + i.x2) / 2, y: (i.y1 + i.y2) / 2 };
+        if (i.renderKind === RENDER.CIRCLE) return { x: i.cx, y: i.cy };
+        return { x: i.x, y: i.y };
+    };
+
+    // ------------------------
+    // Drawing handlers (canvas pointer)
+    // ------------------------
+    const onCanvasPointerDown = (e) => {
+        if (viewingStrat) return;
+        if (tool !== TOOLS.DRAW) return;
+        if (!canvasRef.current) return;
+
         setIsDrawing(true);
-        const pos = getPos(e);
-        setCurrentLine([pos]); // Start a new line
+        const p = getCanvasPos(e);
+        setCurrentLine([p]);
+        e.currentTarget.setPointerCapture?.(e.pointerId);
     };
 
-    const draw = (e) => {
+    const onCanvasPointerMove = (e) => {
         if (!isDrawing) return;
-        const pos = getPos(e);
-        setCurrentLine(prev => [...prev, pos]); // Add point to current line
+        const p = getCanvasPos(e);
+        setCurrentLine((prev) => [...prev, p]);
     };
 
-    const stopDraw = () => {
+    const onCanvasPointerUp = () => {
         if (!isDrawing) return;
         setIsDrawing(false);
+
         if (currentLine.length > 1) {
-            // Save the finished line to state AND history
-            const newLines = [...drawLines, { color: color, points: currentLine }];
-            addToHistory(mapIcons, newLines);
+            const newLine = { color: drawColor, width: drawWidth, points: currentLine };
+            commitStep(({ icons, lines }) => ({ icons, lines: [...lines, newLine] }));
         }
         setCurrentLine([]);
     };
 
-    // --- ICON HANDLERS ---
-    const handleDrop = (e) => {
+    // ------------------------
+    // Moving icons / wall handles with pointer capture
+    // ------------------------
+    const onEntityPointerDown = (e, entity, opts = {}) => {
+        if (viewingStrat) return;
+        if (tool !== TOOLS.SELECT) return;
+
+        e.stopPropagation();
+        setSelectedId(entity.id);
+
+        const { rect } = getMapPercentPos(e); // uses container rect
+
+        if (opts.kind === "wall-handle") {
+            const handle = opts.handle; // 'p1'|'p2'
+            const origX = handle === "p1" ? entity.x1 : entity.x2;
+            const origY = handle === "p1" ? entity.y1 : entity.y2;
+
+            setMoving({
+                id: entity.id,
+                kind: "wall-handle",
+                handle,
+                startX: e.clientX,
+                startY: e.clientY,
+                rect,
+                origX,
+                origY,
+            });
+            e.currentTarget.setPointerCapture?.(e.pointerId);
+            return;
+        }
+
+        // normal icon move (including circle center, label)
+        const c = entityCenter(entity);
+
+        setMoving({
+            id: entity.id,
+            kind: "entity",
+            startX: e.clientX,
+            startY: e.clientY,
+            rect,
+            origX: c.x,
+            origY: c.y,
+        });
+        e.currentTarget.setPointerCapture?.(e.pointerId);
+    };
+
+    const onEntityPointerMove = (e) => {
+        if (!moving) return;
         e.preventDefault();
-        if (!containerRef.current) return;
-        const rect = containerRef.current.getBoundingClientRect();
-        const x = ((e.clientX - rect.left) / rect.width) * 100;
-        const y = ((e.clientY - rect.top) / rect.height) * 100;
 
-        if (dragItem) {
-            const newIcons = [...mapIcons, { id: Date.now(), ...dragItem, x, y, rotation: 0, scale: 1.0 }];
-            addToHistory(newIcons, drawLines); // Save to history
-            setDragItem(null);
-        } else if (movingIconIndex !== null) {
-            const updated = [...mapIcons];
-            updated[movingIconIndex] = { ...updated[movingIconIndex], x, y };
-            addToHistory(updated, drawLines); // Save to history
-            setMovingIconIndex(null);
+        const dx = ((e.clientX - moving.startX) / moving.rect.width) * 100;
+        const dy = ((e.clientY - moving.startY) / moving.rect.height) * 100;
+
+        setStepLive(({ icons, lines }) => {
+            const updated = icons.map((it) => {
+                if (it.id !== moving.id) return it;
+
+                if (moving.kind === "wall-handle") {
+                    const nx = clamp(moving.origX + dx, 0, 100);
+                    const ny = clamp(moving.origY + dy, 0, 100);
+                    if (moving.handle === "p1") return { ...it, x1: nx, y1: ny };
+                    return { ...it, x2: nx, y2: ny };
+                }
+
+                // entity center move
+                const nx = clamp(moving.origX + dx, 0, 100);
+                const ny = clamp(moving.origY + dy, 0, 100);
+
+                if (it.renderKind === RENDER.CIRCLE) return { ...it, cx: nx, cy: ny };
+                if (it.renderKind === RENDER.WALL) {
+                    // move wall by translating both points
+                    const cx = (it.x1 + it.x2) / 2;
+                    const cy = (it.y1 + it.y2) / 2;
+                    const tx = nx - cx;
+                    const ty = ny - cy;
+                    return { ...it, x1: clamp(it.x1 + tx, 0, 100), y1: clamp(it.y1 + ty, 0, 100), x2: clamp(it.x2 + tx, 0, 100), y2: clamp(it.y2 + ty, 0, 100) };
+                }
+                return { ...it, x: nx, y: ny };
+            });
+            return { icons: updated, lines };
+        });
+    };
+
+    const onEntityPointerUp = () => {
+        if (!moving) return;
+        // commit once
+        commitStep(({ icons, lines }) => ({ icons, lines }));
+        setMoving(null);
+    };
+
+    // ------------------------
+    // Selected entity controls
+    // ------------------------
+    const updateSelected = (patch) => {
+        if (!selectedId) return;
+        setStepLive(({ icons, lines }) => ({
+            icons: icons.map((i) => (i.id === selectedId ? { ...i, ...patch } : i)),
+            lines,
+        }));
+    };
+
+    const commitSelected = (patch) => {
+        if (!selectedId) return;
+        commitStep(({ icons, lines }) => ({
+            icons: icons.map((i) => (i.id === selectedId ? { ...i, ...patch } : i)),
+            lines,
+        }));
+    };
+
+    const deleteSelected = () => {
+        if (!selectedId) return;
+        commitStep(({ icons, lines }) => ({ icons: icons.filter((i) => i.id !== selectedId), lines }));
+        setSelectedId(null);
+    };
+
+    // ------------------------
+    // Clear / delete controls (like ValoPlanner)
+    // ------------------------
+    const clearStep = () => {
+        setSteps((prev) => {
+            const next = [...prev];
+            const empty = makeEmptyStep();
+            next[stepIndex] = empty;
+            return next;
+        });
+        setSelectedId(null);
+        setPlacingItem(null);
+        setPlacingWall(null);
+        addToast?.("Cleared Step " + sequenceStep);
+    };
+
+    const clearAllSteps = () => {
+        setSteps(Array.from({ length: MAX_STEPS }, () => makeEmptyStep()));
+        setSequenceStep(1);
+        setSelectedId(null);
+        setPlacingItem(null);
+        setPlacingWall(null);
+        addToast?.("Cleared All Steps");
+    };
+
+    // ------------------------
+    // Playback
+    // ------------------------
+    const togglePlay = () => {
+        if (isPlaying) {
+            setIsPlaying(false);
+            if (playTimer.current) clearInterval(playTimer.current);
+            playTimer.current = null;
+            return;
         }
+        setIsPlaying(true);
+        let s = sequenceStep;
+        playTimer.current = setInterval(() => {
+            s = s + 1;
+            if (s > MAX_STEPS) s = 1;
+            setSequenceStep(s);
+        }, 600);
     };
 
-    const updateSelectedIcon = (prop, value) => {
-        if (selectedIconId === null) return;
-        // Update state directly for smooth UI (sliders), don't spam history
-        setMapIcons(prev => prev.map(icon => icon.id === selectedIconId ? { ...icon, [prop]: value } : icon));
-    };
+    useEffect(() => {
+        return () => {
+            if (playTimer.current) clearInterval(playTimer.current);
+        };
+    }, []);
 
-    const deleteSelectedIcon = () => {
-        const newIcons = mapIcons.filter(icon => icon.id !== selectedIconId);
-        addToHistory(newIcons, drawLines); // Save to history
-        setSelectedIconId(null);
-    };
-
-    const clearCanvas = () => {
-        // Reset everything
-        const empty = { icons: [], lines: [] };
-        setHistory([empty]);
-        setHistoryStep(0);
-        setMapIcons([]);
-        setDrawLines([]);
-        setSelectedIconId(null);
-        addToast('Canvas Cleared');
-    };
-
-    // --- SAVING ---
-    const saveStrat = async () => {
-        const tempCanvas = document.createElement('canvas');
-        tempCanvas.width = 1024; tempCanvas.height = 1024;
-        const ctx = tempCanvas.getContext('2d');
-
-        // 1. Draw Map Background
-        if (mapImages[selectedMap]) {
-            const img = new Image();
-            img.src = mapImages[selectedMap];
-            img.crossOrigin = "anonymous";
-            await new Promise((r) => { img.onload = r; img.onerror = r; });
-            ctx.drawImage(img, 0, 0, 1024, 1024);
-        }
-
-        // 2. Draw existing drawings from the displayed canvas
-        ctx.drawImage(canvasRef.current, 0, 0);
-
-        // 3. Draw Icons
-        for (const icon of mapIcons) {
-            const px = (icon.x / 100) * 1024;
-            const py = (icon.y / 100) * 1024;
-            ctx.save();
-            ctx.translate(px, py);
-            ctx.rotate((icon.rotation || 0) * Math.PI / 180);
-            const scale = icon.scale || 1;
-            ctx.scale(scale, scale);
-
-            if (icon.type === 'agent' && agentData[icon.name]?.icon) {
-                const img = new Image(); img.crossOrigin = "anonymous"; img.src = agentData[icon.name].icon;
-                await new Promise(r => { img.onload = r; img.onerror = r; });
-                ctx.beginPath(); ctx.arc(0, 0, 25, 0, Math.PI * 2); ctx.clip();
-                ctx.drawImage(img, -25, -25, 50, 50);
-                ctx.strokeStyle = '#fff'; ctx.lineWidth = 2; ctx.stroke();
-            } else if (icon.type === 'ability') {
-                const img = new Image(); img.crossOrigin = "anonymous"; img.src = icon.icon;
-                await new Promise(r => { img.onload = r; img.onerror = r; });
-                ctx.drawImage(img, -20, -20, 40, 40);
-            } else if (icon.type === 'site_label') {
-                ctx.font = "bold 60px Arial"; ctx.fillStyle = "rgba(255, 255, 255, 0.8)"; ctx.textAlign = "center"; ctx.textBaseline = "middle";
-                ctx.fillText(icon.label, 0, 0);
-            } else {
-                // Shapes
-                ctx.beginPath();
-                if (icon.shape === 'ring') { ctx.arc(0, 0, 20, 0, Math.PI * 2); ctx.fillStyle = icon.color; ctx.fill(); ctx.lineWidth = 3; ctx.strokeStyle = icon.border; ctx.stroke(); }
-                else if (icon.shape === 'square') { ctx.fillStyle = icon.color; ctx.rect(-15, -15, 30, 30); ctx.fill(); ctx.lineWidth = 2; ctx.strokeStyle = icon.border; ctx.stroke(); }
-                else if (icon.shape === 'rect') { ctx.fillStyle = icon.color; ctx.rect(-25, -8, 50, 16); ctx.fill(); ctx.lineWidth = 2; ctx.strokeStyle = icon.border; ctx.stroke(); }
-                else if (icon.shape === 'cross') { ctx.strokeStyle = icon.border; ctx.lineWidth = 4; ctx.moveTo(-15, -15); ctx.lineTo(15, 15); ctx.moveTo(15, -15); ctx.lineTo(-15, 15); ctx.stroke(); }
-                else if (icon.shape === 'diamond') { ctx.fillStyle = icon.color; ctx.moveTo(0, -20); ctx.lineTo(20, 0); ctx.lineTo(0, 20); ctx.lineTo(-20, 0); ctx.fill(); ctx.lineWidth = 2; ctx.strokeStyle = icon.border; ctx.stroke(); }
-                else if (icon.shape === 'triangle') { ctx.fillStyle = icon.color; ctx.moveTo(0, -15); ctx.lineTo(15, 15); ctx.lineTo(-15, 15); ctx.fill(); }
-                else { ctx.fillStyle = icon.color; ctx.arc(0, 0, 15, 0, Math.PI * 2); ctx.fill(); }
-            }
-            ctx.restore();
-        }
-
+    // ------------------------
+    // Export image (current step)
+    // ------------------------
+    const exportCurrentStepImage = async () => {
         try {
-            const dataUrl = tempCanvas.toDataURL('image/jpeg', 0.7);
-            await addDoc(collection(db, 'strats'), { map: selectedMap, image: dataUrl, date: new Date().toISOString() });
-            addToast('Strat Saved!');
+            const dataUrl = await renderStepToImage({
+                mapName: selectedMap,
+                mapUrl: mapImages[selectedMap],
+                step: steps[stepIndex],
+                agentData,
+            });
+            // Download
+            const a = document.createElement("a");
+            a.href = dataUrl;
+            a.download = `strat_${selectedMap}_step${sequenceStep}.jpg`;
+            a.click();
+            addToast?.("Exported Image");
         } catch (e) {
             console.error(e);
-            addToast('Error saving (Image too large)', 'error');
+            addToast?.("Export failed", "error");
         }
     };
 
-    const deleteStrat = async (id) => { if (viewingStrat) setViewingStrat(null); await deleteDoc(doc(db, 'strats', id)); addToast('Strategy Deleted'); };
+    // ------------------------
+    // Optional Firestore Save (saves rendered image like your old version)
+    // ------------------------
+    const saveStratToFirestore = async () => {
+        if (!enableFirestore || !firestore?.db) return;
+        try {
+            const dataUrl = await renderStepToImage({
+                mapName: selectedMap,
+                mapUrl: mapImages[selectedMap],
+                step: steps[stepIndex],
+                agentData,
+            });
 
+            const { db, addDoc, collection } = firestore;
+            await addDoc(collection(db, "strats"), {
+                map: selectedMap,
+                image: dataUrl,
+                date: new Date().toISOString(),
+                step: sequenceStep,
+            });
+            addToast?.("Strat Saved!");
+        } catch (e) {
+            console.error(e);
+            addToast?.("Error saving", "error");
+        }
+    };
+
+    const deleteStrat = async (id) => {
+        if (!enableFirestore || !firestore?.db) return;
+        try {
+            if (viewingStrat) setViewingStrat(null);
+            const { db, deleteDoc, doc } = firestore;
+            await deleteDoc(doc(db, "strats", id));
+            addToast?.("Deleted");
+        } catch (e) {
+            console.error(e);
+            addToast?.("Delete failed", "error");
+        }
+    };
+
+    // ------------------------
+    // UI helpers
+    // ------------------------
+    const toolButtonClass = (t) =>
+        `px-3 py-1 rounded text-xs font-bold border ${tool === t ? "bg-red-600 border-red-400 text-white" : "bg-black border-white/10 text-neutral-300 hover:border-white/30"}`;
+
+    const mapButtonClass = (m) =>
+        `px-3 py-1 rounded-full text-xs font-bold ${selectedMap === m ? "bg-red-600 text-white" : "bg-black text-neutral-500 hover:text-white"
+        }`;
+
+    // ------------------------
+    // Render
+    // ------------------------
     return (
         <div className="h-full flex flex-col gap-6">
             <div className="flex gap-4 h-[75vh]">
-                <Card className="w-64 flex flex-col gap-4 overflow-hidden !p-0">
+                {/* LEFT PANEL */}
+                <Card className="w-72 flex flex-col overflow-hidden !p-0">
                     <div className="bg-neutral-900 p-4 border-b border-white/10">
-                        <h4 className="text-xs font-black text-red-500 uppercase tracking-widest mb-2">1. Map Markers</h4>
-                        <div className="flex gap-2 justify-center">
-                            {['A', 'B', 'C', 'S'].map(l => (
-                                <div key={l} draggable onDragStart={() => setDragItem({ type: 'site_label', label: l })} className="w-8 h-8 bg-white/10 rounded flex items-center justify-center text-xs font-bold cursor-grab hover:bg-white/20 border border-white/20">{l}</div>
-                            ))}
+                        <h4 className="text-xs font-black text-red-500 uppercase tracking-widest mb-3">Strategy</h4>
+
+                        {/* Tool row */}
+                        <div className="flex flex-wrap gap-2">
+                            <button className={toolButtonClass(TOOLS.SELECT)} onClick={() => { setTool(TOOLS.SELECT); setPlacingItem(null); setPlacingWall(null); }}>Select</button>
+                            <button className={toolButtonClass(TOOLS.DRAW)} onClick={() => { setTool(TOOLS.DRAW); setPlacingItem(null); setPlacingWall(null); }}>Draw</button>
+                            <button className={toolButtonClass(TOOLS.ERASE)} onClick={() => { setTool(TOOLS.ERASE); setPlacingItem(null); setPlacingWall(null); }}>Erase</button>
+                            <button className={`${toolButtonClass(TOOLS.SELECT)} ${isPlaying ? "border-green-400" : ""}`} onClick={togglePlay}>
+                                {isPlaying ? "Stop" : "Play"}
+                            </button>
+                        </div>
+
+                        {/* Draw options */}
+                        <div className="mt-3 flex items-center gap-2">
+                            <div className="flex items-center gap-2">
+                                <button onClick={() => setDrawColor("#ef4444")} className={`w-5 h-5 rounded-full bg-red-500 border ${drawColor === "#ef4444" ? "border-white" : "border-transparent"}`}></button>
+                                <button onClick={() => setDrawColor("#3b82f6")} className={`w-5 h-5 rounded-full bg-blue-500 border ${drawColor === "#3b82f6" ? "border-white" : "border-transparent"}`}></button>
+                                <button onClick={() => setDrawColor("#ffffff")} className={`w-5 h-5 rounded-full bg-white border ${drawColor === "#ffffff" ? "border-white" : "border-transparent"}`}></button>
+                            </div>
+                            <div className="flex-1" />
+                            <div className="flex items-center gap-2">
+                                <span className="text-[10px] text-neutral-400">W</span>
+                                <input
+                                    type="range"
+                                    min={1}
+                                    max={10}
+                                    value={drawWidth}
+                                    onChange={(e) => setDrawWidth(Number(e.target.value))}
+                                    className="w-24 accent-red-600"
+                                />
+                            </div>
                         </div>
                     </div>
+
                     <div className="flex-1 overflow-y-auto custom-scrollbar p-4 space-y-6">
-                        {/* UTILITIES PALETTE */}
+                        {/* MAP MARKERS */}
                         <div>
-                            <h4 className="text-xs font-black text-red-500 uppercase tracking-widest mb-2">2. Generic Util</h4>
-                            <div className="grid grid-cols-4 gap-2">
-                                {UTILITY_TYPES.map(u => (
-                                    <div key={u.id} draggable onDragStart={() => setDragItem({ type: 'util', ...u })} className="w-10 h-10 rounded border border-neutral-700 bg-black cursor-grab hover:border-white flex items-center justify-center" title={u.label}>
-                                        <div className="w-6 h-6" style={{ backgroundColor: u.color, border: `2px solid ${u.border}`, borderRadius: u.shape === 'ring' ? '50%' : '2px' }}></div>
-                                    </div>
+                            <h4 className="text-xs font-black text-red-500 uppercase tracking-widest mb-2">Map Markers</h4>
+                            <div className="flex gap-2 justify-center">
+                                {["A", "B", "C", "S"].map((l) => (
+                                    <button
+                                        key={l}
+                                        onClick={() => startPlacing({ renderKind: RENDER.LABEL, type: "label", label: l })}
+                                        className="w-9 h-9 bg-white/10 rounded flex items-center justify-center text-xs font-bold hover:bg-white/20 border border-white/20"
+                                        title="Place label"
+                                    >
+                                        {l}
+                                    </button>
                                 ))}
                             </div>
                         </div>
-                        {/* ABILITIES PALETTE */}
+
+                        {/* SEQUENCE */}
                         <div>
-                            <h4 className="text-xs font-black text-red-500 uppercase tracking-widest mb-2">3. Abilities</h4>
-                            <Select value={selectedAgentForUtil} onChange={e => setSelectedAgentForUtil(e.target.value)} className="mb-2">
-                                {AGENT_NAMES.map(a => <option key={a} value={a}>{a}</option>)}
+                            <h4 className="text-xs font-black text-red-500 uppercase tracking-widest mb-2">Sequence</h4>
+                            <div className="grid grid-cols-5 gap-2">
+                                {Array.from({ length: MAX_STEPS }, (_, i) => i + 1).map((n) => (
+                                    <button
+                                        key={n}
+                                        onClick={() => setSequenceStep(n)}
+                                        className={`py-2 rounded text-xs font-black border ${sequenceStep === n ? "bg-blue-600 border-blue-400 text-white" : "bg-black border-white/10 text-neutral-300 hover:border-white/30"
+                                            }`}
+                                    >
+                                        {n}
+                                    </button>
+                                ))}
+                            </div>
+                            <div className="mt-3 flex gap-2">
+                                <ButtonSecondary onClick={clearStep} className="text-xs py-1 px-3">Clear Step</ButtonSecondary>
+                                <ButtonSecondary onClick={clearAllSteps} className="text-xs py-1 px-3">Clear All</ButtonSecondary>
+                            </div>
+                        </div>
+
+                        {/* GENERIC UTIL */}
+                        <div>
+                            <h4 className="text-xs font-black text-red-500 uppercase tracking-widest mb-2">Generic Util</h4>
+                            <div className="grid grid-cols-4 gap-2">
+                                {UTILITY_TYPES.map((u) => (
+                                    <button
+                                        key={u.id}
+                                        onClick={() => startPlacing({ type: "util", name: u.label, ...u })}
+                                        className="w-12 h-12 rounded border border-neutral-700 bg-black hover:border-white flex items-center justify-center"
+                                        title={`Place ${u.label}`}
+                                    >
+                                        <div className="w-7 h-7 rounded" style={{ background: u.color, border: `2px solid ${u.outline || "rgba(255,255,255,0.4)"}` }} />
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
+
+                        {/* ABILITIES */}
+                        <div>
+                            <h4 className="text-xs font-black text-red-500 uppercase tracking-widest mb-2">Abilities</h4>
+                            <Select value={selectedAgentForUtil} onChange={(e) => setSelectedAgentForUtil(e.target.value)} className="mb-2">
+                                {AGENT_NAMES.map((a) => (
+                                    <option key={a} value={a}>{a}</option>
+                                ))}
                             </Select>
+
                             <div className="grid grid-cols-4 gap-2">
-                                {agentData[selectedAgentForUtil]?.abilities.map((ability, i) => (
-                                    <div key={i} draggable onDragStart={() => setDragItem({ type: 'ability', name: ability.name, icon: ability.icon })} className="aspect-square bg-black border border-neutral-800 rounded hover:border-red-500 cursor-grab flex items-center justify-center p-1 group">
-                                        <img src={ability.icon} alt={ability.name} className="w-full h-full object-contain opacity-70 group-hover:opacity-100 transition-opacity" />
-                                    </div>
+                                {(agentData[selectedAgentForUtil]?.abilities ?? []).map((ability, i) => {
+                                    const item = resolveAbilityItem(selectedAgentForUtil, ability);
+                                    const isSpecial = item.renderKind !== RENDER.ICON;
+                                    return (
+                                        <button
+                                            key={i}
+                                            onClick={() => startPlacing(item)}
+                                            className={`aspect-square bg-black border rounded hover:border-red-500 flex items-center justify-center p-1 ${isSpecial ? "border-blue-500/40" : "border-neutral-800"}`}
+                                            title={`Place ${selectedAgentForUtil} - ${ability.name}${isSpecial ? ` (${item.renderKind})` : ""}`}
+                                        >
+                                            <img src={ability.icon} alt={ability.name} className="w-full h-full object-contain opacity-80 hover:opacity-100" />
+                                        </button>
+                                    );
+                                })}
+                            </div>
+                        </div>
+
+                        {/* AGENTS */}
+                        <div>
+                            <h4 className="text-xs font-black text-red-500 uppercase tracking-widest mb-2">Agents</h4>
+                            <div className="grid grid-cols-5 gap-2">
+                                {AGENT_NAMES.map((a) => (
+                                    <button
+                                        key={a}
+                                        onClick={() => startPlacing({ type: "agent", name: a, renderKind: RENDER.ICON })}
+                                        className="w-12 h-12 rounded-full border border-neutral-700 bg-black hover:border-white overflow-hidden"
+                                        title={`Place ${a}`}
+                                    >
+                                        <img src={agentData[a]?.icon} alt={a} className="w-full h-full object-cover" />
+                                    </button>
                                 ))}
                             </div>
                         </div>
-                        {/* AGENTS PALETTE */}
-                        <div>
-                            <h4 className="text-xs font-black text-red-500 uppercase tracking-widest mb-2">4. Agents</h4>
-                            <div className="grid grid-cols-4 gap-2">
-                                {AGENT_NAMES.map(a => (
-                                    <img key={a} src={agentData[a]?.icon} alt={a} draggable onDragStart={() => setDragItem({ type: 'agent', name: a })} className="w-8 h-8 rounded-full border border-neutral-700 bg-black cursor-grab hover:border-white" />
-                                ))}
-                            </div>
+
+                        {/* SELECTED CONTROLS */}
+                        <div className="pt-2 border-t border-white/10">
+                            <h4 className="text-xs font-black text-red-500 uppercase tracking-widest mb-2">Selected</h4>
+                            {!selectedEntity ? (
+                                <div className="text-xs text-neutral-400">Nothing selected</div>
+                            ) : (
+                                <div className="space-y-3">
+                                    <div className="text-xs text-white font-bold">
+                                        {selectedEntity.type} {selectedEntity.agent ? `· ${selectedEntity.agent}` : ""} {selectedEntity.name ? `· ${selectedEntity.name}` : ""}
+                                    </div>
+
+                                    {/* Rotation/Scale only for icon-like */}
+                                    {selectedEntity.renderKind === RENDER.ICON && (
+                                        <>
+                                            <div>
+                                                <label className="text-[10px] font-bold text-neutral-400 uppercase">Rotate</label>
+                                                <input
+                                                    type="range"
+                                                    min="0"
+                                                    max="360"
+                                                    value={Number(selectedEntity.rotation ?? 0)}
+                                                    onChange={(e) => updateSelected({ rotation: Number(e.target.value) })}
+                                                    onMouseUp={(e) => commitSelected({ rotation: Number(e.target.value) })}
+                                                    onTouchEnd={(e) => commitSelected({ rotation: Number(e.target.value) })}
+                                                    className="w-full accent-red-600"
+                                                />
+                                            </div>
+                                            <div>
+                                                <label className="text-[10px] font-bold text-neutral-400 uppercase">Size</label>
+                                                <input
+                                                    type="range"
+                                                    min="0.5"
+                                                    max="3"
+                                                    step="0.1"
+                                                    value={Number(selectedEntity.scale ?? 1)}
+                                                    onChange={(e) => updateSelected({ scale: Number(e.target.value) })}
+                                                    onMouseUp={(e) => commitSelected({ scale: Number(e.target.value) })}
+                                                    onTouchEnd={(e) => commitSelected({ scale: Number(e.target.value) })}
+                                                    className="w-full accent-red-600"
+                                                />
+                                            </div>
+                                        </>
+                                    )}
+
+                                    {/* Wall thickness */}
+                                    {selectedEntity.renderKind === RENDER.WALL && (
+                                        <div>
+                                            <label className="text-[10px] font-bold text-neutral-400 uppercase">Thickness</label>
+                                            <input
+                                                type="range"
+                                                min="1"
+                                                max="6"
+                                                step="0.1"
+                                                value={Number(selectedEntity.thickness ?? 2.2)}
+                                                onChange={(e) => updateSelected({ thickness: Number(e.target.value) })}
+                                                onMouseUp={(e) => commitSelected({ thickness: Number(e.target.value) })}
+                                                onTouchEnd={(e) => commitSelected({ thickness: Number(e.target.value) })}
+                                                className="w-full accent-red-600"
+                                            />
+                                        </div>
+                                    )}
+
+                                    {/* Circle radius */}
+                                    {selectedEntity.renderKind === RENDER.CIRCLE && (
+                                        <div>
+                                            <label className="text-[10px] font-bold text-neutral-400 uppercase">Radius</label>
+                                            <input
+                                                type="range"
+                                                min="3"
+                                                max="20"
+                                                step="0.5"
+                                                value={Number(selectedEntity.radius ?? 8.5)}
+                                                onChange={(e) => updateSelected({ radius: Number(e.target.value) })}
+                                                onMouseUp={(e) => commitSelected({ radius: Number(e.target.value) })}
+                                                onTouchEnd={(e) => commitSelected({ radius: Number(e.target.value) })}
+                                                className="w-full accent-red-600"
+                                            />
+                                        </div>
+                                    )}
+
+                                    <div className="flex gap-2">
+                                        <ButtonSecondary onClick={deleteSelected} className="text-xs py-1 px-3 bg-red-900/50 border-red-500 text-white">Delete</ButtonSecondary>
+                                    </div>
+                                </div>
+                            )}
                         </div>
                     </div>
                 </Card>
 
+                {/* CENTER BOARD */}
                 <Card className="flex-1 flex flex-col relative items-center justify-center bg-black/80 !p-2">
+                    {/* Header */}
                     <div className="w-full flex justify-between items-center mb-2 px-4 pt-2">
-                        <h3 className="text-2xl font-black text-white">STRATBOOK {viewingStrat && <span className="text-red-500 text-sm ml-2">(VIEWING)</span>}</h3>
-                        <div className="flex gap-2">
+                        <h3 className="text-2xl font-black text-white">
+                            STRATBOOK{" "}
+                            <span className="text-neutral-400 text-sm ml-2">(Step {sequenceStep})</span>
+                            {tool === TOOLS.PLACE && placingItem && <span className="text-blue-400 text-xs ml-2">Placing…</span>}
+                            {placingWall && <span className="text-green-400 text-xs ml-2">Wall: click end point</span>}
+                        </h3>
+
+                        <div className="flex gap-2 items-center">
                             {!viewingStrat ? (
                                 <>
-                                    <ButtonSecondary onClick={handleUndo} disabled={historyStep === 0} className="px-3" title="Undo">↩</ButtonSecondary>
-                                    <ButtonSecondary onClick={handleRedo} disabled={historyStep === history.length - 1} className="px-3" title="Redo">↪</ButtonSecondary>
-
+                                    <ButtonSecondary onClick={undo} disabled={stepState.historyStep === 0} className="px-3" title="Undo">↩</ButtonSecondary>
+                                    <ButtonSecondary onClick={redo} disabled={stepState.historyStep === stepState.history.length - 1} className="px-3" title="Redo">↪</ButtonSecondary>
                                     <div className="w-px h-6 bg-white/20 mx-2"></div>
 
-                                    <button onClick={() => setColor('#ef4444')} className={`w-6 h-6 rounded-full bg-red-500 border ${color === '#ef4444' ? 'border-white' : 'border-transparent'}`}></button>
-                                    <button onClick={() => setColor('#3b82f6')} className={`w-6 h-6 rounded-full bg-blue-500 border ${color === '#3b82f6' ? 'border-white' : 'border-transparent'}`}></button>
-                                    <button onClick={() => setColor('#ffffff')} className={`w-6 h-6 rounded-full bg-white border ${color === '#ffffff' ? 'border-white' : 'border-transparent'}`}></button>
-                                    <ButtonSecondary onClick={clearCanvas} className="text-xs py-1 px-3">Clear</ButtonSecondary>
-                                    <ButtonPrimary onClick={saveStrat} className="text-xs py-1 px-3">Save</ButtonPrimary>
+                                    <ButtonSecondary onClick={exportCurrentStepImage} className="text-xs py-1 px-3">Export</ButtonSecondary>
+
+                                    {enableFirestore ? (
+                                        <ButtonPrimary onClick={saveStratToFirestore} className="text-xs py-1 px-3">Save</ButtonPrimary>
+                                    ) : null}
                                 </>
-                            ) : <ButtonSecondary onClick={() => setViewingStrat(null)} className="text-xs bg-red-900/50 border-red-500 text-white">Close</ButtonSecondary>}
+                            ) : (
+                                <ButtonSecondary onClick={() => setViewingStrat(null)} className="text-xs bg-red-900/50 border-red-500 text-white">
+                                    Close
+                                </ButtonSecondary>
+                            )}
                         </div>
                     </div>
-                    <div className="w-full flex overflow-x-auto gap-2 pb-4 mb-2 px-4 custom-scrollbar">{MAPS.map(m => <button key={m} onClick={() => { setSelectedMap(m); clearCanvas(); setViewingStrat(null); }} className={`px-3 py-1 rounded-full text-xs font-bold ${selectedMap === m ? 'bg-red-600 text-white' : 'bg-black text-neutral-500'}`}>{m}</button>)}</div>
 
-                    <div ref={containerRef} className="relative h-full aspect-square bg-neutral-900 rounded-xl overflow-hidden border border-neutral-800 shadow-2xl mx-auto" onDragOver={e => e.preventDefault()} onDrop={handleDrop} onClick={() => setSelectedIconId(null)}>
-                        {mapImages[selectedMap] && <img src={mapImages[selectedMap]} alt="Map" className="absolute inset-0 w-full h-full object-cover pointer-events-none" />}
+                    {/* Map selector */}
+                    <div className="w-full flex overflow-x-auto gap-2 pb-4 mb-2 px-4 custom-scrollbar">
+                        {MAPS.map((m) => (
+                            <button
+                                key={m}
+                                onClick={() => {
+                                    setSelectedMap(m);
+                                    setViewingStrat(null);
+                                    // keep steps but reset selection & placement
+                                    setSelectedId(null);
+                                    setPlacingItem(null);
+                                    setPlacingWall(null);
+                                }}
+                                className={mapButtonClass(m)}
+                            >
+                                {m}
+                            </button>
+                        ))}
+                    </div>
 
-                        {/* DRAWN LINES LAYER (Canvas) */}
+                    {/* Board */}
+                    <div
+                        ref={containerRef}
+                        className="relative h-full aspect-square bg-neutral-900 rounded-xl overflow-hidden border border-neutral-800 shadow-2xl mx-auto select-none"
+                        onPointerDown={onMapPointerDown}
+                        onPointerMove={onEntityPointerMove}
+                        onPointerUp={onEntityPointerUp}
+                    >
+                        {mapImages[selectedMap] && (
+                            <img src={mapImages[selectedMap]} alt="Map" className="absolute inset-0 w-full h-full object-cover pointer-events-none" />
+                        )}
+
+                        {/* SHAPES layer (SVG): walls + circles */}
+                        <svg className="absolute inset-0 w-full h-full z-10 pointer-events-none">
+                            {/* Walls */}
+                            {icons.filter((i) => i.renderKind === RENDER.WALL).map((w) => (
+                                <g key={w.id}>
+                                    <line
+                                        x1={`${w.x1}%`}
+                                        y1={`${w.y1}%`}
+                                        x2={`${w.x2}%`}
+                                        y2={`${w.y2}%`}
+                                        stroke={w.color}
+                                        strokeWidth={(w.thickness ?? 2.2) * 10}
+                                        strokeLinecap="round"
+                                        opacity={0.95}
+                                    />
+                                    <line
+                                        x1={`${w.x1}%`}
+                                        y1={`${w.y1}%`}
+                                        x2={`${w.x2}%`}
+                                        y2={`${w.y2}%`}
+                                        stroke={w.outline ?? "rgba(255,255,255,0.6)"}
+                                        strokeWidth={Math.max(2, (w.thickness ?? 2.2) * 2)}
+                                        strokeLinecap="round"
+                                        opacity={0.9}
+                                    />
+                                </g>
+                            ))}
+
+                            {/* Circles */}
+                            {icons.filter((i) => i.renderKind === RENDER.CIRCLE).map((c) => (
+                                <g key={c.id}>
+                                    <circle
+                                        cx={`${c.cx}%`}
+                                        cy={`${c.cy}%`}
+                                        r={`${c.radius}%`}
+                                        fill={c.color ?? "rgba(255,255,255,0.18)"}
+                                        stroke={c.outline ?? "rgba(255,255,255,0.55)"}
+                                        strokeWidth="2"
+                                    />
+                                </g>
+                            ))}
+                        </svg>
+
+                        {/* Drawing canvas */}
                         <canvas
                             ref={canvasRef}
                             width={1024}
                             height={1024}
-                            className={`absolute inset-0 w-full h-full z-10 touch-none ${viewingStrat ? 'hidden' : 'cursor-crosshair'}`}
-                            onMouseDown={startDraw}
-                            onMouseMove={draw}
-                            onMouseUp={stopDraw}
-                            onMouseLeave={stopDraw}
-                            onTouchStart={startDraw} // Added touch support
-                            onTouchMove={draw}
-                            onTouchEnd={stopDraw}
+                            className={`absolute inset-0 w-full h-full z-20 ${viewingStrat ? "hidden" : ""}`}
+                            style={{ touchAction: "none", cursor: tool === TOOLS.DRAW ? "crosshair" : "default" }}
+                            onPointerDown={onCanvasPointerDown}
+                            onPointerMove={onCanvasPointerMove}
+                            onPointerUp={onCanvasPointerUp}
+                            onPointerLeave={onCanvasPointerUp}
                         />
 
-                        {/* ICONS LAYER (DOM) */}
-                        {!viewingStrat && mapIcons.map((icon, i) => (
-                            <div
-                                key={icon.id}
-                                className={`absolute cursor-grab active:cursor-grabbing group ${selectedIconId === icon.id ? 'z-50' : 'z-20'}`}
-                                style={{
-                                    left: `${icon.x}%`, top: `${icon.y}%`,
-                                    transform: `translate(-50%, -50%) rotate(${icon.rotation || 0}deg) scale(${icon.scale || 1})`,
-                                    transition: 'transform 0.1s'
-                                }}
-                                draggable
-                                onDragStart={(e) => { e.stopPropagation(); setMovingIconIndex(i); }}
-                                onClick={(e) => { e.stopPropagation(); setSelectedIconId(icon.id); }}
-                            >
-                                {/* Icon Rendering Logic */}
-                                {icon.type === 'agent' ? <img src={agentData[icon.name]?.icon} alt={icon.name} className={`w-10 h-10 rounded-full border-2 shadow-md pointer-events-none bg-black ${selectedIconId === icon.id ? 'border-green-500' : 'border-white'}`} /> :
-                                    icon.type === 'ability' ? <img src={icon.icon} className={`w-8 h-8 drop-shadow-md ${selectedIconId === icon.id ? 'filter brightness-150' : ''}`} /> :
-                                        icon.type === 'site_label' ? <div className="text-4xl font-black text-white drop-shadow-lg select-none" style={{ textShadow: '0 0 10px black' }}>{icon.label}</div> :
-                                            (icon.shape === 'ring' ? <div className="w-12 h-12 rounded-full border-4 shadow-sm backdrop-blur-sm" style={{ backgroundColor: icon.color, borderColor: icon.border }}></div> :
-                                                (icon.shape === 'triangle' ? <div className="w-0 h-0 border-l-[10px] border-l-transparent border-r-[10px] border-r-transparent border-b-[20px]" style={{ borderBottomColor: icon.border }}></div> :
-                                                    (icon.shape === 'square' ? <div className="w-8 h-8 border-2 shadow-md backdrop-blur-sm" style={{ backgroundColor: icon.color, borderColor: icon.border }}></div> :
-                                                        (icon.shape === 'rect' ? <div className="w-16 h-4 border-2 shadow-md backdrop-blur-sm" style={{ backgroundColor: icon.color, borderColor: icon.border }}></div> :
-                                                            (icon.shape === 'cross' ? <div className="text-3xl font-black leading-none drop-shadow-md" style={{ color: icon.border }}>X</div> :
-                                                                (icon.shape === 'diamond' ? <div className="w-12 h-12 transform rotate-45 border-2 shadow-md backdrop-blur-sm" style={{ backgroundColor: icon.color, borderColor: icon.border }}></div> :
-                                                                    <div className="w-6 h-6 transform rotate-45" style={{ backgroundColor: icon.color }}></div>))))))}
-                            </div>
-                        ))}
+                        {/* ICONS / LABELS layer */}
+                        {!viewingStrat && icons.map((entity) => {
+                            // Labels
+                            if (entity.renderKind === RENDER.LABEL) {
+                                return (
+                                    <div
+                                        key={entity.id}
+                                        className={`absolute z-30 ${tool === TOOLS.SELECT ? "cursor-grab" : "cursor-default"}`}
+                                        style={{ left: `${entity.x}%`, top: `${entity.y}%`, transform: "translate(-50%,-50%)" }}
+                                        onPointerDown={(e) => onEntityPointerDown(e, entity)}
+                                    >
+                                        <div className="text-4xl font-black text-white drop-shadow-lg select-none" style={{ textShadow: "0 0 10px black" }}>
+                                            {entity.label}
+                                        </div>
+                                    </div>
+                                );
+                            }
 
-                        {viewingStrat && <div className="absolute inset-0 z-30 bg-black flex items-center justify-center"><img src={viewingStrat} alt="Saved Strat" className="w-full h-full object-contain" /></div>}
+                            // Icon-like entities (agents, abilities, icon util)
+                            if (entity.renderKind === RENDER.ICON) {
+                                const isSelected = selectedId === entity.id;
+                                const x = entity.x ?? 50;
+                                const y = entity.y ?? 50;
+                                const rot = Number(entity.rotation ?? 0);
+                                const scale = Number(entity.scale ?? 1);
 
-                        {selectedIconId && (
-                            <div className="absolute bottom-4 left-1/2 -translate-x-1/2 bg-neutral-900/90 backdrop-blur border border-white/20 p-3 rounded-xl flex gap-4 items-center z-50 shadow-2xl animate-slide-in" onClick={e => e.stopPropagation()}>
-                                <div className="flex flex-col gap-1"><label className="text-[9px] font-bold text-neutral-400 uppercase">Rotate</label><input type="range" min="0" max="360" onChange={(e) => updateSelectedIcon('rotation', e.target.value)} className="w-24 accent-red-600" /></div>
-                                <div className="flex flex-col gap-1"><label className="text-[9px] font-bold text-neutral-400 uppercase">Size</label><input type="range" min="0.5" max="3" step="0.1" onChange={(e) => updateSelectedIcon('scale', e.target.value)} className="w-24 accent-red-600" /></div>
-                                <button onClick={deleteSelectedIcon} className="bg-red-600 hover:bg-red-700 text-white p-2 rounded-lg text-xs font-bold">DELETE</button>
+                                return (
+                                    <div
+                                        key={entity.id}
+                                        className={`absolute z-30 ${tool === TOOLS.SELECT ? "cursor-grab active:cursor-grabbing" : "cursor-default"} ${isSelected ? "z-40" : ""}`}
+                                        style={{
+                                            left: `${x}%`,
+                                            top: `${y}%`,
+                                            transform: `translate(-50%,-50%) rotate(${rot}deg) scale(${scale})`,
+                                        }}
+                                        onPointerDown={(e) => onEntityPointerDown(e, entity)}
+                                        onClick={(e) => { e.stopPropagation(); setSelectedId(entity.id); }}
+                                    >
+                                        {entity.type === "agent" ? (
+                                            <img
+                                                src={agentData[entity.name]?.icon}
+                                                alt={entity.name}
+                                                className={`w-10 h-10 rounded-full border-2 shadow-md pointer-events-none bg-black ${isSelected ? "border-green-500" : "border-white"}`}
+                                            />
+                                        ) : entity.type === "ability" ? (
+                                            <img src={entity.icon} alt={entity.name} className={`w-8 h-8 drop-shadow-md pointer-events-none ${isSelected ? "brightness-125" : "opacity-90"}`} />
+                                        ) : (
+                                            <div className="w-8 h-8 rounded border border-white/40 bg-white/10" />
+                                        )}
+                                    </div>
+                                );
+                            }
+
+                            // Circles/walls are moved by center; still selectable via an invisible handle at center
+                            if (entity.renderKind === RENDER.CIRCLE) {
+                                const isSelected = selectedId === entity.id;
+                                return (
+                                    <div
+                                        key={entity.id}
+                                        className={`absolute z-25 ${tool === TOOLS.SELECT ? "cursor-grab" : "cursor-default"}`}
+                                        style={{ left: `${entity.cx}%`, top: `${entity.cy}%`, transform: "translate(-50%,-50%)" }}
+                                        onPointerDown={(e) => onEntityPointerDown(e, entity)}
+                                    >
+                                        <div className={`w-3 h-3 rounded-full ${isSelected ? "bg-green-400" : "bg-white/50"} shadow`} />
+                                    </div>
+                                );
+                            }
+
+                            if (entity.renderKind === RENDER.WALL) {
+                                const isSelected = selectedId === entity.id;
+                                // center handle
+                                const cx = (entity.x1 + entity.x2) / 2;
+                                const cy = (entity.y1 + entity.y2) / 2;
+                                return (
+                                    <React.Fragment key={entity.id}>
+                                        {/* center move handle */}
+                                        <div
+                                            className={`absolute z-25 ${tool === TOOLS.SELECT ? "cursor-grab" : "cursor-default"}`}
+                                            style={{ left: `${cx}%`, top: `${cy}%`, transform: "translate(-50%,-50%)" }}
+                                            onPointerDown={(e) => onEntityPointerDown(e, entity)}
+                                        >
+                                            <div className={`w-3 h-3 rounded-full ${isSelected ? "bg-green-400" : "bg-white/50"} shadow`} />
+                                        </div>
+
+                                        {/* endpoint handles when selected */}
+                                        {isSelected && (
+                                            <>
+                                                <WallHandle
+                                                    x={entity.x1}
+                                                    y={entity.y1}
+                                                    onPointerDown={(e) => onEntityPointerDown(e, entity, { kind: "wall-handle", handle: "p1" })}
+                                                />
+                                                <WallHandle
+                                                    x={entity.x2}
+                                                    y={entity.y2}
+                                                    onPointerDown={(e) => onEntityPointerDown(e, entity, { kind: "wall-handle", handle: "p2" })}
+                                                />
+                                            </>
+                                        )}
+                                    </React.Fragment>
+                                );
+                            }
+
+                            return null;
+                        })}
+
+                        {/* Viewing saved strat image */}
+                        {viewingStrat && (
+                            <div className="absolute inset-0 z-50 bg-black flex items-center justify-center">
+                                <img src={viewingStrat} alt="Saved Strat" className="w-full h-full object-contain" />
                             </div>
                         )}
                     </div>
                 </Card>
             </div>
 
-            <div className="grid grid-cols-1 gap-6"><Card><h4 className="text-lg font-bold text-white mb-4">SAVED STRATS</h4><div className="grid grid-cols-2 md:grid-cols-4 gap-4 max-h-60 overflow-y-auto custom-scrollbar">{savedStrats.map((s, i) => <div key={s.id} onClick={() => setViewingStrat(s.image)} className="bg-black/50 p-2 rounded-lg border border-neutral-800 hover:border-red-500 cursor-pointer group relative aspect-square"><img src={s.image} className="w-full h-full object-cover rounded opacity-60 group-hover:opacity-100" /><div className="absolute bottom-0 left-0 w-full bg-black/80 p-1 text-[9px] text-center text-white truncate">{new Date(s.date).toLocaleDateString()}</div><button onClick={(e) => { e.stopPropagation(); deleteStrat(s.id) }} className="absolute top-1 right-1 text-red-500 bg-black rounded-full w-5 h-5 flex items-center justify-center font-bold text-xs opacity-0 group-hover:opacity-100">×</button></div>)}</div></Card></div>
+            {/* SAVED STRATS (Optional Firestore) */}
+            {enableFirestore ? (
+                <div className="grid grid-cols-1 gap-6">
+                    <Card>
+                        <h4 className="text-lg font-bold text-white mb-4">SAVED STRATS</h4>
+                        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 max-h-60 overflow-y-auto custom-scrollbar">
+                            {savedStrats.map((s) => (
+                                <div
+                                    key={s.id}
+                                    onClick={() => setViewingStrat(s.image)}
+                                    className="bg-black/50 p-2 rounded-lg border border-neutral-800 hover:border-red-500 cursor-pointer group relative aspect-square"
+                                >
+                                    <img src={s.image} alt="saved" className="w-full h-full object-cover rounded opacity-60 group-hover:opacity-100" />
+                                    <div className="absolute bottom-0 left-0 w-full bg-black/80 p-1 text-[9px] text-center text-white truncate">
+                                        {new Date(s.date).toLocaleDateString()} {s.step ? `· Step ${s.step}` : ""}
+                                    </div>
+                                    <button
+                                        onClick={(e) => {
+                                            e.stopPropagation();
+                                            deleteStrat(s.id);
+                                        }}
+                                        className="absolute top-1 right-1 text-red-500 bg-black rounded-full w-5 h-5 flex items-center justify-center font-bold text-xs opacity-0 group-hover:opacity-100"
+                                    >
+                                        ×
+                                    </button>
+                                </div>
+                            ))}
+                        </div>
+                    </Card>
+                </div>
+            ) : null}
         </div>
     );
+}
+
+// Small wall handle component (DOM pointer target)
+function WallHandle({ x, y, onPointerDown }) {
+    return (
+        <div
+            className="absolute z-40 cursor-pointer"
+            style={{ left: `${x}%`, top: `${y}%`, transform: "translate(-50%,-50%)" }}
+            onPointerDown={onPointerDown}
+        >
+            <div className="w-4 h-4 rounded-full bg-black border-2 border-green-400 shadow" />
+        </div>
+    );
+}
+
+// Render a step to an image (map + lines + shapes + icons)
+async function renderStepToImage({ mapUrl, step, agentData }) {
+    const temp = document.createElement("canvas");
+    temp.width = 1024;
+    temp.height = 1024;
+    const ctx = temp.getContext("2d");
+
+    // map background
+    if (mapUrl) {
+        const img = new Image();
+        img.crossOrigin = "anonymous";
+        img.src = mapUrl;
+        await new Promise((r) => { img.onload = r; img.onerror = r; });
+        ctx.drawImage(img, 0, 0, 1024, 1024);
+    }
+
+    // shapes first (walls/circles)
+    for (const it of step.icons) {
+        if (it.renderKind === "wall") {
+            const x1 = (it.x1 / 100) * 1024;
+            const y1 = (it.y1 / 100) * 1024;
+            const x2 = (it.x2 / 100) * 1024;
+            const y2 = (it.y2 / 100) * 1024;
+
+            ctx.lineCap = "round";
+            ctx.strokeStyle = it.color ?? "rgba(255,255,255,0.25)";
+            ctx.lineWidth = (it.thickness ?? 2.2) * 10;
+            ctx.beginPath();
+            ctx.moveTo(x1, y1);
+            ctx.lineTo(x2, y2);
+            ctx.stroke();
+
+            ctx.strokeStyle = it.outline ?? "rgba(255,255,255,0.6)";
+            ctx.lineWidth = Math.max(2, (it.thickness ?? 2.2) * 2);
+            ctx.beginPath();
+            ctx.moveTo(x1, y1);
+            ctx.lineTo(x2, y2);
+            ctx.stroke();
+        }
+
+        if (it.renderKind === "circle") {
+            const cx = (it.cx / 100) * 1024;
+            const cy = (it.cy / 100) * 1024;
+            const r = (it.radius / 100) * 1024;
+            ctx.beginPath();
+            ctx.fillStyle = it.color ?? "rgba(255,255,255,0.18)";
+            ctx.strokeStyle = it.outline ?? "rgba(255,255,255,0.55)";
+            ctx.lineWidth = 2;
+            ctx.arc(cx, cy, r, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.stroke();
+        }
+
+        if (it.renderKind === "label") {
+            const x = (it.x / 100) * 1024;
+            const y = (it.y / 100) * 1024;
+            ctx.font = "bold 80px Arial";
+            ctx.fillStyle = "rgba(255,255,255,0.85)";
+            ctx.textAlign = "center";
+            ctx.textBaseline = "middle";
+            ctx.shadowColor = "rgba(0,0,0,0.8)";
+            ctx.shadowBlur = 12;
+            ctx.fillText(it.label, x, y);
+            ctx.shadowBlur = 0;
+        }
+    }
+
+    // freehand lines
+    for (const l of step.lines) {
+        if (!l.points || l.points.length < 2) continue;
+        ctx.beginPath();
+        ctx.strokeStyle = l.color;
+        ctx.lineWidth = l.width ?? 3;
+        ctx.lineCap = "round";
+        ctx.lineJoin = "round";
+        ctx.moveTo(l.points[0].x, l.points[0].y);
+        for (let i = 1; i < l.points.length; i++) ctx.lineTo(l.points[i].x, l.points[i].y);
+        ctx.stroke();
+    }
+
+    // icons (agents/abilities)
+    for (const it of step.icons) {
+        if (it.renderKind !== "icon") continue;
+
+        const px = ((it.x ?? 50) / 100) * 1024;
+        const py = ((it.y ?? 50) / 100) * 1024;
+        const rot = Number(it.rotation ?? 0) * Math.PI / 180;
+        const scale = Number(it.scale ?? 1);
+
+        ctx.save();
+        ctx.translate(px, py);
+        ctx.rotate(rot);
+        ctx.scale(scale, scale);
+
+        if (it.type === "agent" && agentData?.[it.name]?.icon) {
+            const img = new Image();
+            img.crossOrigin = "anonymous";
+            img.src = agentData[it.name].icon;
+            await new Promise((r) => { img.onload = r; img.onerror = r; });
+
+            ctx.beginPath();
+            ctx.arc(0, 0, 26, 0, Math.PI * 2);
+            ctx.clip();
+            ctx.drawImage(img, -26, -26, 52, 52);
+            ctx.restore();
+            continue;
+        }
+
+        if (it.type === "ability" && it.icon) {
+            const img = new Image();
+            img.crossOrigin = "anonymous";
+            img.src = it.icon;
+            await new Promise((r) => { img.onload = r; img.onerror = r; });
+            ctx.drawImage(img, -22, -22, 44, 44);
+            ctx.restore();
+            continue;
+        }
+
+        ctx.restore();
+    }
+
+    return temp.toDataURL("image/jpeg", 0.85);
 }
 
 
