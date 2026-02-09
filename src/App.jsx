@@ -2171,8 +2171,8 @@ function StratBook() {
                                 <button
                                     onClick={() => setSide((s) => (s === "attack" ? "defense" : "attack"))}
                                     className={`w-24 h-[44px] rounded-lg border font-black text-xs ${side === "attack"
-                                            ? "bg-red-600/70 border-red-300 text-white"
-                                            : "bg-white/5 border-white/10 text-white/80 hover:bg-white/10"
+                                        ? "bg-red-600/70 border-red-300 text-white"
+                                        : "bg-white/5 border-white/10 text-white/80 hover:bg-white/10"
                                         }`}
                                     title="Toggle Attack/Defense"
                                 >
@@ -2753,6 +2753,8 @@ function StratBook() {
                 </div>
             </div>
         </div>
+    );
+}
 
 
 
