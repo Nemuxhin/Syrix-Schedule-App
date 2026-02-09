@@ -2045,21 +2045,6 @@ function StratBook() {
     // UI (RED THEME + FIT SCREEN + REAL FUNCTIONALITY)
     // --------------------------
     return (
-        <div className="w-full h-[100dvh] flex flex-col bg-[#0b1116] overflow-hidden">
-            {/* Header */}
-            <div className="h-12 flex items-center px-4 md:px-6 border-b border-white/10 bg-gradient-to-b from-black/50 to-transparent shrink-0">
-                <div className="flex gap-6 md:gap-10 text-white/70 text-xs md:text-sm font-bold tracking-widest uppercase">
-                    <div className="text-white border-b-2 border-red-500 pb-2">Strategy</div>
-                    <div className="hidden md:block">Lineups</div>
-                    <div className="hidden md:block">Playbook</div>
-                    <div className="hidden md:block">Community</div>
-                    <div className="hidden md:block">Matches</div>
-                </div>
-                <div className="ml-auto flex items-center gap-3 text-white/60">
-                    <div className="px-3 py-1 rounded bg-[#4b6b2a] text-white font-bold">PRO</div>
-                </div>
-            </div>
-
             {/* Main grid */}
             <div className="flex-1 grid grid-cols-1 lg:grid-cols-[320px_1fr_320px] overflow-hidden">
                 {/* LEFT */}
