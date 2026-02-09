@@ -2639,117 +2639,118 @@ function StratBook() {
 
                     {/* Bottom agent bar */}
                     <div className="absolute bottom-0 left-0 right-0 z-50 border-t border-white/10 bg-black/70 backdrop-blur">
-                      <div className="flex items-center gap-4 px-4 md:px-6 py-3">
-                        <div className="text-white/70 font-bold shrink-0">Ally</div>
+                        <div className="flex items-center gap-4 px-4 md:px-6 py-3">
+                            <div className="text-white/70 font-bold shrink-0">Ally</div>
 
-                        <div className="w-14 h-7 shrink-0 rounded-full bg-red-400/20 border border-red-300/30 relative">
-                          <div className="w-6 h-6 rounded-full bg-red-400 absolute right-0 top-0.5 translate-x-[-2px]" />
+                            <div className="w-14 h-7 shrink-0 rounded-full bg-red-400/20 border border-red-300/30 relative">
+                                <div className="w-6 h-6 rounded-full bg-red-400 absolute right-0 top-0.5 translate-x-[-2px]" />
+                            </div>
+
+                            <div className="flex-1 overflow-x-auto custom-scrollbar">
+                                <div className="flex gap-2 items-center">
+                                    {AGENT_NAMES.map((a) => {
+                                        const src = agentData?.[a]?.icon;
+
+                                        return (
+                                            <button
+                                                key={a}
+                                                type="button"
+                                                onClick={() => setSelectedAgentForUtil(a)}
+                                                className={`w-16 h-16 shrink-0 rounded-lg overflow-hidden border bg-black flex items-center justify-center ${selectedAgentForUtil === a ? "border-red-400" : "border-white/10"
+                                                    }`}
+                                                title={a}
+                                            >
+                                                {src ? (
+                                                    <img
+                                                        src={src}
+                                                        alt={a}
+                                                        className="w-full h-full object-cover block"
+                                                        loading="lazy"
+                                                        draggable={false}
+                                                        onError={(e) => {
+                                                            e.currentTarget.style.display = "none";
+                                                        }}
+                                                    />
+                                                ) : (
+                                                    <div className="w-full h-full flex items-center justify-center text-white/80 font-black bg-white/10">
+                                                        {String(a).slice(0, 2).toUpperCase()}
+                                                    </div>
+                                                )}
+                                            </button>
+                                        );
+                                    })}
+                                </div>
+                            </div>
                         </div>
+                    </div>
 
-                        <div className="flex-1 overflow-x-auto custom-scrollbar">
-                          <div className="flex gap-2 items-center">
-                            {AGENT_NAMES.map((a) => {
-                              const src = agentData?.[a]?.icon;
+                    {/* RIGHT */}
+                    <div className="border-l border-white/10 bg-[#0b1116] overflow-hidden hidden lg:block">
+                        <div className="h-full overflow-y-auto custom-scrollbar">
+                            <div className="p-4 border-b border-white/10">
+                                <div className="text-white text-3xl font-black">Home</div>
+                                <div className="text-white/40 text-xs font-bold mt-1 uppercase tracking-widest">
+                                    {selectedMap} • {side} • step {sequenceStep}
+                                </div>
+                            </div>
 
-                              return (
+                            <div className="p-4">
                                 <button
-                                  key={a}
-                                  type="button"
-                                  onClick={() => setSelectedAgentForUtil(a)}
-                                  className={`w-16 h-16 shrink-0 rounded-lg overflow-hidden border bg-black flex items-center justify-center ${
-                                    selectedAgentForUtil === a ? "border-red-400" : "border-white/10"
-                                  }`}
-                                  title={a}
+                                    onClick={() => {
+                                        setViewingStrat(null);
+                                        addToast("Ready: place items on the map");
+                                    }}
+                                    className="w-full py-4 rounded-xl bg-white/10 hover:bg-white/15 border border-white/10 text-white font-black text-lg"
                                 >
-                                  {src ? (
-                                    <img
-                                      src={src}
-                                      alt={a}
-                                      className="w-full h-full object-cover block"
-                                      loading="lazy"
-                                      draggable={false}
-                                      onError={(e) => {
-                                        // fallback if an icon URL fails
-                                        e.currentTarget.style.display = "none";
-                                      }}
-                                    />
-                                  ) : (
-                                    <div className="w-full h-full flex items-center justify-center text-white/80 font-black bg-white/10">
-                                      {String(a).slice(0, 2).toUpperCase()}
-                                    </div>
-                                  )}
+                                    Add Strategy
                                 </button>
-                              );
-                            })}
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-
-                {/* RIGHT */}
-                <div className="border-l border-white/10 bg-[#0b1116] overflow-hidden hidden lg:block">
-                    <div className="h-full overflow-y-auto custom-scrollbar">
-                        <div className="p-4 border-b border-white/10">
-                            <div className="text-white text-3xl font-black">Home</div>
-                            <div className="text-white/40 text-xs font-bold mt-1 uppercase tracking-widest">
-                                {selectedMap} • {side} • step {sequenceStep}
                             </div>
-                        </div>
 
-                        <div className="p-4">
-                            <button
-                                onClick={() => {
-                                    setViewingStrat(null);
-                                    addToast("Ready: place items on the map");
-                                }}
-                                className="w-full py-4 rounded-xl bg-white/10 hover:bg-white/15 border border-white/10 text-white font-black text-lg"
-                            >
-                                Add Strategy
-                            </button>
-                        </div>
-
-                        <div className="p-4">
-                            <div className="text-[11px] text-white/50 font-black uppercase tracking-widest mb-2">Saved Strats</div>
-                            <div className="grid grid-cols-2 gap-3 max-h-[70vh] overflow-y-auto custom-scrollbar">
-                                {savedStrats.map((s) => (
-                                    <div
-                                        key={s.id}
-                                        onClick={() => setViewingStrat(s.image)}
-                                        className="bg-black/40 p-2 rounded-lg border border-white/10 hover:border-red-500 cursor-pointer group relative aspect-square"
-                                    >
-                                        <img src={s.image} alt="saved" className="w-full h-full object-cover rounded opacity-70 group-hover:opacity-100" />
-                                        <div className="absolute bottom-0 left-0 w-full bg-black/80 p-1 text-[9px] text-center text-white truncate">
-                                            {new Date(s.date).toLocaleDateString()}
-                                        </div>
-                                        <button
-                                            onClick={(e) => {
-                                                e.stopPropagation();
-                                                deleteStrat(s.id);
-                                            }}
-                                            className="absolute top-1 right-1 text-red-500 bg-black rounded-full w-6 h-6 flex items-center justify-center font-black text-sm opacity-0 group-hover:opacity-100"
+                            <div className="p-4">
+                                <div className="text-[11px] text-white/50 font-black uppercase tracking-widest mb-2">
+                                    Saved Strats
+                                </div>
+                                <div className="grid grid-cols-2 gap-3 max-h-[70vh] overflow-y-auto custom-scrollbar">
+                                    {savedStrats.map((s) => (
+                                        <div
+                                            key={s.id}
+                                            onClick={() => setViewingStrat(s.image)}
+                                            className="bg-black/40 p-2 rounded-lg border border-white/10 hover:border-red-500 cursor-pointer group relative aspect-square"
                                         >
-                                            ×
-                                        </button>
-                                    </div>
-                                ))}
+                                            <img
+                                                src={s.image}
+                                                alt="saved"
+                                                className="w-full h-full object-cover rounded opacity-70 group-hover:opacity-100"
+                                            />
+                                            <div className="absolute bottom-0 left-0 w-full bg-black/80 p-1 text-[9px] text-center text-white truncate">
+                                                {new Date(s.date).toLocaleDateString()}
+                                            </div>
+                                            <button
+                                                onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    deleteStrat(s.id);
+                                                }}
+                                                className="absolute top-1 right-1 text-red-500 bg-black rounded-full w-6 h-6 flex items-center justify-center font-black text-sm opacity-0 group-hover:opacity-100"
+                                            >
+                                                ×
+                                            </button>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+
+                            <div className="p-4 text-white/40 text-xs leading-relaxed">
+                                <div className="font-black text-white/60 mb-2">Tips</div>
+                                <ul className="list-disc pl-4 space-y-1">
+                                    <li>Pick an agent from the bottom bar (it also places the agent).</li>
+                                    <li>Abilities shown on the left match the currently selected agent.</li>
+                                    <li>Walls need 2 clicks.</li>
+                                    <li>Drag markers/abilities into 🗑 to delete.</li>
+                                </ul>
                             </div>
                         </div>
-
-                        <div className="p-4 text-white/40 text-xs leading-relaxed">
-                            <div className="font-black text-white/60 mb-2">Tips</div>
-                            <ul className="list-disc pl-4 space-y-1">
-                                <li>Pick an agent from the bottom bar (it also places the agent).</li>
-                                <li>Abilities shown on the left match the currently selected agent.</li>
-                                <li>Walls need 2 clicks.</li>
-                                <li>Drag markers/abilities into 🗑 to delete.</li>
-                            </ul>
-                        </div>
                     </div>
-                </div>
-            </div>
-        </div>
-    );
-}
+
 
 
 function LineupLibrary() {
