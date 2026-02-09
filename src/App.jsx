@@ -1346,8 +1346,6 @@ function TeamComps({ members }) {
     );
 }
 
-import React, { useEffect, useMemo, useRef, useState } from "react";
-
 /**
  * StratBook v2 (ValoPlanner-like)
  * Features:
