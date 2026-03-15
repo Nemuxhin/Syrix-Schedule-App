@@ -857,48 +857,51 @@ const Card = ({ children, className = "" }) => (
     </div>
 );
 
-// 1. Move these TWO lines ABOVE the "return (" line of the AdminPanel
+// 1. These must be OUTSIDE and ABOVE the AdminPanel function
 const VictoryStamp = () => <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-50 border-8 border-green-500 text-green-500 font-black text-5xl md:text-7xl p-4 uppercase tracking-tighter -rotate-12 pointer-events-none mix-blend-screen shadow-[0_0_20px_rgba(34,197,94,0.5)] animate-fade-in">VICTORY</div>;
 const DefeatStamp = () => <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-50 border-8 border-red-600 text-red-600 font-black text-5xl md:text-7xl p-4 uppercase tracking-tighter rotate-12 pointer-events-none mix-blend-screen shadow-[0_0_20px_rgba(220,38,38,0.5)] animate-fade-in">DEFEAT</div>;
 
-// ... other code ...
+const AdminPanel = () => {
+    // ... all your useState and other logic must be here ...
+    // e.g., const [form, setForm] = useState(...);
+    // e.g., const submit = async () => { ... };
 
-return (
-    <div className="space-y-4">
-        <div>
-            <label className="text-xs font-bold text-red-500 block mb-1">
-                {form.type === 'VOD Review' ? "TOPIC" : "OPPONENT"}
-            </label>
-            {/* 2. YOU WERE MISSING THIS OPENING INPUT TAG BELOW */}
-            <Input
-                value={form.opponent}
-                onChange={e => setForm({ ...form, opponent: e.target.value })}
-                placeholder={form.type === 'VOD Review' ? "e.g. Reviewing Ascent Scrim" : "e.g. Team Liquid"}
-            />
-        </div>
+    return ( // <--- This return is now INSIDE the AdminPanel function
+        <div className="space-y-4">
+            <div>
+                <label className="text-xs font-bold text-red-500 block mb-1">
+                    {form.type === 'VOD Review' ? "TOPIC" : "OPPONENT"}
+                </label>
+                <Input
+                    value={form.opponent}
+                    onChange={e => setForm({ ...form, opponent: e.target.value })}
+                    placeholder={form.type === 'VOD Review' ? "e.g. Reviewing Ascent Scrim" : "e.g. Team Liquid"}
+                />
+            </div>
 
-        <div className="grid grid-cols-2 gap-4">
-            <div>
-                <label className="text-xs font-bold text-red-500 block mb-1">MAP</label>
-                <Select value={form.map} onChange={e => setForm({ ...form, map: e.target.value })}>
-                    <option value="General">General / None</option>
-                    {MAPS.map(m => <option key={m} value={m}>{m}</option>)}
-                </Select>
+            <div className="grid grid-cols-2 gap-4">
+                <div>
+                    <label className="text-xs font-bold text-red-500 block mb-1">MAP</label>
+                    <Select value={form.map} onChange={e => setForm({ ...form, map: e.target.value })}>
+                        <option value="General">General / None</option>
+                        {MAPS.map(m => <option key={m} value={m}>{m}</option>)}
+                    </Select>
+                </div>
+                <div>
+                    <label className="text-xs font-bold text-red-500 block mb-1">TIME</label>
+                    <Input type="time" value={form.time} onChange={e => setForm({ ...form, time: e.target.value })} className="[color-scheme:dark]" />
+                </div>
             </div>
-            <div>
-                <label className="text-xs font-bold text-red-500 block mb-1">TIME</label>
-                <Input type="time" value={form.time} onChange={e => setForm({ ...form, time: e.target.value })} className="[color-scheme:dark]" />
+            <div className="grid grid-cols-1">
+                <div>
+                    <label className="text-xs font-bold text-red-500 block mb-1">DATE</label>
+                    <Input type="date" value={form.date} onChange={e => setForm({ ...form, date: e.target.value })} className="[color-scheme:dark]" />
+                </div>
             </div>
+            <ButtonPrimary onClick={submit} className="w-full py-3">SCHEDULE EVENT</ButtonPrimary>
         </div>
-        <div className="grid grid-cols-1">
-            <div>
-                <label className="text-xs font-bold text-red-500 block mb-1">DATE</label>
-                <Input type="date" value={form.date} onChange={e => setForm({ ...form, date: e.target.value })} className="[color-scheme:dark]" />
-            </div>
-        </div>
-        <ButtonPrimary onClick={submit} className="w-full py-3">SCHEDULE EVENT</ButtonPrimary>
-    </div>
-);
+    );
+}; // <--- Don't forget to close the function!
 
 function AvailabilityHeatmap({ availabilities, members }) {
     const bucketSize = 60; const numBuckets = (24 * 60) / bucketSize;
