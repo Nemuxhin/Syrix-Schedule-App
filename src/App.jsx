@@ -859,164 +859,7 @@ const Card = ({ children, className = "" }) => (
 
 const VictoryStamp = () => <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-50 border-8 border-green-500 text-green-500 font-black text-5xl md:text-7xl p-4 uppercase tracking-tighter -rotate-12 pointer-events-none mix-blend-screen shadow-[0_0_20px_rgba(34,197,94,0.5)] animate-fade-in">VICTORY</div>;
 const DefeatStamp = () => <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-50 border-8 border-red-600 text-red-600 font-black text-5xl md:text-7xl p-4 uppercase tracking-tighter rotate-12 pointer-events-none mix-blend-screen shadow-[0_0_20px_rgba(220,38,38,0.5)] animate-fade-in">DEFEAT</div>;
-
-// --- HUB SECTIONS ---
-function LoginScreen({ signIn, onBack }) {
-    return (
-        <div className="fixed inset-0 bg-black w-full h-full flex flex-col items-center justify-center relative overflow-hidden">
-            <div className="absolute inset-0 w-full h-full z-0 pointer-events-none bg-black">
-                <div className="absolute top-[-10%] left-[-10%] w-[50%] h-[50%] rounded-full bg-[radial-gradient(circle,rgba(127,29,29,0.25)_0%,rgba(0,0,0,0)_70%)]"></div>
-                <div className="absolute bottom-[-10%] right-[-10%] w-[60%] h-[60%] rounded-full bg-[radial-gradient(circle,rgba(69,10,10,0.25)_0%,rgba(0,0,0,0)_70%)]"></div>
-            </div>
-            <div className="relative z-10 bg-neutral-900/80 backdrop-blur-xl border border-white/10 p-12 rounded-[3rem] shadow-2xl shadow-red-900/40 flex flex-col items-center text-center max-w-md w-full mx-4">
-                <h1 className="text-7xl font-black text-white tracking-tighter drop-shadow-[0_0_30px_rgba(255,255,255,0.5)]">SYRIX</h1>
-                <div className="h-1.5 w-32 bg-red-600 rounded-full shadow-[0_0_15px_rgba(220,38,38,1)] my-6"></div>
-
-                <button onClick={signIn} className="w-full bg-[#5865F2] hover:bg-[#4752C4] text-white py-4 rounded-2xl font-bold shadow-lg transition-transform hover:scale-105 flex items-center justify-center gap-3 text-lg uppercase tracking-wider mb-8">
-                    Login with Discord
-                </button>
-
-                <button onClick={onBack} className="text-neutral-500 hover:text-white text-sm uppercase font-bold tracking-widest">
-                    &larr; Back to Home
-                </button>
-            </div>
-        </div>
-    );
-}
-
-function CaptainsMessage() {
-    const [message, setMessage] = useState({ text: "Welcome", updatedBy: "System" }); const [isEditing, setIsEditing] = useState(false); const [draft, setDraft] = useState(""); const auth = getAuth();
-    const addToast = useToast();
-    useEffect(() => { const unsub = onSnapshot(doc(db, 'general', 'captain_message'), (s) => { if (s.exists()) setMessage(s.data()); }); return () => unsub(); }, []);
-    const handleSave = async () => { await setDoc(doc(db, 'general', 'captain_message'), { text: draft, updatedBy: auth.currentUser.displayName }); setIsEditing(false); addToast('Message Updated'); };
-    return (<div className="bg-gradient-to-br from-red-950 to-black p-6 rounded-3xl border border-red-900/50 shadow-xl"><div className="flex justify-between items-center mb-2"><h2 className="text-lg font-black text-white">📢 CAPTAIN'S MESSAGE</h2>{!isEditing && <button onClick={() => { setDraft(message.text); setIsEditing(true) }} className="text-xs text-neutral-400">Edit</button>}</div>{isEditing ? <div><textarea value={draft} onChange={e => setDraft(e.target.value)} className="w-full bg-black p-2 text-white mb-2" /><ButtonPrimary onClick={handleSave} className="text-xs py-2">Post</ButtonPrimary></div> : <p className="text-slate-200 text-sm whitespace-pre-wrap">"{message.text}"</p>}</div>);
-}
-
-function LeaveLogger({ members, rosterName }) {
-    const [leaves, setLeaves] = useState([]);
-    const [newLeave, setNewLeave] = useState({ start: '', end: '', reason: '' });
-    const { currentUser } = getAuth();
-    const addToast = useToast();
-
-    useEffect(() => {
-        const unsub = onSnapshot(collection(db, 'leaves'), (snap) => {
-            const l = [];
-            snap.forEach(doc => l.push({ id: doc.id, ...doc.data() }));
-
-            // Sort by start date
-            l.sort((a, b) => new Date(a.start) - new Date(b.start));
-
-            // Only show current or future absences
-            setLeaves(l.filter(leave => new Date(leave.end) >= new Date().setHours(0, 0, 0, 0)));
-        });
-        return () => unsub();
-    }, []);
-
-    const addLeave = async () => {
-        if (!newLeave.start || !newLeave.end) {
-            addToast("Please select start and end dates", "error");
-            return;
-        }
-
-        try {
-            await addDoc(collection(db, 'leaves'), {
-                ...newLeave,
-                // Uses the Roster Name from the Hub login logic, fallback to a safe string
-                user: rosterName || "Unknown Member",
-                uid: currentUser?.uid || "unknown",
-                timestamp: new Date().toISOString()
-            });
-
-            setNewLeave({ start: '', end: '', reason: '' });
-            addToast("Absence logged successfully");
-        } catch (error) {
-            console.error("Error logging leave:", error);
-            addToast("Failed to log absence", "error");
-        }
-    };
-
-    const deleteLeave = async (id) => {
-        try {
-            await deleteDoc(doc(db, 'leaves', id));
-            addToast("Entry deleted");
-        } catch (error) {
-            addToast("Error deleting entry", "error");
-        }
-    };
-
-    return (
-        <Card className="border-red-900/20">
-            <h3 className="text-lg font-black text-white mb-4 border-b border-red-900/30 pb-2 uppercase tracking-widest flex items-center gap-2">
-                <span className="text-xl">🏖️</span> Absence Log
-            </h3>
-
-            <div className="space-y-3 mb-4">
-                <div className="grid grid-cols-2 gap-2">
-                    <div className="flex flex-col gap-1">
-                        <label className="text-[9px] font-bold text-neutral-500 uppercase ml-1">Start</label>
-                        <Input type="date" value={newLeave.start} onChange={e => setNewLeave({ ...newLeave, start: e.target.value })} className="[color-scheme:dark]" />
-                    </div>
-                    <div className="flex flex-col gap-1">
-                        <label className="text-[9px] font-bold text-neutral-500 uppercase ml-1">End</label>
-                        <Input type="date" value={newLeave.end} onChange={e => setNewLeave({ ...newLeave, end: e.target.value })} className="[color-scheme:dark]" />
-                    </div>
-                </div>
-                <Input type="text" placeholder="Reason (e.g. Vacation, Exams)" value={newLeave.reason} onChange={e => setNewLeave({ ...newLeave, reason: e.target.value })} />
-                <ButtonSecondary onClick={addLeave} className="w-full text-xs py-3">Log Absence</ButtonSecondary>
-            </div>
-
-            <div className="space-y-2 max-h-48 overflow-y-auto pr-2 custom-scrollbar">
-                {leaves.length === 0 ? (
-                    <p className="text-neutral-600 italic text-xs text-center py-4">No upcoming absences.</p>
-                ) : (
-                    leaves.map(l => (
-                        <div key={l.id} className="p-3 bg-black/50 border border-neutral-800 rounded-lg flex justify-between items-center text-xs hover:border-red-900/50 transition-colors group">
-                            <div>
-                                <span className="font-bold text-red-500 mr-2">{l.user}</span>
-                                <span className="text-neutral-400 font-mono">{l.start} to {l.end}</span>
-                                <div className="text-neutral-500 italic mt-0.5">{l.reason || "No reason provided"}</div>
-                            </div>
-
-                            {/* Allow deletion if user owns the post OR is an admin */}
-                            {(l.user === rosterName || ADMIN_UIDS.includes(currentUser?.uid)) && (
-                                <button onClick={() => deleteLeave(l.id)} className="text-neutral-600 hover:text-red-500 font-bold px-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                                    ✕
-                                </button>
-                            )}
-                        </div>
-                    ))
-                )}
-            </div>
-        </Card>
-    );
-}
-function ScrimScheduler({ onSchedule, userTimezone }) {
-    const [form, setForm] = useState({ type: 'Scrim', date: '', time: '', opponent: '', map: MAPS[0] });
-
-    const submit = async () => {
-        if (!form.date || !form.time) return; // Basic validation
-        await onSchedule({ ...form, timezone: userTimezone });
-        setForm({ ...form, opponent: '' });
-    };
-
-    return (
-        <div className="space-y-4">
-            <div className="grid grid-cols-2 gap-4">
-                <div>
-                    <label className="text-xs font-bold text-red-500 block mb-1">EVENT TYPE</label>
-                    <Select value={form.type} onChange={e => setForm({ ...form, type: e.target.value })}>
-                        <option>Scrim</option>
-                        <option>Premier</option>
-                        <option>Tournament</option>
-                        <option>Competitive</option>
-                        <option>VOD Review</option>
-                        <option>Strategy Session</option>
-                    </Select>
-                </div>
-                <div>
-                    <label className="text-xs font-bold text-red-500 block mb-1">OPPONENT / NOTES</label>
-                    <Input
-                        value={form.opponent}
+a                        value={form.opponent}
                         onChange={e => setForm({ ...form, opponent: e.target.value })}
                         placeholder={form.type === 'VOD Review' ? "e.g. Reviewing Ascent Scrim" : "e.g. Team Liquid"}
                     />
@@ -4052,22 +3895,41 @@ function SyrixDashboard({ onBack }) {
     const openModal = (t, c, f) => { setModalContent({ title: t, children: c, onConfirm: f }); setIsModalOpen(true); };
 
     const saveAvail = async () => {
-        // Use rosterName if valid, otherwise fallback to "Guest"
-        const finalName = rosterName || currentUser.displayName || 'Guest';
+        if (!currentUser) return;
 
-        if (timeToMinutes(end) <= timeToMinutes(start)) return addToast('End time must be after start time', 'error');
-        setSaveStatus('saving');
-        const gs = convertToGMT(day, start);
-        const ge = convertToGMT(day, end);
-        const old = availabilities[finalName] || []; // Use finalName
-        const others = old.filter(s => convertFromGMT(s.day, s.start, userTimezone).day !== day);
+        try {
+            // CHANGE: Use currentUser.uid as the document ID
+            const userDocRef = doc(db, 'availabilities', currentUser.uid);
 
-        // Save to the correct document
-        await setDoc(doc(db, 'availabilities', finalName), { slots: [...others, { day: gs.day, start: gs.time, end: ge.time, role }] });
-        setSaveStatus('idle');
-        addToast('Availability Slot Saved');
-    };
-    const clearDay = async () => {
+            // Prepare the data
+            const gmtData = {};
+            DAYS.forEach(day => {
+                const range = localAvail[day];
+                if (range && range.start && range.end) {
+                    gmtData[day] = {
+                        start: convertToGMT(day, range.start).time,
+                        end: convertToGMT(day, range.end).time
+                    };
+                } else {
+                    gmtData[day] = null;
+                }
+            });
+
+            await setDoc(userDocRef, {
+                name: currentUser.displayName,
+                uid: currentUser.uid, // Store the UID inside the doc too
+                days: gmtData,
+                lastUpdated: new Date().toISOString(),
+                timezone: userTimezone
+            });
+
+            addToast("Availability Synced!");
+        } catch (e) {
+            console.error("Error saving availability:", e);
+            // If they get a permission error now, it's likely because the UID doesn't match
+            addToast("Failed to sync. Ensure you are logged in.", "error");
+        }
+    };    const clearDay = async () => {
         const finalName = rosterName || currentUser.displayName || 'Guest';
         const old = availabilities[finalName] || [];
         await setDoc(doc(db, 'availabilities', finalName), { slots: old.filter(s => convertFromGMT(s.day, s.start, userTimezone).day !== day) });
