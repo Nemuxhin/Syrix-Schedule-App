@@ -861,6 +861,47 @@ const Card = ({ children, className = "" }) => (
 const VictoryStamp = () => <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-50 border-8 border-green-500 text-green-500 font-black text-5xl md:text-7xl p-4 uppercase tracking-tighter -rotate-12 pointer-events-none mix-blend-screen shadow-[0_0_20px_rgba(34,197,94,0.5)] animate-fade-in">VICTORY</div>;
 const DefeatStamp = () => <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-50 border-8 border-red-600 text-red-600 font-black text-5xl md:text-7xl p-4 uppercase tracking-tighter rotate-12 pointer-events-none mix-blend-screen shadow-[0_0_20px_rgba(220,38,38,0.5)] animate-fade-in">DEFEAT</div>;
 
+const AdminPanel = () => {
+    // ... all your useState and other logic must be here ...
+    // e.g., const [form, setForm] = useState(...);
+    // e.g., const submit = async () => { ... };
+
+    return ( // <--- This return is now INSIDE the AdminPanel function
+        <div className="space-y-4">
+            <div>
+                <label className="text-xs font-bold text-red-500 block mb-1">
+                    {form.type === 'VOD Review' ? "TOPIC" : "OPPONENT"}
+                </label>
+                <Input
+                    value={form.opponent}
+                    onChange={e => setForm({ ...form, opponent: e.target.value })}
+                    placeholder={form.type === 'VOD Review' ? "e.g. Reviewing Ascent Scrim" : "e.g. Team Liquid"}
+                />
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+                <div>
+                    <label className="text-xs font-bold text-red-500 block mb-1">MAP</label>
+                    <Select value={form.map} onChange={e => setForm({ ...form, map: e.target.value })}>
+                        <option value="General">General / None</option>
+                        {MAPS.map(m => <option key={m} value={m}>{m}</option>)}
+                    </Select>
+                </div>
+                <div>
+                    <label className="text-xs font-bold text-red-500 block mb-1">TIME</label>
+                    <Input type="time" value={form.time} onChange={e => setForm({ ...form, time: e.target.value })} className="[color-scheme:dark]" />
+                </div>
+            </div>
+            <div className="grid grid-cols-1">
+                <div>
+                    <label className="text-xs font-bold text-red-500 block mb-1">DATE</label>
+                    <Input type="date" value={form.date} onChange={e => setForm({ ...form, date: e.target.value })} className="[color-scheme:dark]" />
+                </div>
+            </div>
+            <ButtonPrimary onClick={submit} className="w-full py-3">SCHEDULE EVENT</ButtonPrimary>
+        </div>
+    );
+}; // <--- Don't forget to close the function!
 
 function AvailabilityHeatmap({ availabilities, members }) {
     const bucketSize = 60; const numBuckets = (24 * 60) / bucketSize;
@@ -3470,135 +3511,7 @@ function RosterManager({ members, events }) {
     );
 }
 
-function AdminPanel() {
-    const [applications, setApplications] = useState([]);
-    const [processing, setProcessing] = useState(null); // Track which ID is processing
-    const addToast = useToast();
 
-    useEffect(() => {
-        const unsub = onSnapshot(collection(db, 'applications'), (snap) => {
-            const apps = [];
-            snap.forEach(doc => apps.push({ id: doc.id, ...doc.data() }));
-            setApplications(apps);
-        });
-        return () => unsub();
-    }, []);
-
-    const acceptApplicant = async (app) => {
-        setProcessing(app.id);
-
-        try {
-            // --- FIX FOR MISSING USERNAME ---
-            let rosterName = app.user;
-
-            if (!rosterName) {
-                const manualName = window.prompt("⚠️ This application is missing a username.\n\nPlease enter the player's Riot ID or Roster Name manually:");
-                if (!manualName) {
-                    setProcessing(null);
-                    return addToast("Action Cancelled: Name required", "error");
-                }
-                rosterName = manualName;
-            }
-            // --------------------------------
-
-            const safeUid = app.uid || "legacy_id_missing";
-
-            const rosterData = {
-                rank: app.rank || "Unranked",
-                role: 'Tryout',
-                ingameRole: app.role || "Flex",
-                notes: `Tracker: ${app.tracker || "N/A"}\nWhy: ${app.why || "N/A"}`,
-                joinedAt: new Date().toISOString(),
-                uid: safeUid,
-                pfp: "",
-                gameId: ""
-            };
-
-            // Use rosterName (which is guaranteed to exist now) as the document ID
-            await setDoc(doc(db, 'roster', rosterName), rosterData);
-            await deleteDoc(doc(db, 'applications', app.id));
-
-            addToast(`✅ Added ${rosterName} to Roster`);
-
-        } catch (error) {
-            console.error("ACCEPT ERROR:", error);
-            addToast(`Error: ${error.message}`, "error");
-        }
-        setProcessing(null);
-    };
-
-    const rejectApplicant = async (id) => {
-        if (!window.confirm("Are you sure you want to reject this applicant? This cannot be undone.")) return;
-        setProcessing(id);
-        try {
-            await deleteDoc(doc(db, 'applications', id));
-            addToast('Applicant Rejected');
-        } catch (error) {
-            addToast("Error rejecting", "error");
-        }
-        setProcessing(null);
-    };
-
-    return (
-        <Card className="h-full">
-            <h2 className="text-3xl font-black text-white mb-6 flex items-center gap-3">
-                <span className="text-red-600">ADMIN</span> DASHBOARD
-            </h2>
-            <div className="space-y-6">
-                {applications.length === 0 ? (
-                    <div className="text-center py-12 border border-dashed border-neutral-800 rounded-2xl">
-                        <p className="text-neutral-500 italic">No pending applications.</p>
-                    </div>
-                ) : (
-                    <div className="grid grid-cols-1 gap-4">
-                        {applications.map(app => (
-                            <div key={app.id} className="bg-black/80 border border-neutral-800 p-6 rounded-2xl flex flex-col md:flex-row justify-between gap-6 relative overflow-hidden group hover:border-red-600/30 transition-all">
-                                <div className="absolute top-0 left-0 w-1 h-full bg-yellow-500"></div>
-                                <div className="space-y-3 flex-1">
-                                    <div className="flex items-center gap-3">
-                                        <h4 className="text-2xl font-black text-white">{app.user}</h4>
-                                        <span className="bg-neutral-800 text-neutral-300 text-[10px] px-2 py-1 rounded font-bold uppercase tracking-wider">{app.rank}</span>
-                                        <span className="bg-red-900/30 text-red-400 text-[10px] px-2 py-1 rounded font-bold uppercase tracking-wider">{app.role}</span>
-                                    </div>
-
-                                    <div className="bg-neutral-900/50 p-3 rounded-lg border border-white/5">
-                                        <p className="text-neutral-500 text-xs font-bold uppercase mb-1">Application Statement</p>
-                                        <p className="text-neutral-300 text-sm italic">"{app.why}"</p>
-                                    </div>
-
-                                    <div className="flex items-center gap-4 text-xs">
-                                        <div className="text-neutral-500">Exp: <span className="text-white">{app.exp}</span></div>
-                                        <a href={app.tracker} target="_blank" rel="noreferrer" className="text-red-500 font-bold hover:underline flex items-center gap-1">
-                                            Tracker Profile ↗
-                                        </a>
-                                    </div>
-                                    <div className="text-[10px] text-neutral-600 font-mono">Applied: {new Date(app.submittedAt).toLocaleDateString()}</div>
-                                </div>
-
-                                <div className="flex flex-row md:flex-col gap-3 justify-center min-w-[150px]">
-                                    <button
-                                        onClick={() => acceptApplicant(app)}
-                                        disabled={processing === app.id}
-                                        className="bg-green-600 hover:bg-green-500 text-white font-black uppercase tracking-widest py-3 px-4 rounded-xl shadow-lg transition-all flex-1 text-xs disabled:opacity-50"
-                                    >
-                                        {processing === app.id ? 'Processing...' : 'Accept'}
-                                    </button>
-                                    <button
-                                        onClick={() => rejectApplicant(app.id)}
-                                        disabled={processing === app.id}
-                                        className="bg-black hover:bg-red-900/20 border border-neutral-700 hover:border-red-500 text-neutral-400 hover:text-white font-bold uppercase tracking-widest py-3 px-4 rounded-xl transition-all flex-1 text-xs disabled:opacity-50"
-                                    >
-                                        Reject
-                                    </button>
-                                </div>
-                            </div>
-                        ))}
-                    </div>
-                )}
-            </div>
-        </Card>
-    );
-}
 function PartnerDirectory() {
     const [partners, setPartners] = useState([]); const [newPartner, setNewPartner] = useState({ name: '', contact: '', notes: '' });
     useEffect(() => { const unsub = onSnapshot(collection(db, 'partners'), (s) => { const p = []; s.forEach(d => p.push({ id: d.id, ...d.data() })); setPartners(p); }); return unsub; }, []);
