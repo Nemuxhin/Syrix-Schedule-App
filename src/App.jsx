@@ -1421,13 +1421,13 @@ function StratBook() {
 
     const circleStyleFor = (kind) => {
         const styles = {
-            smoke: { fill: 'rgba(226, 232, 240, 0.20)', stroke: '#e2e8f0', r: 4.2 },
-            molly: { fill: 'rgba(239, 68, 68, 0.22)', stroke: '#ef4444', r: 3.2 },
-            flash: { fill: 'rgba(250, 204, 21, 0.22)', stroke: '#facc15', r: 2.2 },
-            recon: { fill: 'rgba(59, 130, 246, 0.18)', stroke: '#3b82f6', r: 3 },
-            stun: { fill: 'rgba(249, 115, 22, 0.18)', stroke: '#f97316', r: 3 }
+            smoke: { fill: 'rgba(226, 232, 240, 0.18)', stroke: '#e2e8f0', r: 4.8 },
+            molly: { fill: 'rgba(239, 68, 68, 0.20)', stroke: '#ef4444', r: 3.1 },
+            flash: { fill: 'rgba(250, 204, 21, 0.20)', stroke: '#facc15', r: 2.1 },
+            recon: { fill: 'rgba(59, 130, 246, 0.16)', stroke: '#3b82f6', r: 3.6 },
+            stun: { fill: 'rgba(249, 115, 22, 0.16)', stroke: '#f97316', r: 3.2 }
         };
-        return styles[kind] || { fill: `${color}30`, stroke: color, r: 2.8 };
+        return styles[kind] || { fill: `${color}30`, stroke: color, r: 2.6 };
     };
 
     const addObjectAt = (point) => {
@@ -1438,7 +1438,7 @@ function StratBook() {
         if (tool === 'ability' && selectedAbility) {
             const kind = classifyAbility(selectedAbility.name);
             const style = circleStyleFor(kind);
-            item = { id: uid(), type: 'ability', name: selectedAbility.name, icon: selectedAbility.icon, kind, x: point.x, y: point.y, radius: style.r, fill: style.fill, stroke: style.stroke, size: 1, rotation: 0, side };
+            item = { id: uid(), type: 'ability', name: selectedAbility.name, icon: selectedAbility.icon, kind, x: point.x, y: point.y, radius: style.r, fill: style.fill, stroke: style.stroke, side };
         }
         if (tool === 'smoke' || tool === 'molly') {
             const style = circleStyleFor(tool);
@@ -1659,24 +1659,24 @@ function StratBook() {
         if (obj.type === 'ability' || obj.type === 'area') {
             return (
                 <g key={obj.id} className="cursor-grab" onPointerDown={(e) => startDragObject(e, obj)}>
-                    <circle cx={`${obj.x}%`} cy={`${obj.y}%`} r={`${(obj.radius || 5) * (obj.size || 1)}%`} fill={obj.fill} stroke={obj.stroke} strokeWidth="2" strokeDasharray={obj.kind === 'flash' ? '4 3' : '0'} />
+                    <circle cx={`${obj.x}%`} cy={`${obj.y}%`} r={`${obj.radius || 5}%`} fill={obj.fill} stroke={obj.stroke} strokeWidth="1.4" strokeDasharray={obj.kind === 'flash' ? '3 2' : '0'} />
                     {obj.icon && <image href={obj.icon} x={`${obj.x - 1.2}%`} y={`${obj.y - 1.2}%`} width="2.4%" height="2.4%" opacity="0.95" />}
-                    {isSelected && <circle cx={`${obj.x}%`} cy={`${obj.y}%`} r={`${(obj.radius || 5) * (obj.size || 1) + 0.45}%`} fill="none" stroke="#22c55e" strokeWidth="1.2" />}
+                    {isSelected && <circle cx={`${obj.x}%`} cy={`${obj.y}%`} r={`${(obj.radius || 5) + 0.35}%`} fill="none" stroke="#22c55e" strokeWidth="1" />}
                 </g>
             );
         }
 
         return (
-            <foreignObject key={obj.id} x={`${obj.x - 2}%`} y={`${obj.y - 2}%`} width="4%" height="4%" className="overflow-visible">
+            <foreignObject key={obj.id} x={`${obj.x - 2.8}%`} y={`${obj.y - 2.8}%`} width="5.6%" height="5.6%" className="overflow-visible">
                 <div
-                    className={`relative flex h-full w-full items-center justify-center select-none cursor-grab ${isSelected ? 'ring-1 ring-green-400 rounded-full' : ''}`}
+                    className={`relative flex h-full w-full items-center justify-center select-none cursor-grab ${isSelected ? 'ring-2 ring-green-400 rounded-full' : ''}`}
                     style={{ transform: `rotate(${obj.rotation || 0}deg) scale(${obj.size || 1})`, transformOrigin: 'center' }}
                     onPointerDown={(e) => startDragObject(e, obj)}
                 >
-                    {obj.type === 'agent' && (obj.icon ? <img src={obj.icon} alt={obj.name} className="h-full w-full rounded-full border border-white bg-black shadow-lg pointer-events-none" /> : <div className="h-full w-full rounded-full border border-white bg-black text-white flex items-center justify-center text-[8px] font-black">{obj.name?.slice(0, 2)}</div>)}
+                    {obj.type === 'agent' && (obj.icon ? <img src={obj.icon} alt={obj.name} className="h-full w-full rounded-full border-2 border-white bg-black object-cover shadow-[0_0_12px_rgba(0,0,0,0.9)] pointer-events-none" /> : <div className="h-full w-full rounded-full border-2 border-white bg-black text-white flex items-center justify-center text-[10px] font-black shadow-[0_0_12px_rgba(0,0,0,0.9)]">{obj.name?.slice(0, 2)}</div>)}
                     {obj.type === 'text' && <div className="px-1.5 py-0.5 rounded bg-black/80 border border-white/20 text-[9px] font-black uppercase whitespace-nowrap shadow-lg" style={{ color: obj.color }}>{obj.text}</div>}
-                    {obj.type === 'spike' && <div className="h-3/4 w-3/4 rotate-45 bg-yellow-400 border border-yellow-100 shadow-[0_0_10px_rgba(250,204,21,0.65)]" />}
-                    {obj.type === 'ping' && <div className="h-full w-full rounded-full border-2 bg-transparent animate-pulse" style={{ borderColor: obj.color }} />}
+                    {obj.type === 'spike' && <div className="h-2/3 w-2/3 rotate-45 bg-yellow-400 border border-yellow-100 shadow-[0_0_10px_rgba(250,204,21,0.65)]" />}
+                    {obj.type === 'ping' && <div className="h-4/5 w-4/5 rounded-full border-2 bg-transparent animate-pulse" style={{ borderColor: obj.color }} />}
                 </div>
             </foreignObject>
         );
@@ -1799,7 +1799,6 @@ function StratBook() {
                             <div className="text-sm font-bold text-white truncate">{selectedObject.name || selectedObject.text || selectedObject.type}</div>
                             {'size' in selectedObject && <div><label className="text-[10px] text-neutral-500 uppercase font-bold">Size</label><input type="range" min="0.5" max="2.5" step="0.1" value={selectedObject.size || 1} onChange={e => updateSelected({ size: Number(e.target.value) })} className="w-full accent-red-600" /></div>}
                             {'rotation' in selectedObject && <div><label className="text-[10px] text-neutral-500 uppercase font-bold">Rotation</label><input type="range" min="0" max="360" value={selectedObject.rotation || 0} onChange={e => updateSelected({ rotation: Number(e.target.value) })} className="w-full accent-red-600" /></div>}
-                            {'radius' in selectedObject && <div><label className="text-[10px] text-neutral-500 uppercase font-bold">Radius</label><input type="range" min="1" max="8" step="0.25" value={selectedObject.radius || 5} onChange={e => updateSelected({ radius: Number(e.target.value) })} className="w-full accent-red-600" /></div>}
                             {selectedObject.type === 'text' && <Input value={selectedObject.text} onChange={e => updateSelected({ text: e.target.value })} />}
                         </div>
                     </div>
