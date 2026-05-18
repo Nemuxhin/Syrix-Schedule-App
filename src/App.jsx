@@ -271,7 +271,7 @@ const Modal = ({ isOpen, onClose, onConfirm, title, children }) => {
     if (!isOpen) return null;
     return (
         <div className="fixed inset-0 bg-black/95 z-[150] flex justify-center items-center backdrop-blur-sm p-4 overflow-y-auto">
-            <div className="bg-neutral-900 rounded-2xl shadow-2xl shadow-red-900/20 p-6 w-full max-w-md border border-red-900/40 animate-fade-in relative">
+            <div className="bg-neutral-900 rounded-xl shadow-2xl shadow-red-900/20 p-6 w-full max-w-md border border-red-900/40 animate-fade-in relative">
                 <h3 className="text-2xl font-black text-white mb-4 border-b pb-2 border-red-900/50 uppercase tracking-wider italic">{title}</h3>
                 <div className="text-neutral-300 mb-8">{children}</div>
                 <div className="flex justify-end gap-4">
@@ -415,35 +415,46 @@ const LandingPage = ({ onEnterHub }) => {
         };
     }, []);
 
+    const formatEventDate = (date) => {
+        if (!date) return 'Date TBD';
+        const parsed = new Date(date);
+        if (Number.isNaN(parsed.getTime())) return date;
+        return parsed.toLocaleDateString('en-US', { month: 'short', day: 'numeric', weekday: 'short' });
+    };
+
     const PlayerCard = ({ player, delay }) => {
+        const initials = String(player.id || '?').slice(0, 2).toUpperCase();
         return (
             <div className="player-card group w-full sm:w-72" data-aos="fade-up" data-aos-delay={delay}>
-                <div className="card-inner">
-                    {/* Front of Card */}
-                    <div className={`card-front glass-panel rounded-xl overflow-hidden shadow-2xl border-b-4 border-red-600 relative`}>
-                        <div className="w-full h-48 bg-gradient-to-b from-neutral-800 to-black flex items-center justify-center overflow-hidden">
+                <div className="card-inner h-full">
+                    <div className="card-front glass-panel rounded-xl overflow-hidden border border-white/10 relative h-full flex flex-col">
+                        <div className="w-full h-52 bg-neutral-950 flex items-center justify-center overflow-hidden relative">
                             {player.pfp ? (
-                                <img src={player.pfp} alt={player.id} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500" />
+                                <img src={player.pfp} alt={player.id} className="w-full h-full object-cover group-hover:scale-[1.04] transition-transform duration-500" />
                             ) : (
-                                <span className="text-6xl font-black text-neutral-700 group-hover:text-red-600 transition-colors">{player.id[0]}</span>
+                                <span className="text-6xl font-black text-neutral-700 group-hover:text-red-500 transition-colors">{initials}</span>
                             )}
+                            <div className="absolute inset-x-0 bottom-0 h-20 bg-gradient-to-t from-black to-transparent"></div>
                             {player.ingameRole && (
-                                <div className="absolute top-2 right-2 bg-red-600 text-white text-[10px] font-black uppercase px-2 py-1 rounded shadow-lg">
+                                <div className="absolute top-3 right-3 bg-red-600 text-white text-[10px] font-black uppercase px-2.5 py-1 rounded-md shadow-lg">
                                     {player.ingameRole}
                                 </div>
                             )}
                         </div>
-                        <div className="p-6 text-center relative">
-                            <h4 className={`text-2xl font-extrabold text-white mb-1`}>{player.id}</h4>
-                            <p className="text-sm font-black text-red-600 mb-1 uppercase tracking-widest border-y border-red-900/30 py-1 inline-block">{player.role || 'Member'}</p>
-                            <div className="mt-2 text-xs text-neutral-500 font-mono bg-black/50 py-1 px-2 rounded inline-block">Rank: {player.rank || 'N/A'}</div>
+                        <div className="p-5 text-left relative flex-1 flex flex-col">
+                            <div className="flex items-start justify-between gap-3 mb-3">
+                                <div>
+                                    <h4 className="text-2xl font-black text-white leading-none">{player.id}</h4>
+                                    {player.gameId && <p className="mt-1 text-xs text-neutral-500 font-mono truncate">{player.gameId}</p>}
+                                </div>
+                                <div className="text-[10px] font-black text-red-400 uppercase tracking-widest border border-red-500/30 bg-red-950/20 px-2 py-1 rounded-md whitespace-nowrap">{player.role || 'Member'}</div>
+                            </div>
+                            <p className="text-sm text-neutral-400 leading-relaxed line-clamp-3 flex-1">{player.notes || 'No bio available yet.'}</p>
+                            <div className="mt-4 flex items-center justify-between gap-2 border-t border-white/10 pt-3">
+                                <span className="text-[10px] uppercase tracking-widest text-neutral-500 font-bold">Rank</span>
+                                <span className="text-xs text-white font-bold bg-white/5 border border-white/10 px-2 py-1 rounded-md">{player.rank || 'N/A'}</span>
+                            </div>
                         </div>
-                    </div>
-
-                    {/* Back of Card (Updated to remove Gamer Tag) */}
-                    <div className="card-back glass-panel border border-red-900/30">
-                        <h5 className="text-xl font-bold text-red-500 mb-2">{player.id}</h5>
-                        <p className="text-neutral-300 text-sm italic">"{player.notes || 'No bio available.'}"</p>
                     </div>
                 </div>
             </div>
@@ -479,6 +490,7 @@ const LandingPage = ({ onEnterHub }) => {
                     <a onClick={() => setMobileMenuOpen(false)} href="#roster" className="text-white hover:text-red-500">Roster</a>
                     <a onClick={() => setMobileMenuOpen(false)} href="#schedule" className="text-white hover:text-red-500">Matches</a>
                     <a onClick={() => setMobileMenuOpen(false)} href="#vods" className="text-white hover:text-red-500">VODs</a>
+                    <a onClick={() => setMobileMenuOpen(false)} href="#news" className="text-white hover:text-red-500">News</a>
                     <a onClick={() => setMobileMenuOpen(false)} href="#merch" className="text-white hover:text-red-500">Shop</a>
                     <button onClick={() => { setMobileMenuOpen(false); onEnterHub(); }} className="px-8 py-4 rounded-full bg-red-600 text-white shadow-xl">TEAM HUB</button>
                 </div>
@@ -490,10 +502,6 @@ const LandingPage = ({ onEnterHub }) => {
 
                     {/* 1. YOUTUBE BACKGROUND LAYER */}
                     <div className="absolute inset-0 w-full h-full z-0 pointer-events-none overflow-hidden">
-                        {/* THE TRICK: 
-           We scale the video background enough to keep YouTube chrome outside the viewport.
-           and play buttons off the screen so no one sees them.
-        */}
                         <iframe
                             className="absolute top-1/2 left-1/2 w-full h-full min-w-[177vh] min-h-[56.25vw] -translate-x-1/2 -translate-y-1/2 scale-[2.35] opacity-38 mix-blend-luminosity"
                             src="https://www.youtube.com/embed/y9zweO_hU1U?autoplay=1&mute=1&controls=0&loop=1&playlist=y9zweO_hU1U&showinfo=0&rel=0&iv_load_policy=3&modestbranding=1&playsinline=1&enablejsapi=1&origin=http://localhost:3000"
@@ -505,7 +513,6 @@ const LandingPage = ({ onEnterHub }) => {
 
                         {/* Gradient & Texture Overlays to make it look cinematic */}
                         <div className="absolute inset-0 bg-gradient-to-t from-black via-black/55 to-black/80"></div>
-                        <div className="absolute inset-0 bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-20"></div>
                     </div>
 
                     {/* 2. HERO CONTENT */}
@@ -537,7 +544,7 @@ const LandingPage = ({ onEnterHub }) => {
                                 </span>
                                 <div className="absolute inset-0 bg-white/20 translate-x-[-100%] skew-x-[-15deg] group-hover:translate-x-[100%] transition-transform duration-700 ease-in-out"></div>
                             </button>
-                            <button onClick={onEnterHub} className="px-10 py-4 bg-white text-black border border-white text-black font-black uppercase tracking-widest hover:bg-neutral-200 transition-all rounded-lg">
+                            <button onClick={onEnterHub} className="px-10 py-4 bg-white text-black border border-white font-black uppercase tracking-widest hover:bg-neutral-200 transition-all rounded-lg">
                                 Team Hub
                             </button>
                         </div>
@@ -567,10 +574,8 @@ const LandingPage = ({ onEnterHub }) => {
 
                 {/* --- NEW TEAM STATS SECTION --- */}
                 <section className="w-full py-12 bg-black border-b border-white/10 flex justify-center relative z-20">
-                    {/* NEW: AMBIENT GLOW EFFECT */}
-                    <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[400px] bg-red-600/10 rounded-full blur-[100px] pointer-events-none"></div>
                     <div className="max-w-7xl w-full px-6 grid grid-cols-1 md:grid-cols-3 gap-6">
-                        <div className="glass-panel p-6 rounded-2xl flex items-center justify-between border border-red-900/30" data-aos="fade-up" data-aos-delay="0">
+                        <div className="glass-panel p-6 rounded-xl flex items-center justify-between border border-red-900/30" data-aos="fade-up" data-aos-delay="0">
                             <div>
                                 <div className="text-xs text-neutral-500 font-bold uppercase tracking-widest mb-1">Season Win Rate</div>
                                 <div className="text-5xl font-black text-white italic tracking-tighter">{teamStats.winRate}%</div>
@@ -579,7 +584,7 @@ const LandingPage = ({ onEnterHub }) => {
                                 <span className="text-2xl">🔥</span>
                             </div>
                         </div>
-                        <div className="glass-panel p-6 rounded-2xl flex items-center justify-between border border-white/10" data-aos="fade-up" data-aos-delay="100">
+                        <div className="glass-panel p-6 rounded-xl flex items-center justify-between border border-white/10" data-aos="fade-up" data-aos-delay="100">
                             <div>
                                 <div className="text-xs text-neutral-500 font-bold uppercase tracking-widest mb-1">Current Record</div>
                                 <div className="text-5xl font-black text-white italic tracking-tighter flex gap-3">
@@ -589,7 +594,7 @@ const LandingPage = ({ onEnterHub }) => {
                                 </div>
                             </div>
                         </div>
-                        <div className="glass-panel p-6 rounded-2xl flex items-center justify-between border border-white/10 relative overflow-hidden" data-aos="fade-up" data-aos-delay="200">
+                        <div className="glass-panel p-6 rounded-xl flex items-center justify-between border border-white/10 relative overflow-hidden" data-aos="fade-up" data-aos-delay="200">
                             <div className="relative z-10">
                                 <div className="text-xs text-neutral-500 font-bold uppercase tracking-widest mb-1">Performance Trend</div>
                                 <div className="text-sm text-neutral-300 font-mono">Last 10 Matches</div>
@@ -687,23 +692,23 @@ const LandingPage = ({ onEnterHub }) => {
                         </div>
                         <div className="space-y-4" data-aos="fade-up">
                             {matches.length > 0 ? matches.map((match, i) => (
-                                <div key={i} className="glass-panel p-6 rounded-2xl flex flex-col md:flex-row justify-between items-center gap-6 hover:border-red-600/50 transition-all group">
-                                    <div className="flex items-center gap-6">
-                                        <div className="text-3xl font-black text-neutral-700 group-hover:text-white transition-colors">0{i + 1}</div>
-                                        <div>
-                                            <div className="text-2xl font-black text-white italic tracking-tight flex items-center gap-2">
-                                                SYRIX <span className="text-sm text-red-600 not-italic font-bold px-2">VS</span> {match.opponent}
+                                <div key={i} className="glass-panel p-5 rounded-xl grid grid-cols-1 md:grid-cols-[1fr_auto] items-center gap-5 hover:border-red-600/40 transition-all group">
+                                    <div className="flex items-center gap-4 min-w-0">
+                                        <div className="h-12 w-12 rounded-lg border border-white/10 bg-white/5 flex items-center justify-center text-sm font-black text-neutral-500 group-hover:text-white transition-colors">{String(i + 1).padStart(2, '0')}</div>
+                                        <div className="min-w-0">
+                                            <div className="text-xl md:text-2xl font-black text-white italic tracking-tight flex flex-wrap items-center gap-2">
+                                                SYRIX <span className="text-xs text-red-500 not-italic font-black px-2 py-1 rounded bg-red-950/30 border border-red-900/40">VS</span> {match.opponent || 'TBD'}
                                             </div>
-                                            <div className="text-xs text-neutral-500 font-mono uppercase tracking-widest mt-1">{match.type} • {match.map || 'TBD'}</div>
+                                            <div className="text-xs text-neutral-500 font-mono uppercase tracking-widest mt-1">{match.type || 'Match'} • {match.map || 'TBD'}</div>
                                         </div>
                                     </div>
-                                    <div className="text-right bg-black/40 px-6 py-3 rounded-xl border border-white/5">
-                                        <div className="text-red-500 font-black text-lg">{match.date}</div>
-                                        <div className="text-white font-mono text-sm">@{match.time} {match.timezone}</div>
+                                    <div className="md:text-right bg-black/35 px-4 py-3 rounded-lg border border-white/10 min-w-40">
+                                        <div className="text-red-400 font-black text-base uppercase">{formatEventDate(match.date)}</div>
+                                        <div className="text-white font-mono text-sm">{match.time || 'TBD'} {match.timezone || ''}</div>
                                     </div>
                                 </div>
                             )) : (
-                                <div className="text-center py-12 glass-panel rounded-2xl">
+                                <div className="text-center py-12 glass-panel rounded-xl">
                                     <p className="text-neutral-500 italic">No upcoming operations scheduled.</p>
                                 </div>
                             )}
@@ -757,14 +762,14 @@ const LandingPage = ({ onEnterHub }) => {
                                         <span className="text-red-500 text-xs font-bold uppercase tracking-widest mb-2 block">Featured • {featuredNews.date}</span>
                                         <h4 className="text-3xl font-black text-white mb-4 uppercase leading-none">{featuredNews.title}</h4>
                                         <p className="text-neutral-400 mb-6 line-clamp-4">{featuredNews.body}</p>
-                                        <button className="text-white font-bold text-sm hover:text-red-500 transition-colors self-start">Read Full Report &rarr;</button>
+                                        {featuredNews.url && <a href={featuredNews.url} target="_blank" rel="noopener noreferrer" className="text-white font-bold text-sm hover:text-red-500 transition-colors self-start">Read Full Report &rarr;</a>}
                                     </div>
                                 )}
 
                                 {/* Other News List */}
                                 <div className="space-y-4" data-aos="fade-left">
                                     {otherNews.map(item => (
-                                        <div key={item.id} className="glass-panel p-6 rounded-2xl flex gap-4 items-center group hover:border-red-600/30 transition-all">
+                                        <div key={item.id} className="glass-panel p-6 rounded-xl flex gap-4 items-center group hover:border-red-600/30 transition-all">
                                             <div className="w-16 h-16 bg-neutral-800 rounded-lg flex-shrink-0 flex items-center justify-center text-2xl font-black text-neutral-700">
                                                 {/* Initials as icon */}
                                                 {item.title.substring(0, 2).toUpperCase()}
@@ -792,11 +797,10 @@ const LandingPage = ({ onEnterHub }) => {
                         </div>
                         <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
                             {merchData.length > 0 ? merchData.map((item, i) => (
-                                <div key={item.id} className="glass-panel rounded-2xl overflow-hidden group cursor-pointer" data-aos="fade-up" data-aos-delay={i * 100}>
-                                    <div className="h-64 bg-neutral-800 flex items-center justify-center group-hover:bg-neutral-700 transition-colors relative">
-                                        <span className="text-neutral-500 font-black uppercase tracking-widest z-10">{item.name}</span>
-                                        {/* Placeholder gradient background if no image provided */}
-                                        <div className="absolute inset-0 bg-gradient-to-tr from-transparent to-white/5 opacity-0 group-hover:opacity-100 transition-opacity"></div>
+                                <div key={item.id} className="glass-panel rounded-xl overflow-hidden group cursor-pointer" data-aos="fade-up" data-aos-delay={i * 100}>
+                                    <div className="h-64 bg-neutral-900 flex items-center justify-center group-hover:bg-neutral-800 transition-colors relative overflow-hidden">
+                                        {item.image ? <img src={item.image} alt={item.name} className="absolute inset-0 w-full h-full object-cover opacity-80 group-hover:scale-105 transition-transform duration-500" /> : <span className="text-neutral-500 font-black uppercase tracking-widest z-10">{item.name}</span>}
+                                        <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-transparent to-transparent"></div>
                                     </div>
                                     <div className="p-6 flex justify-between items-center">
                                         <div>
@@ -1249,7 +1253,7 @@ function TeamComps({ members }) {
         const agentImage = getAgentIcon(selectedAgent);
 
         return (
-            <div className="relative group h-64 bg-neutral-900/80 border border-white/10 rounded-2xl overflow-hidden transition-all hover:border-red-600 hover:shadow-[0_0_30px_rgba(220,38,38,0.2)] flex flex-col">
+            <div className="relative group h-64 bg-neutral-900/80 border border-white/10 rounded-xl overflow-hidden transition-all hover:border-red-600 hover:shadow-[0_0_30px_rgba(220,38,38,0.2)] flex flex-col">
                 {selectedAgent && agentImage && (<div className="absolute inset-0 z-0"><img src={agentImage} alt={selectedAgent} className="w-full h-full object-cover opacity-40 group-hover:opacity-60 transition-opacity mix-blend-luminosity" style={{ objectPosition: 'center top' }} /><div className="absolute inset-0 bg-gradient-to-b from-transparent via-neutral-900/50 to-neutral-950"></div></div>)}
                 <div onClick={() => setActiveDropdown(isOpen ? null : index)} className="flex-1 relative flex flex-col justify-center items-center p-4 z-10 border-b border-white/5 cursor-pointer">
                     <label className="text-[10px] font-black text-red-500 uppercase tracking-[0.2em] mb-3 z-20 drop-shadow-md">Role {index + 1}</label>
@@ -1270,7 +1274,7 @@ function TeamComps({ members }) {
                 <div className="flex justify-between items-center mb-8 relative z-10"><div className="flex items-center gap-3"><span className="flex h-3 w-3 relative"><span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-500 opacity-75"></span><span className="relative inline-flex rounded-full h-3 w-3 bg-red-600"></span></span><h4 className="text-sm font-bold text-neutral-300 uppercase tracking-widest">Design {selectedMap} Strategy</h4></div><ButtonPrimary onClick={saveComp} className="text-xs py-2">Save Loadout</ButtonPrimary></div>
                 <div className="grid grid-cols-2 md:grid-cols-5 gap-4" onClick={() => setActiveDropdown(null)}>{Array.from({ length: 5 }).map((_, i) => (<div key={i} onClick={e => e.stopPropagation()}><AgentCard index={i} /></div>))}</div>
             </div>
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">{currentMapComps.map(comp => (<div key={comp.id} className="bg-neutral-900/80 rounded-2xl border border-white/5 overflow-hidden relative group hover:border-red-600/40 transition-all shadow-lg"><div className="bg-black/50 px-5 py-3 flex justify-between items-center border-b border-neutral-800 group-hover:bg-red-900/10 transition-colors"><div className="flex items-center gap-2"><div className="w-1.5 h-1.5 bg-red-600 rounded-full"></div><div className="text-[10px] font-mono text-neutral-400 uppercase tracking-widest">ID: {comp.id.substring(0, 6)}</div></div><button onClick={() => deleteComp(comp.id)} className="text-neutral-600 hover:text-white font-bold text-[10px] bg-neutral-800 hover:bg-red-600 px-2 py-1 rounded transition-all">DELETE</button></div><div className="p-5 grid grid-cols-5 gap-2 divide-x divide-neutral-800/50">{comp.agents.map((agent, i) => (<div key={i} className="text-center flex flex-col justify-center items-center gap-1"><div className="text-xs sm:text-sm font-black text-white uppercase tracking-tight drop-shadow-sm">{agent}</div><div className="text-[9px] text-neutral-500 font-mono uppercase tracking-widest truncate w-full">{comp.players[i] || '-'}</div></div>))}</div></div>))}</div>
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">{currentMapComps.map(comp => (<div key={comp.id} className="bg-neutral-900/80 rounded-xl border border-white/5 overflow-hidden relative group hover:border-red-600/40 transition-all shadow-lg"><div className="bg-black/50 px-5 py-3 flex justify-between items-center border-b border-neutral-800 group-hover:bg-red-900/10 transition-colors"><div className="flex items-center gap-2"><div className="w-1.5 h-1.5 bg-red-600 rounded-full"></div><div className="text-[10px] font-mono text-neutral-400 uppercase tracking-widest">ID: {comp.id.substring(0, 6)}</div></div><button onClick={() => deleteComp(comp.id)} className="text-neutral-600 hover:text-white font-bold text-[10px] bg-neutral-800 hover:bg-red-600 px-2 py-1 rounded transition-all">DELETE</button></div><div className="p-5 grid grid-cols-5 gap-2 divide-x divide-neutral-800/50">{comp.agents.map((agent, i) => (<div key={i} className="text-center flex flex-col justify-center items-center gap-1"><div className="text-xs sm:text-sm font-black text-white uppercase tracking-tight drop-shadow-sm">{agent}</div><div className="text-[9px] text-neutral-500 font-mono uppercase tracking-widest truncate w-full">{comp.players[i] || '-'}</div></div>))}</div></div>))}</div>
         </div>
     );
 }
@@ -2004,7 +2008,7 @@ function StratBook() {
     const allObjects = draft ? [...objects, draft] : objects;
 
     return (
-        <div className="h-full min-h-[760px] grid grid-cols-1 xl:grid-cols-[280px_minmax(420px,1fr)_320px] bg-[#070b0f] border border-white/10 rounded-2xl overflow-hidden shadow-2xl">
+        <div className="h-full min-h-[760px] grid grid-cols-1 xl:grid-cols-[280px_minmax(420px,1fr)_320px] bg-[#070b0f] border border-white/10 rounded-xl overflow-hidden shadow-2xl">
             <aside className="border-b xl:border-b-0 xl:border-r border-white/10 bg-black/40 overflow-y-auto custom-scrollbar">
                 <div className="p-4 border-b border-white/10">
                     <div className="text-2xl font-black text-white italic tracking-tighter"><span className="text-red-600">/</span> STRAT PLANNER</div>
@@ -2256,7 +2260,7 @@ function LineupLibrary() {
             </div>
 
             <div className="flex flex-col lg:flex-row gap-6 h-full min-h-0">
-                <div className="relative aspect-square h-full max-h-[600px] bg-neutral-900 rounded-2xl overflow-hidden border border-neutral-800 shadow-2xl flex-shrink-0 group self-start lg:self-auto">
+                <div className="relative aspect-square h-full max-h-[600px] bg-neutral-900 rounded-xl overflow-hidden border border-neutral-800 shadow-2xl flex-shrink-0 group self-start lg:self-auto">
                     {mapImages[selectedMap] && <img ref={mapRef} onClick={handleMapClick} src={mapImages[selectedMap]} alt="Map" className="w-full h-full object-cover cursor-crosshair opacity-80 group-hover:opacity-100 transition-opacity" />}
                     {lineups.map(l => (
                         <div
@@ -2609,7 +2613,7 @@ function MatchHistory({ currentUser, members }) {
 
             {/* --- MANUAL ADD FORM --- */}
             {isAdding && (
-                <div className="mb-8 bg-black/50 p-6 rounded-2xl border border-white/10 space-y-4 animate-fade-in relative overflow-hidden">
+                <div className="mb-8 bg-black/50 p-6 rounded-xl border border-white/10 space-y-4 animate-fade-in relative overflow-hidden">
                     <div className="absolute top-0 left-0 w-1 h-full bg-red-600"></div>
                     <h4 className="text-white font-bold uppercase text-sm">Log Unscheduled Match</h4>
                     <div className="grid grid-cols-2 gap-3">
@@ -3572,7 +3576,7 @@ function SyrixDashboard({ onBack }) {
 
             <main className="flex-1 overflow-y-auto p-4 md:p-6 scrollbar-thin scrollbar-thumb-red-900/50 scrollbar-track-black/20 relative z-10">
                 <div className="max-w-[1920px] mx-auto min-h-screen flex flex-col">
-                    {activeTab === 'dashboard' && <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 animate-fade-in">
+                    {activeTab === 'dashboard' && <div className="animate-fade-in space-y-6"><div className="grid grid-cols-1 md:grid-cols-4 gap-4"><div className="glass-panel rounded-xl p-4 border-white/10"><div className="text-[10px] uppercase tracking-widest text-neutral-500 font-black">Members</div><div className="mt-2 text-3xl font-black text-white">{dynamicMembers.length}</div></div><div className="glass-panel rounded-xl p-4 border-white/10"><div className="text-[10px] uppercase tracking-widest text-neutral-500 font-black">Events</div><div className="mt-2 text-3xl font-black text-white">{events.length}</div></div><div className="glass-panel rounded-xl p-4 border-white/10"><div className="text-[10px] uppercase tracking-widest text-neutral-500 font-black">Timezone</div><div className="mt-2 text-sm font-bold text-white truncate">{userTimezone}</div></div><div className="glass-panel rounded-xl p-4 border-white/10"><div className="text-[10px] uppercase tracking-widest text-neutral-500 font-black">Access</div><div className="mt-2 text-sm font-bold text-white">{isAdmin ? 'Admin' : 'Member'}</div></div></div><div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
                         <div className="lg:col-span-4 space-y-8">
                             <CaptainsMessage />
                             <LeaveLogger members={dynamicMembers} rosterName={rosterName} />
@@ -3580,11 +3584,11 @@ function SyrixDashboard({ onBack }) {
                             <Card className="border-red-900/20"><div className="absolute top-0 left-0 w-1 h-full bg-red-600/50"></div><h2 className="text-xl font-bold text-white mb-6 uppercase tracking-wide">Event Operations</h2><ScrimScheduler onSchedule={schedEvent} userTimezone={userTimezone} /></Card>
                         </div>
                         <div className="lg:col-span-8 space-y-8">
-                            <div className="grid grid-cols-1 xl:grid-cols-2 gap-8"><Card><h2 className="text-lg font-bold text-white mb-4 flex justify-between items-center uppercase tracking-wide"><span>Upcoming Events</span><span className="text-[10px] bg-red-900/30 text-red-400 border border-red-900/50 px-2 py-1 rounded font-bold">{events.length} ACTIVE</span></h2><div className="space-y-3 max-h-64 overflow-y-auto pr-2 scrollbar-thin scrollbar-thumb-neutral-700">{events.map(ev => (<div key={ev.id} className="p-3 bg-black/40 rounded-xl border border-neutral-800 flex justify-between items-center group hover:border-red-900/50 transition-colors"><div><div className="font-bold text-white text-sm group-hover:text-red-400 transition-colors">{ev.type} <span className="text-neutral-500">vs</span> {ev.opponent || 'TBD'}</div><div className="text-xs text-neutral-400 mt-1">{ev.date} @ <span className="text-white font-mono">{ev.time}</span></div></div><button onClick={() => openModal('Delete Event', 'Remove?', () => deleteEvent(ev.id))} className="text-neutral-600 hover:text-red-500">×</button></div>))}</div></Card><Card><h2 className="text-lg font-bold text-white mb-4 uppercase tracking-wide">Availability Heatmap</h2><AvailabilityHeatmap availabilities={availabilities} members={dynamicMembers} /></Card></div>
+                            <div className="grid grid-cols-1 xl:grid-cols-2 gap-8"><Card><h2 className="text-lg font-bold text-white mb-4 flex justify-between items-center uppercase tracking-wide"><span>Upcoming Events</span><span className="text-[10px] bg-red-900/30 text-red-400 border border-red-900/50 px-2 py-1 rounded font-bold">{events.length} ACTIVE</span></h2><div className="space-y-3 max-h-64 overflow-y-auto pr-2 scrollbar-thin scrollbar-thumb-neutral-700">{events.length > 0 ? events.map(ev => (<div key={ev.id} className="p-3 bg-black/40 rounded-xl border border-neutral-800 flex justify-between items-center group hover:border-red-900/50 transition-colors"><div><div className="font-bold text-white text-sm group-hover:text-red-400 transition-colors">{ev.type} <span className="text-neutral-500">vs</span> {ev.opponent || 'TBD'}</div><div className="text-xs text-neutral-400 mt-1">{ev.date} @ <span className="text-white font-mono">{ev.time}</span></div></div><button onClick={() => openModal('Delete Event', 'Remove?', () => deleteEvent(ev.id))} className="text-neutral-600 hover:text-red-500">×</button></div>)) : <div className="p-6 text-center text-sm text-neutral-500 border border-dashed border-neutral-800 rounded-xl">No active events scheduled.</div>}</div></Card><Card><h2 className="text-lg font-bold text-white mb-4 uppercase tracking-wide">Availability Heatmap</h2><AvailabilityHeatmap availabilities={availabilities} members={dynamicMembers} /></Card></div>
                             <PerformanceWidget events={events} />
                             <Card><h2 className="text-xl font-bold text-white mb-6 uppercase tracking-wide">Detailed Timeline <span className="text-neutral-500 text-sm normal-case">({userTimezone})</span></h2><div className="overflow-x-auto scrollbar-thin scrollbar-thumb-neutral-700"><table className="w-full text-left border-collapse min-w-[600px]"><thead><tr className="border-b border-neutral-800"><th className="p-3 text-xs font-bold text-neutral-500 uppercase tracking-wider w-32">Team Member</th>{SHORT_DAYS.map(day => (<th key={day} className="p-3 text-xs font-bold text-red-600 uppercase tracking-wider text-center border-l border-neutral-800">{day}</th>))}</tr></thead><tbody className="divide-y divide-neutral-800/50">{dynamicMembers.map(member => (<tr key={member} className="hover:bg-neutral-800/30 transition-colors group"><td className="p-4 font-bold text-white text-sm flex items-center gap-2"><div className="w-2 h-2 rounded-full bg-red-500 shadow-red-500/50 shadow-sm"></div>{member}</td>{DAYS.map((day) => { const slots = (displayAvail[member] || []).filter(s => s.day === day); return (<td key={day} className="p-2 align-middle border-l border-neutral-800/50"><div className="flex flex-col gap-1 items-center justify-center">{slots.length > 0 ? slots.map((s, i) => (<div key={i} className="bg-gradient-to-br from-red-600 to-red-700 text-white text-[10px] font-bold px-2 py-1 rounded w-full text-center shadow-md whitespace-nowrap flex items-center justify-center gap-1">{s.start}-{s.end}<span className="opacity-75 ml-1 text-[9px] border border-white/20 px-1 rounded bg-black/20">{ROLE_ABBREVIATIONS[s.role] || s.role}</span></div>)) : <div className="h-1 w-4 bg-neutral-800 rounded-full"></div>}</div></td>); })}</tr>))}</tbody></table></div></Card>
                         </div>
-                    </div>}
+                    </div></div>}
                     {activeTab === 'playbook' && <div className="animate-fade-in h-[80vh]"><Playbook /></div>}
                     {activeTab === 'comps' && <div className="animate-fade-in h-full"><TeamComps members={dynamicMembers} /></div>}
                     {activeTab === 'matches' && <div className="animate-fade-in"><MatchHistory currentUser={currentUser} members={dynamicMembers} /></div>}
