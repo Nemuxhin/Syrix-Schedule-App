@@ -1,7 +1,7 @@
-﻿import React, { useState, useEffect, useMemo, useRef, createContext, useContext } from 'react';
+import React, { useState, useEffect, useMemo, useRef, createContext, useContext } from 'react';
 import { initializeApp } from 'firebase/app';
 import { getFirestore, collection, onSnapshot, doc, setDoc, deleteDoc, addDoc, updateDoc, query, where, getDoc, getDocs } from 'firebase/firestore';
-import { getAuth, onAuthStateChanged, signInWithPopup, signOut, OAuthProvider, signInWithCustomToken } from 'firebase/auth';
+import { getAuth, onAuthStateChanged, signInWithPopup, signOut, OAuthProvider } from 'firebase/auth';
 
 // --- Firebase Configuration ---
 const firebaseConfig = {
@@ -45,6 +45,23 @@ const timezones = ["UTC", "GMT", "Europe/London", "Europe/Paris", "Europe/Berlin
 // --- UTILITY FUNCTIONS ---
 function timeToMinutes(t) { if (!t || t === '24:00') return 1440; const [h, m] = t.split(":").map(Number); return h * 60 + m; }
 function minutesToTime(m) { const minutes = m % 1440; const hh = Math.floor(minutes / 60).toString().padStart(2, '0'); const mm = (minutes % 60).toString().padStart(2, '0'); return `${hh}:${mm}`; }
+
+const normalizeAvailabilitySlots = (data = {}) => {
+    if (Array.isArray(data.slots)) return data.slots;
+
+    if (data.days && typeof data.days === 'object') {
+        return Object.entries(data.days)
+            .filter(([, range]) => range?.start && range?.end)
+            .map(([day, range]) => ({
+                day,
+                start: range.start,
+                end: range.end,
+                role: range.role || 'Flex'
+            }));
+    }
+
+    return [];
+};
 
 const convertFromGMT = (day, time, timezone) => {
     if (!day || !time) return { day: '', time: '' };
@@ -833,12 +850,12 @@ const LandingPage = ({ onEnterHub }) => {
 // ==========================================
 
 // ... (Helper Components for Hub)
-const Input = (props) => (
-    <input {...props} className={`w-full bg-black/40 border border-neutral-800 rounded-xl p-3 text-white text-sm outline-none focus:border-red-600 focus:ring-1 focus:ring-red-600 transition-all placeholder-neutral-600 shadow-inner hover:border-neutral-700 ${props.className}`} />
+const Input = ({ className = '', ...props }) => (
+    <input {...props} className={`w-full bg-black/40 border border-neutral-800 rounded-xl p-3 text-white text-sm outline-none focus:border-red-600 focus:ring-1 focus:ring-red-600 transition-all placeholder-neutral-600 shadow-inner hover:border-neutral-700 ${className}`} />
 );
-const Select = (props) => (
-    <select {...props} className={`w-full bg-black/40 border border-neutral-800 rounded-xl p-3 text-white text-sm outline-none focus:border-red-600 focus:ring-1 focus:ring-red-600 transition-all shadow-inner hover:border-neutral-700 ${props.className}`}>
-        {props.children}
+const Select = ({ className = '', children, ...props }) => (
+    <select {...props} className={`w-full bg-black/40 border border-neutral-800 rounded-xl p-3 text-white text-sm outline-none focus:border-red-600 focus:ring-1 focus:ring-red-600 transition-all shadow-inner hover:border-neutral-700 ${className}`}>
+        {children}
     </select>
 );
 const ButtonPrimary = ({ children, onClick, disabled, className = "" }) => (
@@ -846,8 +863,8 @@ const ButtonPrimary = ({ children, onClick, disabled, className = "" }) => (
         {children}
     </button>
 );
-const ButtonSecondary = ({ children, onClick, className = "" }) => (
-    <button onClick={onClick} className={`bg-black/40 hover:bg-neutral-900 border border-neutral-800 hover:border-red-900/50 text-neutral-400 hover:text-white font-bold uppercase tracking-wider py-2 px-4 rounded-xl transition-all ${className}`}>
+const ButtonSecondary = ({ children, onClick, disabled, className = "" }) => (
+    <button onClick={onClick} disabled={disabled} className={`bg-black/40 hover:bg-neutral-900 border border-neutral-800 hover:border-red-900/50 text-neutral-400 hover:text-white font-bold uppercase tracking-wider py-2 px-4 rounded-xl transition-all disabled:opacity-50 disabled:cursor-not-allowed ${className}`}>
         {children}
     </button>
 );
@@ -862,24 +879,64 @@ const VictoryStamp = () => <div className="absolute top-1/2 left-1/2 -translate-
 const DefeatStamp = () => <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-50 border-8 border-red-600 text-red-600 font-black text-5xl md:text-7xl p-4 uppercase tracking-tighter rotate-12 pointer-events-none mix-blend-screen shadow-[0_0_20px_rgba(220,38,38,0.5)] animate-fade-in">DEFEAT</div>;
 
 const AdminPanel = () => {
-    // ... all your useState and other logic must be here ...
-    // e.g., const [form, setForm] = useState(...);
-    // e.g., const submit = async () => { ... };
+    const [form, setForm] = useState({
+        type: 'Scrim',
+        opponent: '',
+        map: MAPS[0],
+        date: new Date().toISOString().split('T')[0],
+        time: '20:00',
+        timezone: 'GMT'
+    });
+    const [saving, setSaving] = useState(false);
+    const addToast = useToast();
 
-    return ( // <--- This return is now INSIDE the AdminPanel function
-        <div className="space-y-4">
+    const submit = async () => {
+        if (!form.opponent.trim() || !form.date || !form.time) {
+            addToast('Opponent/topic, date, and time are required', 'error');
+            return;
+        }
+
+        setSaving(true);
+        try {
+            await addDoc(collection(db, 'events'), {
+                ...form,
+                opponent: form.opponent.trim(),
+                createdAt: new Date().toISOString()
+            });
+            setForm(prev => ({ ...prev, opponent: '' }));
+            addToast('Event scheduled');
+        } catch (error) {
+            console.error('Schedule event failed:', error);
+            addToast('Unable to schedule event', 'error');
+        } finally {
+            setSaving(false);
+        }
+    };
+
+    return (
+        <div className="space-y-4 max-w-2xl">
+            <div>
+                <label className="text-xs font-bold text-red-500 block mb-1">EVENT TYPE</label>
+                <Select value={form.type} onChange={e => setForm({ ...form, type: e.target.value })}>
+                    <option value="Scrim">Scrim</option>
+                    <option value="Official">Official</option>
+                    <option value="Practice">Practice</option>
+                    <option value="VOD Review">VOD Review</option>
+                    <option value="Meeting">Meeting</option>
+                </Select>
+            </div>
             <div>
                 <label className="text-xs font-bold text-red-500 block mb-1">
-                    {form.type === 'VOD Review' ? "TOPIC" : "OPPONENT"}
+                    {form.type === 'VOD Review' ? 'TOPIC' : 'OPPONENT'}
                 </label>
                 <Input
                     value={form.opponent}
                     onChange={e => setForm({ ...form, opponent: e.target.value })}
-                    placeholder={form.type === 'VOD Review' ? "e.g. Reviewing Ascent Scrim" : "e.g. Team Liquid"}
+                    placeholder={form.type === 'VOD Review' ? 'e.g. Reviewing Ascent Scrim' : 'e.g. Team Liquid'}
                 />
             </div>
 
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
                     <label className="text-xs font-bold text-red-500 block mb-1">MAP</label>
                     <Select value={form.map} onChange={e => setForm({ ...form, map: e.target.value })}>
@@ -888,20 +945,28 @@ const AdminPanel = () => {
                     </Select>
                 </div>
                 <div>
-                    <label className="text-xs font-bold text-red-500 block mb-1">TIME</label>
-                    <Input type="time" value={form.time} onChange={e => setForm({ ...form, time: e.target.value })} className="[color-scheme:dark]" />
+                    <label className="text-xs font-bold text-red-500 block mb-1">TIMEZONE</label>
+                    <Select value={form.timezone} onChange={e => setForm({ ...form, timezone: e.target.value })}>
+                        {timezones.map(t => <option key={t} value={t}>{t}</option>)}
+                    </Select>
                 </div>
             </div>
-            <div className="grid grid-cols-1">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
                     <label className="text-xs font-bold text-red-500 block mb-1">DATE</label>
                     <Input type="date" value={form.date} onChange={e => setForm({ ...form, date: e.target.value })} className="[color-scheme:dark]" />
                 </div>
+                <div>
+                    <label className="text-xs font-bold text-red-500 block mb-1">TIME</label>
+                    <Input type="time" value={form.time} onChange={e => setForm({ ...form, time: e.target.value })} className="[color-scheme:dark]" />
+                </div>
             </div>
-            <ButtonPrimary onClick={submit} className="w-full py-3">SCHEDULE EVENT</ButtonPrimary>
+            <ButtonPrimary onClick={submit} disabled={saving} className="w-full py-3">
+                {saving ? 'SCHEDULING...' : 'SCHEDULE EVENT'}
+            </ButtonPrimary>
         </div>
     );
-}; // <--- Don't forget to close the function!
+};
 
 function AvailabilityHeatmap({ availabilities, members }) {
     const bucketSize = 60; const numBuckets = (24 * 60) / bucketSize;
@@ -3680,6 +3745,142 @@ function ContentManager() {
         </div>
     );
 }
+
+function LoginScreen({ signIn, onBack }) {
+    return (
+        <div className="fixed inset-0 bg-black text-white overflow-y-auto flex items-center justify-center p-6">
+            <Background />
+            <button onClick={onBack} className="absolute top-4 left-4 z-20 text-neutral-400 hover:text-white font-bold uppercase text-sm">&larr; Home</button>
+            <div className="relative z-10 w-full max-w-md glass-panel rounded-3xl border border-red-900/30 p-8 text-center">
+                <div className="text-5xl font-black italic tracking-tighter mb-2">SYRIX</div>
+                <p className="text-neutral-400 text-sm mb-8">Sign in with Discord to access the team hub.</p>
+                <ButtonPrimary onClick={signIn} className="w-full">Sign In With Discord</ButtonPrimary>
+            </div>
+        </div>
+    );
+}
+
+function CaptainsMessage() {
+    return (
+        <Card className="border-red-900/20">
+            <div className="absolute top-0 left-0 w-1 h-full bg-red-600/50"></div>
+            <h2 className="text-xl font-bold text-white mb-3 uppercase tracking-wide">Captain's Message</h2>
+            <p className="text-sm text-neutral-400 leading-relaxed">Keep availability current, review the active match plan, and log updates before practice.</p>
+        </Card>
+    );
+}
+
+function LeaveLogger({ members, rosterName }) {
+    const [selectedMember, setSelectedMember] = useState(rosterName || '');
+    const [note, setNote] = useState('');
+    const [saving, setSaving] = useState(false);
+    const addToast = useToast();
+
+    useEffect(() => {
+        if (rosterName) setSelectedMember(rosterName);
+    }, [rosterName]);
+
+    const submitLeave = async () => {
+        if (!selectedMember || !note.trim()) return addToast('Select a member and add a note', 'error');
+        setSaving(true);
+        try {
+            await addDoc(collection(db, 'leave_logs'), {
+                member: selectedMember,
+                note: note.trim(),
+                createdAt: new Date().toISOString()
+            });
+            setNote('');
+            addToast('Leave note logged');
+        } catch (error) {
+            console.error('Leave log failed:', error);
+            addToast('Unable to log leave note', 'error');
+        } finally {
+            setSaving(false);
+        }
+    };
+
+    return (
+        <Card className="border-red-900/20">
+            <div className="absolute top-0 left-0 w-1 h-full bg-red-600/50"></div>
+            <h2 className="text-xl font-bold text-white mb-4 uppercase tracking-wide">Leave Logger</h2>
+            <div className="space-y-3">
+                <Select value={selectedMember} onChange={e => setSelectedMember(e.target.value)}>
+                    <option value="">Select member</option>
+                    {members.map(m => <option key={m} value={m}>{m}</option>)}
+                </Select>
+                <textarea
+                    value={note}
+                    onChange={e => setNote(e.target.value)}
+                    className="w-full min-h-24 bg-black/40 border border-neutral-800 rounded-xl p-3 text-white text-sm outline-none focus:border-red-600 focus:ring-1 focus:ring-red-600 transition-all placeholder-neutral-600 resize-y"
+                    placeholder="Reason, dates, or availability note"
+                />
+                <ButtonSecondary onClick={submitLeave} className="w-full text-xs" disabled={saving}>{saving ? 'Logging...' : 'Log Note'}</ButtonSecondary>
+            </div>
+        </Card>
+    );
+}
+
+function ScrimScheduler({ onSchedule, userTimezone }) {
+    const [form, setForm] = useState({
+        type: 'Scrim',
+        opponent: '',
+        map: 'TBD',
+        date: new Date().toISOString().split('T')[0],
+        time: '20:00',
+        timezone: userTimezone || 'GMT'
+    });
+    const [saving, setSaving] = useState(false);
+    const addToast = useToast();
+
+    useEffect(() => {
+        setForm(prev => ({ ...prev, timezone: userTimezone || prev.timezone }));
+    }, [userTimezone]);
+
+    const submit = async () => {
+        if (!form.opponent.trim() || !form.date || !form.time) return addToast('Opponent, date, and time are required', 'error');
+        setSaving(true);
+        try {
+            await onSchedule({
+                ...form,
+                opponent: form.opponent.trim(),
+                createdAt: new Date().toISOString()
+            });
+            setForm(prev => ({ ...prev, opponent: '' }));
+        } catch (error) {
+            console.error('Schedule failed:', error);
+            addToast('Unable to schedule event', 'error');
+        } finally {
+            setSaving(false);
+        }
+    };
+
+    return (
+        <div className="space-y-3">
+            <Select value={form.type} onChange={e => setForm({ ...form, type: e.target.value })}>
+                <option value="Scrim">Scrim</option>
+                <option value="Official">Official</option>
+                <option value="Practice">Practice</option>
+                <option value="VOD Review">VOD Review</option>
+            </Select>
+            <Input placeholder="Opponent or topic" value={form.opponent} onChange={e => setForm({ ...form, opponent: e.target.value })} />
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <Select value={form.map} onChange={e => setForm({ ...form, map: e.target.value })}>
+                    <option value="TBD">TBD</option>
+                    {MAPS.map(m => <option key={m} value={m}>{m}</option>)}
+                </Select>
+                <Input type="date" value={form.date} onChange={e => setForm({ ...form, date: e.target.value })} className="[color-scheme:dark]" />
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <Input type="time" value={form.time} onChange={e => setForm({ ...form, time: e.target.value })} className="[color-scheme:dark]" />
+                <Select value={form.timezone} onChange={e => setForm({ ...form, timezone: e.target.value })}>
+                    {timezones.map(t => <option key={t} value={t}>{t}</option>)}
+                </Select>
+            </div>
+            <ButtonPrimary onClick={submit} disabled={saving} className="w-full text-xs py-3">{saving ? 'Scheduling...' : 'Schedule Event'}</ButtonPrimary>
+        </div>
+    );
+}
+
 function SyrixDashboard({ onBack }) {
     const [currentUser, setCurrentUser] = useState(null);
     const [rosterName, setRosterName] = useState(null);
@@ -3721,7 +3922,7 @@ function SyrixDashboard({ onBack }) {
         // Listener 2: Get Availabilities (Existing logic)
         const unsub2 = onSnapshot(collection(db, 'availabilities'), (s) => {
             const d = {};
-            s.forEach(doc => d[doc.id] = doc.data().slots || []);
+            s.forEach(doc => d[doc.id] = normalizeAvailabilitySlots(doc.data()));
             setAvailabilities(d);
         });
 
@@ -3782,40 +3983,38 @@ function SyrixDashboard({ onBack }) {
 
     const saveAvail = async () => {
         if (!currentUser) return;
+        if (!start || !end) return addToast('Start and end times are required', 'error');
+        if (start === end) return addToast('Start and end times cannot match', 'error');
 
+        const finalName = rosterName || currentUser.displayName || currentUser.uid;
+        const gmtStart = convertToGMT(day, start);
+        const gmtEnd = convertToGMT(day, end);
+        const existing = availabilities[finalName] || [];
+        const nextSlots = [
+            ...existing.filter(s => convertFromGMT(s.day, s.start, userTimezone).day !== day),
+            { day: gmtStart.day, start: gmtStart.time, end: gmtEnd.time, role }
+        ];
+
+        setSaveStatus('saving');
         try {
-            // CHANGE: Use currentUser.uid as the document ID
-            const userDocRef = doc(db, 'availabilities', currentUser.uid);
-
-            // Prepare the data
-            const gmtData = {};
-            DAYS.forEach(day => {
-                const range = localAvail[day];
-                if (range && range.start && range.end) {
-                    gmtData[day] = {
-                        start: convertToGMT(day, range.start).time,
-                        end: convertToGMT(day, range.end).time
-                    };
-                } else {
-                    gmtData[day] = null;
-                }
-            });
-
-            await setDoc(userDocRef, {
-                name: currentUser.displayName,
-                uid: currentUser.uid, // Store the UID inside the doc too
-                days: gmtData,
+            await setDoc(doc(db, 'availabilities', finalName), {
+                name: finalName,
+                uid: currentUser.uid,
+                slots: nextSlots,
                 lastUpdated: new Date().toISOString(),
                 timezone: userTimezone
-            });
+            }, { merge: true });
 
-            addToast("Availability Synced!");
+            addToast('Availability synced');
         } catch (e) {
-            console.error("Error saving availability:", e);
-            // If they get a permission error now, it's likely because the UID doesn't match
-            addToast("Failed to sync. Ensure you are logged in.", "error");
+            console.error('Error saving availability:', e);
+            addToast('Failed to sync availability', 'error');
+        } finally {
+            setSaveStatus('idle');
         }
-    };    const clearDay = async () => {
+    };
+
+    const clearDay = async () => {
         const finalName = rosterName || currentUser.displayName || 'Guest';
         const old = availabilities[finalName] || [];
         await setDoc(doc(db, 'availabilities', finalName), { slots: old.filter(s => convertFromGMT(s.day, s.start, userTimezone).day !== day) });
