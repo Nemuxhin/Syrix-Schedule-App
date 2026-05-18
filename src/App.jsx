@@ -1289,11 +1289,10 @@ function StratBook() {
     const [savedStrats, setSavedStrats] = useState([]);
     const [stratName, setStratName] = useState('');
     const [loadingSave, setLoadingSave] = useState(false);
+    const [paletteDrag, setPaletteDrag] = useState(null);
 
     const tools = [
         { id: 'select', label: 'Select', hint: 'Move and edit placed items' },
-        { id: 'agent', label: 'Agent', hint: 'Place selected agent' },
-        { id: 'ability', label: 'Ability', hint: 'Place selected ability' },
         { id: 'smoke', label: 'Smoke', hint: 'Place smoke radius' },
         { id: 'molly', label: 'Molly', hint: 'Place damage utility' },
         { id: 'line', label: 'Line', hint: 'Draw straight path' },
@@ -1650,15 +1649,47 @@ function StratBook() {
         return styles[kind] || { fill: `${color}30`, stroke: color, r: 2.1 };
     };
 
+    const createPaletteObject = (point, paletteItem) => {
+        if (!paletteItem) return null;
+        if (paletteItem.type === 'agent') {
+            const data = getAgentData(paletteItem.agent);
+            return { id: uid(), type: 'agent', name: paletteItem.agent, icon: data?.icon || '', x: point.x, y: point.y, size: 1, rotation: 0, side };
+        }
+        if (paletteItem.type === 'ability') {
+            const preset = utilityPresetFor(paletteItem.agent, paletteItem.ability.name);
+            return { id: uid(), type: 'ability', name: paletteItem.ability.name, icon: paletteItem.ability.icon, x: point.x, y: point.y, side, ...preset };
+        }
+        return null;
+    };
+
+    const placePaletteObject = (point, paletteItem) => {
+        const item = createPaletteObject(point, paletteItem);
+        if (!item) return;
+        commitObjects([...objects, item]);
+        setSelectedId(item.id);
+        setTool('select');
+    };
+
+    const handleBoardDrop = (event) => {
+        event.preventDefault();
+        let dropped = paletteDrag;
+        const raw = event.dataTransfer?.getData('application/json');
+        if (!dropped && raw) {
+            try { dropped = JSON.parse(raw); } catch { dropped = null; }
+        }
+        if (!dropped) return;
+        placePaletteObject(getBoardPoint(event), dropped);
+        setPaletteDrag(null);
+    };
+
+    const startPaletteDrag = (event, paletteItem) => {
+        setPaletteDrag(paletteItem);
+        event.dataTransfer.effectAllowed = 'copy';
+        event.dataTransfer.setData('application/json', JSON.stringify(paletteItem));
+    };
+
     const addObjectAt = (point) => {
         let item = null;
-        if (tool === 'agent') {
-            item = { id: uid(), type: 'agent', name: selectedAgent, icon: selectedAgentData?.icon || '', x: point.x, y: point.y, size: 1, rotation: 0, side };
-        }
-        if (tool === 'ability' && selectedAbility) {
-            const preset = utilityPresetFor(selectedAgent, selectedAbility.name);
-            item = { id: uid(), type: 'ability', name: selectedAbility.name, icon: selectedAbility.icon, x: point.x, y: point.y, side, ...preset };
-        }
         if (tool === 'smoke' || tool === 'molly') {
             const style = circleStyleFor(tool);
             item = { id: uid(), type: 'area', name: tool === 'smoke' ? 'Smoke' : 'Molly', kind: tool, x: point.x, y: point.y, radius: style.r, fill: style.fill, stroke: style.stroke, side };
@@ -1680,7 +1711,7 @@ function StratBook() {
     const handleBoardPointerDown = (event) => {
         if (event.button !== 0) return;
         const point = getBoardPoint(event);
-        if (['agent', 'ability', 'smoke', 'molly', 'text', 'spike', 'ping'].includes(tool)) {
+        if (['smoke', 'molly', 'text', 'spike', 'ping'].includes(tool)) {
             addObjectAt(point);
             return;
         }
@@ -1950,11 +1981,11 @@ function StratBook() {
         return (
             <foreignObject key={obj.id} x={`${obj.x - 2.8}%`} y={`${obj.y - 2.8}%`} width="5.6%" height="5.6%" className="overflow-visible">
                 <div
-                    className={`relative flex h-full w-full items-center justify-center select-none cursor-grab ${isSelected ? 'ring-2 ring-green-400 rounded-full' : ''}`}
+                    className={`relative flex h-full w-full items-center justify-center select-none cursor-grab ${isSelected ? 'outline outline-2 outline-green-400 outline-offset-1' : ''}`}
                     style={{ transform: `rotate(${obj.rotation || 0}deg) scale(${obj.size || 1})`, transformOrigin: 'center' }}
                     onPointerDown={(e) => startDragObject(e, obj)}
                 >
-                    {obj.type === 'agent' && (obj.icon ? <img src={obj.icon} alt={obj.name} className="h-full w-full rounded-full border-2 border-white bg-black object-cover shadow-[0_0_12px_rgba(0,0,0,0.9)] pointer-events-none" /> : <div className="h-full w-full rounded-full border-2 border-white bg-black text-white flex items-center justify-center text-[10px] font-black shadow-[0_0_12px_rgba(0,0,0,0.9)]">{obj.name?.slice(0, 2)}</div>)}
+                    {obj.type === 'agent' && (obj.icon ? <img src={obj.icon} alt={obj.name} className="h-full w-full object-contain drop-shadow-[0_2px_8px_rgba(0,0,0,0.95)] pointer-events-none" /> : <div className="h-full w-full text-white flex items-center justify-center text-[10px] font-black drop-shadow-[0_2px_8px_rgba(0,0,0,0.95)]">{obj.name?.slice(0, 2)}</div>)}
                     {obj.type === 'text' && <div className="px-1.5 py-0.5 rounded bg-black/80 border border-white/20 text-[9px] font-black uppercase whitespace-nowrap shadow-lg" style={{ color: obj.color }}>{obj.text}</div>}
                     {obj.type === 'spike' && <div className="h-2/3 w-2/3 rotate-45 bg-yellow-400 border border-yellow-100 shadow-[0_0_10px_rgba(250,204,21,0.65)]" />}
                     {obj.type === 'ping' && <div className="h-4/5 w-4/5 rounded-full border-2 bg-transparent animate-pulse" style={{ borderColor: obj.color }} />}
@@ -2030,6 +2061,8 @@ function StratBook() {
                     onPointerMove={handleBoardPointerMove}
                     onPointerUp={finishBoardAction}
                     onPointerLeave={finishBoardAction}
+                    onDragOver={(event) => { event.preventDefault(); event.dataTransfer.dropEffect = 'copy'; }}
+                    onDrop={handleBoardDrop}
                 >
                     {mapImages?.[selectedMap] ? (
                         <img src={mapImages[selectedMap]} alt={`${selectedMap} tactical map`} className="absolute inset-0 w-full h-full object-cover opacity-95 pointer-events-none" draggable={false} />
@@ -2053,8 +2086,16 @@ function StratBook() {
                         {AGENT_NAMES.map(agent => {
                             const data = getAgentData(agent);
                             return (
-                                <button key={agent} onClick={() => { setSelectedAgent(agent); setSelectedAbility(null); setTool('agent'); }} className={`aspect-square rounded-lg overflow-hidden border bg-neutral-900 flex items-center justify-center ${selectedAgent === agent ? 'border-red-500' : 'border-white/10 hover:border-white/30'}`} title={agent}>
-                                    {data?.icon ? <img src={data.icon} alt={agent} className="w-full h-full object-cover" loading="lazy" /> : <span className="text-[10px] font-black text-neutral-500">{agent.slice(0, 2).toUpperCase()}</span>}
+                                <button
+                                    key={agent}
+                                    draggable
+                                    onDragStart={(event) => startPaletteDrag(event, { type: 'agent', agent })}
+                                    onDragEnd={() => setPaletteDrag(null)}
+                                    onClick={() => { setSelectedAgent(agent); setSelectedAbility(null); setTool('select'); }}
+                                    className={`aspect-square rounded-lg overflow-hidden border bg-neutral-900 flex items-center justify-center cursor-grab active:cursor-grabbing ${selectedAgent === agent ? 'border-red-500' : 'border-white/10 hover:border-white/30'}`}
+                                    title={`Drag ${agent} onto the map`}
+                                >
+                                    {data?.icon ? <img src={data.icon} alt={agent} className="w-full h-full object-cover pointer-events-none" loading="lazy" draggable={false} /> : <span className="text-[10px] font-black text-neutral-500">{agent.slice(0, 2).toUpperCase()}</span>}
                                 </button>
                             );
                         })}
@@ -2065,9 +2106,17 @@ function StratBook() {
                     <label className="text-[10px] font-black text-red-500 uppercase mb-2 block">Abilities</label>
                     <div className="grid grid-cols-2 gap-2">
                         {availableAbilities.length ? availableAbilities.map(ability => (
-                            <button key={ability.name} onClick={() => { setSelectedAbility(ability); setTool('ability'); }} className={`min-h-16 rounded-xl border p-2 flex items-center gap-2 text-left ${selectedAbility?.name === ability.name ? 'bg-red-900/30 border-red-500 text-white' : 'bg-white/5 border-white/10 text-neutral-400 hover:text-white'}`}>
-                                {ability.icon && <img src={ability.icon} alt="" className="w-7 h-7 object-contain" />}
-                                <span className="text-[10px] font-bold uppercase leading-tight">{ability.name}</span>
+                            <button
+                                key={ability.name}
+                                draggable
+                                onDragStart={(event) => startPaletteDrag(event, { type: 'ability', agent: selectedAgent, ability })}
+                                onDragEnd={() => setPaletteDrag(null)}
+                                onClick={() => { setSelectedAbility(ability); setTool('select'); }}
+                                className={`min-h-16 rounded-xl border p-2 flex items-center gap-2 text-left cursor-grab active:cursor-grabbing ${selectedAbility?.name === ability.name ? 'bg-red-900/30 border-red-500 text-white' : 'bg-white/5 border-white/10 text-neutral-400 hover:text-white'}`}
+                                title={`Drag ${ability.name} onto the map`}
+                            >
+                                {ability.icon && <img src={ability.icon} alt="" className="w-7 h-7 object-contain pointer-events-none" draggable={false} />}
+                                <span className="text-[10px] font-bold uppercase leading-tight pointer-events-none">{ability.name}</span>
                             </button>
                         )) : <div className="col-span-2 text-xs text-neutral-500 italic">Ability data loading...</div>}
                     </div>
