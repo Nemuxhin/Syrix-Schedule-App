@@ -1408,26 +1408,50 @@ function StratBook() {
         };
     };
 
-    const classifyAbility = (abilityName) => {
+    const utilityPresetFor = (agentName, abilityName) => {
+        const agent = norm(agentName);
         const name = norm(abilityName);
-        if (/smoke|cloud|cover|orb|cove|cascade|screen/.test(name)) return 'smoke';
-        if (/molly|snake|incendiary|grenade|hot hands|nanoswarm|aftershock/.test(name)) return 'molly';
-        if (/flash|curveball|blind|leer|guiding/.test(name)) return 'flash';
-        if (/recon|dart|eye|haunt|drone|prowler|trailblazer|seize/.test(name)) return 'recon';
-        if (/stun|fault|seismic|relay|slow|gravnet|net/.test(name)) return 'stun';
-        if (/wall|barrier|toxic screen|high tide|fast lane/.test(name)) return 'wall';
-        return 'ability';
+        const smoke = { shape: 'circle', kind: 'smoke', fill: 'rgba(226, 232, 240, 0.16)', stroke: '#e2e8f0', radius: 2.65 };
+        const molly = { shape: 'circle', kind: 'molly', fill: 'rgba(239, 68, 68, 0.18)', stroke: '#ef4444', radius: 2.05 };
+        const recon = { shape: 'circle', kind: 'recon', fill: 'rgba(59, 130, 246, 0.13)', stroke: '#3b82f6', radius: 2.35 };
+        const stun = { shape: 'circle', kind: 'stun', fill: 'rgba(249, 115, 22, 0.14)', stroke: '#f97316', radius: 2.2 };
+
+        if (agent === 'omen' && name.includes('paranoia')) {
+            return { shape: 'beam', kind: 'blind', fill: 'rgba(168, 85, 247, 0.24)', stroke: '#c084fc', length: 17, width: 3.4, rotation: 0 };
+        }
+        if (agent === 'breach' && name.includes('fault line')) {
+            return { shape: 'beam', kind: 'stun', fill: 'rgba(249, 115, 22, 0.20)', stroke: '#f97316', length: 19, width: 3, rotation: 0 };
+        }
+        if (agent === 'breach' && name.includes('aftershock')) {
+            return { shape: 'beam', kind: 'molly', fill: 'rgba(239, 68, 68, 0.20)', stroke: '#ef4444', length: 12, width: 2.5, rotation: 0 };
+        }
+        if (agent === 'fade' && name.includes('seize')) return { ...stun, kind: 'seize', radius: 2.6, stroke: '#a855f7' };
+        if (agent === 'deadlock' && name.includes('gravnet')) return { ...stun, kind: 'net', radius: 2.4, stroke: '#38bdf8' };
+
+        if (/toxic screen|high tide|cascade|barrier orb|wall|fast lane|blaze/.test(name)) {
+            return { shape: 'wall', kind: 'wall', fill: 'rgba(45, 212, 191, 0.18)', stroke: '#2dd4bf', length: 20, width: 1.1, rotation: 0 };
+        }
+        if (/smoke|cloud|dark cover|sky smoke|nebula|astral|cove|cage|ruse/.test(name)) return smoke;
+        if (/molly|snake bite|snakebite|incendiary|hot hands|nanoswarm|paint shells|grenade/.test(name)) return molly;
+        if (/recon|dart|haunt|eye|knife|zero\/point|sonic sensor|trapwire|trademark/.test(name)) return recon;
+        if (/stun|relay bolt|slow orb|seismic/.test(name)) return stun;
+        if (/flash|curveball|blind|leer|guiding light|flashpoint|dizzy|arc rose|blindside/.test(name)) {
+            return { shape: 'cone', kind: 'flash', fill: 'rgba(250, 204, 21, 0.18)', stroke: '#facc15', length: 7, width: 5, rotation: 0 };
+        }
+        if (/dash|updraft|dismiss|teleport|gatecrash|satchel|blast pack|tailwind|wingman/.test(name)) {
+            return { shape: 'marker', kind: 'movement', stroke: '#38bdf8', size: 1, rotation: 0 };
+        }
+        return { shape: 'marker', kind: 'ability', stroke: color, size: 1, rotation: 0 };
     };
 
     const circleStyleFor = (kind) => {
         const styles = {
-            smoke: { fill: 'rgba(226, 232, 240, 0.18)', stroke: '#e2e8f0', r: 4.8 },
-            molly: { fill: 'rgba(239, 68, 68, 0.20)', stroke: '#ef4444', r: 3.1 },
-            flash: { fill: 'rgba(250, 204, 21, 0.20)', stroke: '#facc15', r: 2.1 },
-            recon: { fill: 'rgba(59, 130, 246, 0.16)', stroke: '#3b82f6', r: 3.6 },
-            stun: { fill: 'rgba(249, 115, 22, 0.16)', stroke: '#f97316', r: 3.2 }
+            smoke: { fill: 'rgba(226, 232, 240, 0.16)', stroke: '#e2e8f0', r: 2.65 },
+            molly: { fill: 'rgba(239, 68, 68, 0.18)', stroke: '#ef4444', r: 2.05 },
+            recon: { fill: 'rgba(59, 130, 246, 0.13)', stroke: '#3b82f6', r: 2.35 },
+            stun: { fill: 'rgba(249, 115, 22, 0.14)', stroke: '#f97316', r: 2.2 }
         };
-        return styles[kind] || { fill: `${color}30`, stroke: color, r: 2.6 };
+        return styles[kind] || { fill: `${color}30`, stroke: color, r: 2.1 };
     };
 
     const addObjectAt = (point) => {
@@ -1436,9 +1460,8 @@ function StratBook() {
             item = { id: uid(), type: 'agent', name: selectedAgent, icon: selectedAgentData?.icon || '', x: point.x, y: point.y, size: 1, rotation: 0, side };
         }
         if (tool === 'ability' && selectedAbility) {
-            const kind = classifyAbility(selectedAbility.name);
-            const style = circleStyleFor(kind);
-            item = { id: uid(), type: 'ability', name: selectedAbility.name, icon: selectedAbility.icon, kind, x: point.x, y: point.y, radius: style.r, fill: style.fill, stroke: style.stroke, side };
+            const preset = utilityPresetFor(selectedAgent, selectedAbility.name);
+            item = { id: uid(), type: 'ability', name: selectedAbility.name, icon: selectedAbility.icon, x: point.x, y: point.y, side, ...preset };
         }
         if (tool === 'smoke' || tool === 'molly') {
             const style = circleStyleFor(tool);
@@ -1657,11 +1680,54 @@ function StratBook() {
         }
 
         if (obj.type === 'ability' || obj.type === 'area') {
+            const shape = obj.shape || 'circle';
+            const markerSize = 3.2 * (obj.size || 1);
+            if (shape === 'circle') {
+                return (
+                    <g key={obj.id} className="cursor-grab" onPointerDown={(e) => startDragObject(e, obj)}>
+                        <circle cx={`${obj.x}%`} cy={`${obj.y}%`} r={`${obj.radius || 2.2}%`} fill={obj.fill} stroke={obj.stroke} strokeWidth="1.2" />
+                        {obj.icon && <image href={obj.icon} x={`${obj.x - 1.05}%`} y={`${obj.y - 1.05}%`} width="2.1%" height="2.1%" opacity="0.95" />}
+                        {isSelected && <circle cx={`${obj.x}%`} cy={`${obj.y}%`} r={`${(obj.radius || 2.2) + 0.3}%`} fill="none" stroke="#22c55e" strokeWidth="0.9" />}
+                    </g>
+                );
+            }
+            if (shape === 'beam') {
+                return (
+                    <g key={obj.id} className="cursor-grab" transform={`translate(${obj.x} ${obj.y}) rotate(${obj.rotation || 0})`} onPointerDown={(e) => startDragObject(e, obj)}>
+                        <rect x="0" y={`${-(obj.width || 3) / 2}`} width={obj.length || 12} height={obj.width || 3} rx={(obj.width || 3) / 2} fill={obj.fill} stroke={obj.stroke} strokeWidth="0.45" />
+                        <line x1="0" y1="0" x2={obj.length || 12} y2="0" stroke={obj.stroke} strokeWidth="0.35" strokeDasharray="1.5 1.2" />
+                        {obj.icon && <image href={obj.icon} x="-1.4" y="-1.4" width="2.8" height="2.8" />}
+                        {isSelected && <rect x="-0.4" y={`${-(obj.width || 3) / 2 - 0.4}`} width={(obj.length || 12) + 0.8} height={(obj.width || 3) + 0.8} rx={(obj.width || 3) / 2} fill="none" stroke="#22c55e" strokeWidth="0.35" />}
+                    </g>
+                );
+            }
+            if (shape === 'wall') {
+                const length = obj.length || 18;
+                return (
+                    <g key={obj.id} className="cursor-grab" transform={`translate(${obj.x} ${obj.y}) rotate(${obj.rotation || 0})`} onPointerDown={(e) => startDragObject(e, obj)}>
+                        <line x1={-length / 2} y1="0" x2={length / 2} y2="0" stroke={obj.stroke} strokeWidth={obj.width || 1.1} strokeLinecap="round" opacity="0.9" />
+                        <line x1={-length / 2} y1="0" x2={length / 2} y2="0" stroke="rgba(255,255,255,0.55)" strokeWidth="0.25" strokeLinecap="round" />
+                        {obj.icon && <image href={obj.icon} x="-1.25" y="-1.25" width="2.5" height="2.5" />}
+                        {isSelected && <rect x={-length / 2} y="-1.4" width={length} height="2.8" fill="none" stroke="#22c55e" strokeWidth="0.35" />}
+                    </g>
+                );
+            }
+            if (shape === 'cone') {
+                const length = obj.length || 7;
+                const width = obj.width || 5;
+                return (
+                    <g key={obj.id} className="cursor-grab" transform={`translate(${obj.x} ${obj.y}) rotate(${obj.rotation || 0})`} onPointerDown={(e) => startDragObject(e, obj)}>
+                        <path d={`M 0 0 L ${length} ${-width / 2} L ${length} ${width / 2} Z`} fill={obj.fill} stroke={obj.stroke} strokeWidth="0.35" />
+                        {obj.icon && <image href={obj.icon} x="-1.25" y="-1.25" width="2.5" height="2.5" />}
+                        {isSelected && <path d={`M -0.4 0 L ${length + 0.4} ${-width / 2 - 0.4} L ${length + 0.4} ${width / 2 + 0.4} Z`} fill="none" stroke="#22c55e" strokeWidth="0.35" />}
+                    </g>
+                );
+            }
             return (
-                <g key={obj.id} className="cursor-grab" onPointerDown={(e) => startDragObject(e, obj)}>
-                    <circle cx={`${obj.x}%`} cy={`${obj.y}%`} r={`${obj.radius || 5}%`} fill={obj.fill} stroke={obj.stroke} strokeWidth="1.4" strokeDasharray={obj.kind === 'flash' ? '3 2' : '0'} />
-                    {obj.icon && <image href={obj.icon} x={`${obj.x - 1.2}%`} y={`${obj.y - 1.2}%`} width="2.4%" height="2.4%" opacity="0.95" />}
-                    {isSelected && <circle cx={`${obj.x}%`} cy={`${obj.y}%`} r={`${(obj.radius || 5) + 0.35}%`} fill="none" stroke="#22c55e" strokeWidth="1" />}
+                <g key={obj.id} className="cursor-grab" transform={`translate(${obj.x} ${obj.y}) rotate(${obj.rotation || 0})`} onPointerDown={(e) => startDragObject(e, obj)}>
+                    <circle cx="0" cy="0" r={markerSize / 2} fill="rgba(0,0,0,0.78)" stroke={obj.stroke || color} strokeWidth="0.45" />
+                    {obj.icon && <image href={obj.icon} x={-markerSize / 2 + 0.35} y={-markerSize / 2 + 0.35} width={markerSize - 0.7} height={markerSize - 0.7} />}
+                    {isSelected && <circle cx="0" cy="0" r={markerSize / 2 + 0.35} fill="none" stroke="#22c55e" strokeWidth="0.35" />}
                 </g>
             );
         }
