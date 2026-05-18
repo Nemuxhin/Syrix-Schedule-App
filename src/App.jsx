@@ -1269,1416 +1269,570 @@ function TeamComps({ members }) {
 }
 
 function StratBook() {
-    const [selectedMap, setSelectedMap] = useState(MAPS[0]);
-    const [selectedAgentForUtil, setSelectedAgentForUtil] = useState(AGENT_NAMES[0]);
-
-    const canvasRef = useRef(null);
-    const containerRef = useRef(null);
-
+    const boardRef = useRef(null);
     const { mapImages, agentData } = useValorantData();
-    const [color, setColor] = useState("#ef4444");
     const addToast = useToast();
 
-    // --------------------------
-    // ValoPlanner-style TOOL MODES
-    // --------------------------
-    const TOOLS = { SELECT: "select", DRAW: "draw", ERASE: "erase", PLACE: "place" };
-    const RENDER = { ICON: "icon", WALL: "wall", CIRCLE: "circle", LABEL: "label", SHAPE: "shape" };
-
-    const [tool, setTool] = useState(TOOLS.SELECT);
-    const [placingItem, setPlacingItem] = useState(null);
-    const [placingWallStart, setPlacingWallStart] = useState(null); // {x,y}
-
-    // Planner-like state
-    const [side, setSide] = useState("attack"); // attack | defense
-    const [sequenceStep, setSequenceStep] = useState(1);
-
-    // --- STATE ---
-    const [mapIcons, setMapIcons] = useState([]);
-    const [drawLines, setDrawLines] = useState([]);
-
-    // --- HISTORY ---
-    const [history, setHistory] = useState([{ icons: [], lines: [] }]);
+    const [selectedMap, setSelectedMap] = useState(MAPS[0]);
+    const [side, setSide] = useState('Attack');
+    const [tool, setTool] = useState('select');
+    const [color, setColor] = useState('#ef4444');
+    const [strokeWidth, setStrokeWidth] = useState(3);
+    const [selectedAgent, setSelectedAgent] = useState(AGENT_NAMES[0]);
+    const [selectedAbility, setSelectedAbility] = useState(null);
+    const [objects, setObjects] = useState([]);
+    const [history, setHistory] = useState([[]]);
     const [historyStep, setHistoryStep] = useState(0);
-
-    // --- Drawing ---
-    const [isDrawing, setIsDrawing] = useState(false);
-    const [currentLine, setCurrentLine] = useState([]);
-
-    // --- Selection / Moving ---
-    const [selectedIconId, setSelectedIconId] = useState(null);
-    const [moving, setMoving] = useState(null);
-
-    // --- Saved Strats ---
+    const [selectedId, setSelectedId] = useState(null);
+    const [dragging, setDragging] = useState(null);
+    const [draft, setDraft] = useState(null);
     const [savedStrats, setSavedStrats] = useState([]);
-    const [viewingStrat, setViewingStrat] = useState(null);
+    const [stratName, setStratName] = useState('');
+    const [loadingSave, setLoadingSave] = useState(false);
 
-    // --------------------------
-    // Safe helpers
-    // --------------------------
-    const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+    const tools = [
+        { id: 'select', label: 'Select', hint: 'Move and edit placed items' },
+        { id: 'agent', label: 'Agent', hint: 'Place selected agent' },
+        { id: 'ability', label: 'Ability', hint: 'Place selected ability' },
+        { id: 'smoke', label: 'Smoke', hint: 'Place smoke radius' },
+        { id: 'molly', label: 'Molly', hint: 'Place damage utility' },
+        { id: 'line', label: 'Line', hint: 'Draw straight path' },
+        { id: 'arrow', label: 'Arrow', hint: 'Draw execute or rotation arrow' },
+        { id: 'freehand', label: 'Draw', hint: 'Freehand drawing' },
+        { id: 'text', label: 'Text', hint: 'Place callout label' },
+        { id: 'spike', label: 'Spike', hint: 'Place spike marker' },
+        { id: 'ping', label: 'Ping', hint: 'Place attention marker' }
+    ];
+
+    const palette = ['#ef4444', '#f97316', '#facc15', '#22c55e', '#2dd4bf', '#3b82f6', '#a855f7', '#f8fafc'];
+
     const uid = () => {
         try {
-            if (typeof crypto !== "undefined" && crypto.randomUUID) return crypto.randomUUID();
+            if (typeof crypto !== 'undefined' && crypto.randomUUID) return crypto.randomUUID();
         } catch { }
-        return String(Date.now() + Math.random());
+        return `${Date.now()}-${Math.random().toString(16).slice(2)}`;
     };
 
-    const normKey = (s) => String(s ?? "").toLowerCase().replace(/\s+/g, " ").trim();
+    const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
+    const norm = (value) => String(value || '').toLowerCase().replace(/\s+/g, ' ').trim();
 
-    // ✅ FIX: robust agent icon resolver (handles key mismatches + fallback)
-    const agentIconSrc = (name) => {
+    const getAgentData = (name) => {
         if (!agentData) return null;
-
-        // direct hit
-        const direct = agentData?.[name]?.icon;
-        if (direct) return direct;
-
-        // normalized hit
-        const target = normKey(name);
-        const foundKey = Object.keys(agentData).find((k) => normKey(k) === target);
-        return foundKey ? agentData?.[foundKey]?.icon ?? null : null;
+        if (agentData[name]) return agentData[name];
+        const key = Object.keys(agentData).find(k => norm(k) === norm(name));
+        return key ? agentData[key] : null;
     };
 
-    const renderShapeIcon = (icon) => {
-        if (icon.shape === "ring") {
-            return <div className="w-12 h-12 rounded-full border-4 shadow-sm" style={{ backgroundColor: icon.color, borderColor: icon.border }} />;
-        }
-        if (icon.shape === "triangle") {
-            return <div className="w-0 h-0 border-l-[10px] border-l-transparent border-r-[10px] border-r-transparent border-b-[20px]" style={{ borderBottomColor: icon.border }} />;
-        }
-        if (icon.shape === "square") {
-            return <div className="w-8 h-8 border-2 shadow-md" style={{ backgroundColor: icon.color, borderColor: icon.border }} />;
-        }
-        if (icon.shape === "rect") {
-            return <div className="w-16 h-4 border-2 shadow-md" style={{ backgroundColor: icon.color, borderColor: icon.border }} />;
-        }
-        if (icon.shape === "cross") {
-            return (
-                <div className="text-3xl font-black leading-none drop-shadow-md" style={{ color: icon.border }}>
-                    X
-                </div>
-            );
-        }
-        if (icon.shape === "diamond") {
-            return <div className="w-12 h-12 transform rotate-45 border-2 shadow-md" style={{ backgroundColor: icon.color, borderColor: icon.border }} />;
-        }
-        return <div className="w-6 h-6 transform rotate-45" style={{ backgroundColor: icon.color }} />;
-    };
+    const selectedAgentData = getAgentData(selectedAgent);
+    const availableAbilities = selectedAgentData?.abilities || [];
 
-    // --------------------------
-    // Firestore (OPTIONAL + SAFE)
-    // --------------------------
     useEffect(() => {
-        let unsub = null;
-
-        const hasFirestore =
-            typeof db !== "undefined" &&
-            typeof collection !== "undefined" &&
-            typeof query !== "undefined" &&
-            typeof where !== "undefined" &&
-            typeof onSnapshot !== "undefined";
-
-        if (!hasFirestore) {
-            setSavedStrats([]);
-            return;
+        if (!selectedAbility && availableAbilities.length) setSelectedAbility(availableAbilities[0]);
+        if (selectedAbility && availableAbilities.length && !availableAbilities.some(a => a.name === selectedAbility.name)) {
+            setSelectedAbility(availableAbilities[0]);
         }
+    }, [selectedAgent, availableAbilities.length]);
 
-        try {
-            const qStrats = query(collection(db, "strats"), where("map", "==", selectedMap));
-            unsub = onSnapshot(
-                qStrats,
-                (snap) => {
-                    const s = [];
-                    snap.forEach((docSnap) => s.push({ id: docSnap.id, ...docSnap.data() }));
-                    s.sort((a, b) => new Date(b.date) - new Date(a.date));
-                    setSavedStrats(s);
-                },
-                (err) => {
-                    console.error(err);
-                    setSavedStrats([]);
-                    addToast("Saved strats disabled (Firestore permission-denied)", "error");
-                }
-            );
-        } catch (e) {
-            console.error(e);
-            setSavedStrats([]);
-        }
-
-        return () => {
-            if (typeof unsub === "function") unsub();
-        };
+    useEffect(() => {
+        const unsub = onSnapshot(
+            query(collection(db, 'strats'), where('map', '==', selectedMap)),
+            (snap) => {
+                const data = [];
+                snap.forEach(docSnap => data.push({ id: docSnap.id, ...docSnap.data() }));
+                setSavedStrats(data.sort((a, b) => new Date(b.updatedAt || b.date || 0) - new Date(a.updatedAt || a.date || 0)));
+            },
+            (error) => {
+                console.error('Planner saves unavailable:', error);
+                setSavedStrats([]);
+            }
+        );
+        return () => unsub();
     }, [selectedMap]);
 
-    // --------------------------
-    // Canvas redraw
-    // --------------------------
     useEffect(() => {
-        const ctx = canvasRef.current?.getContext?.("2d");
-        if (!ctx) return;
+        const handleKeyDown = (event) => {
+            if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'z') {
+                event.preventDefault();
+                undo();
+            }
+            if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'y') {
+                event.preventDefault();
+                redo();
+            }
+            if ((event.key === 'Delete' || event.key === 'Backspace') && selectedId) {
+                const tag = document.activeElement?.tagName?.toLowerCase();
+                if (tag !== 'input' && tag !== 'textarea' && tag !== 'select') deleteSelected();
+            }
+            if (event.key === 'Escape') {
+                setSelectedId(null);
+                setDraft(null);
+                setDragging(null);
+                setTool('select');
+            }
+        };
+        window.addEventListener('keydown', handleKeyDown);
+        return () => window.removeEventListener('keydown', handleKeyDown);
+    }, [history, historyStep, selectedId, objects]);
 
-        ctx.clearRect(0, 0, 1024, 1024);
-        ctx.lineCap = "round";
-        ctx.lineJoin = "round";
-
-        drawLines.forEach((line) => {
-            if (!line.points || line.points.length < 2) return;
-            ctx.beginPath();
-            ctx.strokeStyle = line.color;
-            ctx.lineWidth = line.width ?? 3;
-            ctx.moveTo(line.points[0].x, line.points[0].y);
-            for (let i = 1; i < line.points.length; i++) ctx.lineTo(line.points[i].x, line.points[i].y);
-            ctx.stroke();
-        });
-
-        if (currentLine.length > 1) {
-            ctx.beginPath();
-            ctx.strokeStyle = color;
-            ctx.lineWidth = 3;
-            ctx.moveTo(currentLine[0].x, currentLine[0].y);
-            for (let i = 1; i < currentLine.length; i++) ctx.lineTo(currentLine[i].x, currentLine[i].y);
-            ctx.stroke();
-        }
-    }, [drawLines, currentLine, selectedMap, color]);
-
-    // --------------------------
-    // History
-    // --------------------------
-    const addToHistory = (newIcons, newLines) => {
-        const newHistory = history.slice(0, historyStep + 1);
-        newHistory.push({ icons: newIcons, lines: newLines });
-        setHistory(newHistory);
-        setHistoryStep(newHistory.length - 1);
-        setMapIcons(newIcons);
-        setDrawLines(newLines);
+    const commitObjects = (nextObjects) => {
+        const clean = nextObjects.map(obj => ({ ...obj }));
+        const nextHistory = history.slice(0, historyStep + 1);
+        nextHistory.push(clean);
+        setHistory(nextHistory);
+        setHistoryStep(nextHistory.length - 1);
+        setObjects(clean);
     };
 
-    const handleUndo = () => {
-        if (historyStep === 0) return;
-        const prevStep = historyStep - 1;
-        setHistoryStep(prevStep);
-        setMapIcons(history[prevStep].icons);
-        setDrawLines(history[prevStep].lines);
-        setSelectedIconId(null);
+    const undo = () => {
+        if (historyStep <= 0) return;
+        const nextStep = historyStep - 1;
+        setHistoryStep(nextStep);
+        setObjects(history[nextStep]);
+        setSelectedId(null);
     };
 
-    const handleRedo = () => {
-        if (historyStep === history.length - 1) return;
+    const redo = () => {
+        if (historyStep >= history.length - 1) return;
         const nextStep = historyStep + 1;
         setHistoryStep(nextStep);
-        setMapIcons(history[nextStep].icons);
-        setDrawLines(history[nextStep].lines);
-        setSelectedIconId(null);
+        setObjects(history[nextStep]);
+        setSelectedId(null);
     };
 
-    // --------------------------
-    // Pointer position
-    // --------------------------
-    const getCanvasPos = (e) => {
-        const el = canvasRef.current;
-        if (!el) return { x: 0, y: 0 };
-        const rect = el.getBoundingClientRect();
+    const getBoardPoint = (event) => {
+        const rect = boardRef.current?.getBoundingClientRect();
+        if (!rect) return { x: 50, y: 50 };
         return {
-            x: (e.clientX - rect.left) * (1024 / rect.width),
-            y: (e.clientY - rect.top) * (1024 / rect.height),
+            x: clamp(((event.clientX - rect.left) / rect.width) * 100, 0, 100),
+            y: clamp(((event.clientY - rect.top) / rect.height) * 100, 0, 100)
         };
     };
 
-    const getMapPercentPos = (e) => {
-        const el = containerRef.current;
-        if (!el) return { x: 50, y: 50, rect: { width: 1, height: 1 }, clientX: e.clientX, clientY: e.clientY };
-        const rect = el.getBoundingClientRect();
-        return {
-            x: clamp(((e.clientX - rect.left) / rect.width) * 100, 0, 100),
-            y: clamp(((e.clientY - rect.top) / rect.height) * 100, 0, 100),
-            rect,
-            clientX: e.clientX,
-            clientY: e.clientY,
+    const classifyAbility = (abilityName) => {
+        const name = norm(abilityName);
+        if (/smoke|cloud|cover|orb|cove|cascade|screen/.test(name)) return 'smoke';
+        if (/molly|snake|incendiary|grenade|hot hands|nanoswarm|aftershock/.test(name)) return 'molly';
+        if (/flash|curveball|blind|leer|guiding/.test(name)) return 'flash';
+        if (/recon|dart|eye|haunt|drone|prowler|trailblazer|seize/.test(name)) return 'recon';
+        if (/stun|fault|seismic|relay|slow|gravnet|net/.test(name)) return 'stun';
+        if (/wall|barrier|toxic screen|high tide|fast lane/.test(name)) return 'wall';
+        return 'ability';
+    };
+
+    const circleStyleFor = (kind) => {
+        const styles = {
+            smoke: { fill: 'rgba(226, 232, 240, 0.20)', stroke: '#e2e8f0', r: 7 },
+            molly: { fill: 'rgba(239, 68, 68, 0.22)', stroke: '#ef4444', r: 6 },
+            flash: { fill: 'rgba(250, 204, 21, 0.22)', stroke: '#facc15', r: 4.5 },
+            recon: { fill: 'rgba(59, 130, 246, 0.18)', stroke: '#3b82f6', r: 6 },
+            stun: { fill: 'rgba(249, 115, 22, 0.18)', stroke: '#f97316', r: 5.5 }
         };
+        return styles[kind] || { fill: `${color}30`, stroke: color, r: 5 };
     };
 
-    // ==========================================================
-    // FULL util classification (all agents)
-    // ==========================================================
-    const PRESET = {
-        smoke: { radius: 8.5, fill: "rgba(255,255,255,0.18)", outline: "rgba(255,255,255,0.55)" },
-        molly: { radius: 6.5, fill: "rgba(255,120,60,0.20)", outline: "rgba(255,120,60,0.70)" },
-        cage: { radius: 6.8, fill: "rgba(180,0,255,0.16)", outline: "rgba(180,0,255,0.65)" },
-        slow: { radius: 7.2, fill: "rgba(120,200,255,0.16)", outline: "rgba(120,200,255,0.60)" },
-        scan: { radius: 7.0, fill: "rgba(0,200,255,0.16)", outline: "rgba(0,220,255,0.60)" },
-        stun: { radius: 6.0, fill: "rgba(255,255,0,0.18)", outline: "rgba(255,255,0,0.65)" },
-    };
-
-    const WALL_PRESET = {
-        viper: { thickness: 2.2, color: "rgba(60,255,122,0.40)", outline: "rgba(60,255,122,0.85)" },
-        harbor: { thickness: 2.4, color: "rgba(0,200,255,0.30)", outline: "rgba(0,240,255,0.85)" },
-        sage: { thickness: 3.2, color: "rgba(120,200,255,0.25)", outline: "rgba(180,240,255,0.85)" },
-        neon: { thickness: 2.6, color: "rgba(0,220,255,0.22)", outline: "rgba(0,255,255,0.85)" },
-        phoenix: { thickness: 2.4, color: "rgba(255,120,60,0.22)", outline: "rgba(255,160,90,0.85)" },
-        neutral: { thickness: 2.4, color: "rgba(255,255,255,0.14)", outline: "rgba(255,255,255,0.55)" },
-    };
-
-    const norm = (s) => String(s ?? "").toLowerCase().replace(/\s+/g, " ").trim();
-    const hasAny = (text, words) => words.some((w) => text.includes(w));
-
-    const AGENT_OVERRIDES = {
-        viper: [
-            { match: ["toxic screen"], kind: "wall", wall: WALL_PRESET.viper },
-            { match: ["poison cloud"], kind: "smoke" },
-            { match: ["snake bite", "snakebite"], kind: "molly" },
-        ],
-        harbor: [
-            { match: ["high tide"], kind: "wall", wall: WALL_PRESET.harbor },
-            { match: ["cascade"], kind: "wall", wall: WALL_PRESET.harbor },
-            { match: ["cove"], kind: "smoke" },
-        ],
-        sage: [
-            { match: ["barrier orb"], kind: "wall", wall: WALL_PRESET.sage },
-            { match: ["slow orb"], kind: "slow" },
-        ],
-        phoenix: [
-            { match: ["blaze"], kind: "wall", wall: WALL_PRESET.phoenix },
-            { match: ["hot hands"], kind: "molly" },
-        ],
-        neon: [{ match: ["fast lane"], kind: "wall", wall: WALL_PRESET.neon }],
-        cypher: [{ match: ["cyber cage"], kind: "cage" }],
-        killjoy: [{ match: ["nanoswarm"], kind: "molly" }],
-        brimstone: [
-            { match: ["sky smoke"], kind: "smoke" },
-            { match: ["incendiary"], kind: "molly" },
-        ],
-        omen: [{ match: ["dark cover"], kind: "smoke" }],
-        jett: [{ match: ["cloudburst"], kind: "smoke" }],
-        astra: [{ match: ["nebula", "dissipate"], kind: "smoke" }],
-        clove: [{ match: ["ruse"], kind: "smoke" }],
-        sova: [{ match: ["recon bolt"], kind: "scan" }],
-        fade: [{ match: ["haunt"], kind: "scan" }, { match: ["seize"], kind: "slow" }],
-        gekko: [{ match: ["mosh pit"], kind: "molly" }],
-    };
-
-    const classifyAbility = (agentName, abilityName) => {
-        const a = norm(agentName);
-        const n = norm(abilityName);
-
-        const overrides = AGENT_OVERRIDES[a];
-        if (overrides) {
-            const hit = overrides.find((o) => o.match.some((m) => n.includes(m)));
-            if (hit) return hit;
+    const addObjectAt = (point) => {
+        let item = null;
+        if (tool === 'agent') {
+            item = { id: uid(), type: 'agent', name: selectedAgent, icon: selectedAgentData?.icon || '', x: point.x, y: point.y, size: 1, rotation: 0, side };
         }
-
-        if (hasAny(n, ["wall", "screen", "tide", "lane", "barrier", "blaze"])) return { kind: "wall", wall: WALL_PRESET.neutral };
-        if (hasAny(n, ["smoke", "cloud", "cover", "nebula", "shroud", "cove", "mist", "veil", "poison cloud"])) return { kind: "smoke" };
-        if (hasAny(n, ["molly", "incendiary", "fire", "hot hands", "snake bite", "snakebite", "nanoswarm", "acid", "burn", "mosh"])) return { kind: "molly" };
-        if (hasAny(n, ["slow", "chill", "decay", "vulnerable", "seize"])) return { kind: "slow" };
-        if (hasAny(n, ["recon", "scan", "reveal", "haunt", "dart", "eye", "seek", "trail"])) return { kind: "scan" };
-        if (hasAny(n, ["stun", "concuss", "flash", "blind", "daze"])) return { kind: "stun" };
-
-        return { kind: "icon" };
-    };
-
-    const abilityRender = (agentName, ability) => {
-        const base = { type: "ability", name: ability.name, icon: ability.icon, renderKind: RENDER.ICON };
-        const c = classifyAbility(agentName, ability.name);
-
-        if (c.kind === "wall") return { ...base, renderKind: RENDER.WALL, wall: c.wall ?? WALL_PRESET.neutral };
-        if (c.kind === "smoke") return { ...base, renderKind: RENDER.CIRCLE, circle: PRESET.smoke };
-        if (c.kind === "molly") return { ...base, renderKind: RENDER.CIRCLE, circle: PRESET.molly };
-        if (c.kind === "cage") return { ...base, renderKind: RENDER.CIRCLE, circle: PRESET.cage };
-        if (c.kind === "slow") return { ...base, renderKind: RENDER.CIRCLE, circle: PRESET.slow };
-        if (c.kind === "scan") return { ...base, renderKind: RENDER.CIRCLE, circle: PRESET.scan };
-        if (c.kind === "stun") return { ...base, renderKind: RENDER.CIRCLE, circle: PRESET.stun };
-
-        return base;
-    };
-
-    // --------------------------
-    // Drawing (tool gated)
-    // --------------------------
-    const startDraw = (e) => {
-        if (tool !== TOOLS.DRAW) return;
-        if (selectedIconId !== null) return;
-        setIsDrawing(true);
-        const pos = getCanvasPos(e);
-        setCurrentLine([pos]);
-        e.currentTarget.setPointerCapture?.(e.pointerId);
-    };
-
-    const draw = (e) => {
-        if (!isDrawing) return;
-        const pos = getCanvasPos(e);
-        setCurrentLine((prev) => [...prev, pos]);
-    };
-
-    const stopDraw = () => {
-        if (!isDrawing) return;
-        setIsDrawing(false);
-        if (currentLine.length > 1) {
-            const newLines = [...drawLines, { color, width: 3, points: currentLine }];
-            addToHistory(mapIcons, newLines);
+        if (tool === 'ability' && selectedAbility) {
+            const kind = classifyAbility(selectedAbility.name);
+            const style = circleStyleFor(kind);
+            item = { id: uid(), type: 'ability', name: selectedAbility.name, icon: selectedAbility.icon, kind, x: point.x, y: point.y, radius: style.r, fill: style.fill, stroke: style.stroke, size: 1, rotation: 0, side };
         }
-        setCurrentLine([]);
+        if (tool === 'smoke' || tool === 'molly') {
+            const style = circleStyleFor(tool);
+            item = { id: uid(), type: 'area', name: tool === 'smoke' ? 'Smoke' : 'Molly', kind: tool, x: point.x, y: point.y, radius: style.r, fill: style.fill, stroke: style.stroke, side };
+        }
+        if (tool === 'text') {
+            const label = window.prompt('Label text');
+            if (!label) return;
+            item = { id: uid(), type: 'text', text: label, x: point.x, y: point.y, color, size: 1, side };
+        }
+        if (tool === 'spike') item = { id: uid(), type: 'spike', x: point.x, y: point.y, color: '#facc15', size: 1, side };
+        if (tool === 'ping') item = { id: uid(), type: 'ping', x: point.x, y: point.y, color, size: 1, side };
+
+        if (!item) return;
+        commitObjects([...objects, item]);
+        setSelectedId(item.id);
+        if (!['agent', 'ability'].includes(tool)) setTool('select');
     };
 
-    // --------------------------
-    // Placement
-    // --------------------------
-    const beginPlace = (item) => {
-        setTool(TOOLS.PLACE);
-        setPlacingItem(item);
-        setPlacingWallStart(null);
-        setSelectedIconId(null);
-    };
-
-    const handleMapPointerDown = (e) => {
-        if (viewingStrat) return;
-        if (!containerRef.current) return;
-        if (tool === TOOLS.DRAW) return;
-
-        const { x, y } = getMapPercentPos(e);
-
-        if (tool === TOOLS.PLACE && placingItem) {
-            if (placingItem.renderKind === RENDER.WALL) {
-                if (!placingWallStart) {
-                    setPlacingWallStart({ x, y });
-                    return;
-                }
-                const wall = {
-                    id: uid(),
-                    type: "ability",
-                    name: placingItem.name,
-                    icon: placingItem.icon,
-                    renderKind: RENDER.WALL,
-                    x1: placingWallStart.x,
-                    y1: placingWallStart.y,
-                    x2: x,
-                    y2: y,
-                    thickness: placingItem.wall?.thickness ?? WALL_PRESET.neutral.thickness,
-                    wallColor: placingItem.wall?.color ?? WALL_PRESET.neutral.color,
-                    wallOutline: placingItem.wall?.outline ?? WALL_PRESET.neutral.outline,
-                };
-                addToHistory([...mapIcons, wall], drawLines);
-                setPlacingWallStart(null);
-                setPlacingItem(null);
-                setTool(TOOLS.SELECT);
-                return;
-            }
-
-            if (placingItem.renderKind === RENDER.CIRCLE) {
-                const circle = {
-                    id: uid(),
-                    type: "ability",
-                    name: placingItem.name,
-                    icon: placingItem.icon,
-                    renderKind: RENDER.CIRCLE,
-                    cx: x,
-                    cy: y,
-                    radius: placingItem.circle?.radius ?? PRESET.smoke.radius,
-                    fill: placingItem.circle?.fill ?? placingItem.circle?.color ?? PRESET.smoke.fill,
-                    outline: placingItem.circle?.outline ?? PRESET.smoke.outline,
-                };
-                addToHistory([...mapIcons, circle], drawLines);
-                setPlacingItem(null);
-                setTool(TOOLS.SELECT);
-                return;
-            }
-
-            if (placingItem.type === "site_label") {
-                const label = { id: uid(), ...placingItem, renderKind: RENDER.LABEL, x, y };
-                addToHistory([...mapIcons, label], drawLines);
-                setPlacingItem(null);
-                setTool(TOOLS.SELECT);
-                return;
-            }
-
-            const newIcon = { id: uid(), ...placingItem, renderKind: placingItem.renderKind ?? RENDER.ICON, x, y, rotation: 0, scale: 1 };
-            addToHistory([...mapIcons, newIcon], drawLines);
-            setPlacingItem(null);
-            setTool(TOOLS.SELECT);
+    const handleBoardPointerDown = (event) => {
+        if (event.button !== 0) return;
+        const point = getBoardPoint(event);
+        if (['agent', 'ability', 'smoke', 'molly', 'text', 'spike', 'ping'].includes(tool)) {
+            addObjectAt(point);
             return;
         }
-
-        if (tool === TOOLS.ERASE) {
-            if (selectedIconId) {
-                deleteSelectedIcon();
-                return;
-            }
+        if (tool === 'line' || tool === 'arrow') {
+            setDraft({ id: uid(), type: tool, x1: point.x, y1: point.y, x2: point.x, y2: point.y, color, width: strokeWidth, side });
+            return;
         }
-
-        setSelectedIconId(null);
+        if (tool === 'freehand') {
+            setDraft({ id: uid(), type: 'freehand', points: [point], color, width: strokeWidth, side });
+            return;
+        }
+        setSelectedId(null);
     };
 
-    // --------------------------
-    // Moving entities
-    // --------------------------
-    const startMoveEntity = (e, icon, kind = "icon") => {
-        if (tool !== TOOLS.SELECT) return;
-        if (viewingStrat) return;
+    const handleBoardPointerMove = (event) => {
+        const point = getBoardPoint(event);
+        if (dragging) {
+            setObjects(prev => prev.map(obj => {
+                if (obj.id !== dragging.id) return obj;
+                if (dragging.handle === 'start') return { ...obj, x1: point.x, y1: point.y };
+                if (dragging.handle === 'end') return { ...obj, x2: point.x, y2: point.y };
 
-        e.stopPropagation();
-        setSelectedIconId(icon.id);
-
-        const { rect } = getMapPercentPos(e);
-
-        let origX = icon.x,
-            origY = icon.y;
-        if (icon.renderKind === RENDER.CIRCLE) {
-            origX = icon.cx;
-            origY = icon.cy;
-        }
-        if (icon.renderKind === RENDER.WALL) {
-            origX = (icon.x1 + icon.x2) / 2;
-            origY = (icon.y1 + icon.y2) / 2;
-        }
-        if (kind === "wallP1") {
-            origX = icon.x1;
-            origY = icon.y1;
-        }
-        if (kind === "wallP2") {
-            origX = icon.x2;
-            origY = icon.y2;
-        }
-
-        setMoving({
-            id: icon.id,
-            kind,
-            startClientX: e.clientX,
-            startClientY: e.clientY,
-            rect,
-            origX,
-            origY,
-        });
-
-        e.currentTarget.setPointerCapture?.(e.pointerId);
-    };
-
-    const onMovePointer = (e) => {
-        if (!moving) return;
-
-        const dx = ((e.clientX - moving.startClientX) / moving.rect.width) * 100;
-        const dy = ((e.clientY - moving.startClientY) / moving.rect.height) * 100;
-
-        setMapIcons((prev) =>
-            prev.map((icon) => {
-                if (icon.id !== moving.id) return icon;
-
-                const nx = clamp(moving.origX + dx, 0, 100);
-                const ny = clamp(moving.origY + dy, 0, 100);
-
-                if (moving.kind === "wallP1") return { ...icon, x1: nx, y1: ny };
-                if (moving.kind === "wallP2") return { ...icon, x2: nx, y2: ny };
-
-                if (icon.renderKind === RENDER.CIRCLE) return { ...icon, cx: nx, cy: ny };
-
-                if (icon.renderKind === RENDER.WALL) {
-                    const cx = (icon.x1 + icon.x2) / 2;
-                    const cy = (icon.y1 + icon.y2) / 2;
-                    const tx = nx - cx;
-                    const ty = ny - cy;
+                const deltaX = point.x - dragging.startPoint.x;
+                const deltaY = point.y - dragging.startPoint.y;
+                if (obj.type === 'line' || obj.type === 'arrow') {
                     return {
-                        ...icon,
-                        x1: clamp(icon.x1 + tx, 0, 100),
-                        y1: clamp(icon.y1 + ty, 0, 100),
-                        x2: clamp(icon.x2 + tx, 0, 100),
-                        y2: clamp(icon.y2 + ty, 0, 100),
+                        ...obj,
+                        x1: clamp(dragging.original.x1 + deltaX, 0, 100),
+                        y1: clamp(dragging.original.y1 + deltaY, 0, 100),
+                        x2: clamp(dragging.original.x2 + deltaX, 0, 100),
+                        y2: clamp(dragging.original.y2 + deltaY, 0, 100)
                     };
                 }
-
-                return { ...icon, x: nx, y: ny };
-            })
-        );
+                if (obj.type === 'freehand') {
+                    return {
+                        ...obj,
+                        points: dragging.original.points.map(p => ({
+                            x: clamp(p.x + deltaX, 0, 100),
+                            y: clamp(p.y + deltaY, 0, 100)
+                        }))
+                    };
+                }
+                return { ...obj, x: clamp(point.x - dragging.dx, 0, 100), y: clamp(point.y - dragging.dy, 0, 100) };
+            }));
+            return;
+        }
+        if (!draft) return;
+        if (draft.type === 'line' || draft.type === 'arrow') setDraft(prev => ({ ...prev, x2: point.x, y2: point.y }));
+        if (draft.type === 'freehand') setDraft(prev => ({ ...prev, points: [...prev.points, point] }));
     };
 
-    const endMove = () => {
-        if (!moving) return;
-        setMoving(null);
-        addToHistory(mapIcons, drawLines);
+    const finishBoardAction = () => {
+        if (dragging) {
+            commitObjects(objects);
+            setDragging(null);
+            return;
+        }
+        if (draft) {
+            const shouldSave = draft.type === 'freehand' ? draft.points.length > 1 : Math.hypot(draft.x2 - draft.x1, draft.y2 - draft.y1) > 1;
+            if (shouldSave) commitObjects([...objects, draft]);
+            setDraft(null);
+        }
     };
 
-    // --------------------------
-    // Selection edits
-    // --------------------------
-    const updateSelectedIcon = (prop, value) => {
-        if (selectedIconId === null) return;
-        const v = prop === "rotation" || prop === "scale" ? Number(value) : value;
-        setMapIcons((prev) => prev.map((icon) => (icon.id === selectedIconId ? { ...icon, [prop]: v } : icon)));
+    const startDragObject = (event, obj, handle = 'body') => {
+        if (tool !== 'select') return;
+        event.stopPropagation();
+        const point = getBoardPoint(event);
+        setSelectedId(obj.id);
+        setDragging({
+            id: obj.id,
+            handle,
+            dx: point.x - (obj.x || point.x),
+            dy: point.y - (obj.y || point.y),
+            startPoint: point,
+            original: JSON.parse(JSON.stringify(obj))
+        });
     };
 
-    const deleteSelectedIcon = () => {
-        if (!selectedIconId) return;
-        const newIcons = mapIcons.filter((icon) => icon.id !== selectedIconId);
-        addToHistory(newIcons, drawLines);
-        setSelectedIconId(null);
+    const selectedObject = objects.find(obj => obj.id === selectedId);
+
+    const updateSelected = (patch) => {
+        if (!selectedId) return;
+        const next = objects.map(obj => obj.id === selectedId ? { ...obj, ...patch } : obj);
+        commitObjects(next);
     };
 
-    const clearCanvas = () => {
-        const empty = { icons: [], lines: [] };
-        setHistory([empty]);
-        setHistoryStep(0);
-        setMapIcons([]);
-        setDrawLines([]);
-        setSelectedIconId(null);
-        setTool(TOOLS.SELECT);
-        setPlacingItem(null);
-        setPlacingWallStart(null);
-        addToast("Canvas Cleared");
+    const deleteSelected = () => {
+        if (!selectedId) return;
+        commitObjects(objects.filter(obj => obj.id !== selectedId));
+        setSelectedId(null);
     };
 
-    // --------------------------
-    // TRASH ZONE support
-    // --------------------------
-    const isInTrash = (clientX, clientY) => {
-        const pad = 16;
-        const size = 56;
-        const right = window.innerWidth - pad;
-        const top = 12 + pad;
-        const left = right - size;
-        const bottom = top + size;
-        return clientX >= left && clientX <= right && clientY >= top && clientY <= bottom;
+    const duplicateSelected = () => {
+        if (!selectedObject) return;
+        const copy = { ...selectedObject, id: uid(), x: clamp((selectedObject.x || 45) + 3, 0, 100), y: clamp((selectedObject.y || 45) + 3, 0, 100) };
+        if (copy.x1 !== undefined) {
+            copy.x1 = clamp(copy.x1 + 3, 0, 100);
+            copy.x2 = clamp(copy.x2 + 3, 0, 100);
+            copy.y1 = clamp(copy.y1 + 3, 0, 100);
+            copy.y2 = clamp(copy.y2 + 3, 0, 100);
+        }
+        commitObjects([...objects, copy]);
+        setSelectedId(copy.id);
     };
 
-    // --------------------------
-    // Saving (SAFE if Firestore missing/denied)
-    // --------------------------
+    const clearBoard = () => {
+        if (!objects.length) return;
+        if (!window.confirm('Clear this planner board?')) return;
+        commitObjects([]);
+        setSelectedId(null);
+    };
+
     const saveStrat = async () => {
+        if (!objects.length) return addToast('Place something on the board first', 'error');
+        setLoadingSave(true);
         try {
-            const tempCanvas = document.createElement("canvas");
-            tempCanvas.width = 1024;
-            tempCanvas.height = 1024;
-            const ctx = tempCanvas.getContext("2d");
-
-            if (mapImages[selectedMap]) {
-                const img = new Image();
-                img.src = mapImages[selectedMap];
-                img.crossOrigin = "anonymous";
-                await new Promise((r) => {
-                    img.onload = r;
-                    img.onerror = r;
-                });
-                ctx.drawImage(img, 0, 0, 1024, 1024);
-            }
-
-            ctx.drawImage(canvasRef.current, 0, 0);
-
-            for (const icon of mapIcons) {
-                if (icon.renderKind === RENDER.WALL) {
-                    const x1 = (icon.x1 / 100) * 1024;
-                    const y1 = (icon.y1 / 100) * 1024;
-                    const x2 = (icon.x2 / 100) * 1024;
-                    const y2 = (icon.y2 / 100) * 1024;
-
-                    ctx.lineCap = "round";
-                    ctx.strokeStyle = icon.wallColor ?? "rgba(255,255,255,0.14)";
-                    ctx.lineWidth = (icon.thickness ?? 2.4) * 10;
-                    ctx.beginPath();
-                    ctx.moveTo(x1, y1);
-                    ctx.lineTo(x2, y2);
-                    ctx.stroke();
-
-                    ctx.strokeStyle = icon.wallOutline ?? "rgba(255,255,255,0.55)";
-                    ctx.lineWidth = Math.max(2, (icon.thickness ?? 2.4) * 2);
-                    ctx.beginPath();
-                    ctx.moveTo(x1, y1);
-                    ctx.lineTo(x2, y2);
-                    ctx.stroke();
-                }
-
-                if (icon.renderKind === RENDER.CIRCLE) {
-                    const cx = (icon.cx / 100) * 1024;
-                    const cy = (icon.cy / 100) * 1024;
-                    const r = (icon.radius / 100) * 1024;
-
-                    ctx.beginPath();
-                    ctx.fillStyle = icon.fill ?? "rgba(255,255,255,0.18)";
-                    ctx.strokeStyle = icon.outline ?? "rgba(255,255,255,0.55)";
-                    ctx.lineWidth = 2;
-                    ctx.arc(cx, cy, r, 0, Math.PI * 2);
-                    ctx.fill();
-                    ctx.stroke();
-                }
-            }
-
-            for (const icon of mapIcons) {
-                if (icon.type === "site_label") {
-                    const px = (icon.x / 100) * 1024;
-                    const py = (icon.y / 100) * 1024;
-                    ctx.save();
-                    ctx.translate(px, py);
-                    ctx.font = "bold 60px Arial";
-                    ctx.fillStyle = "rgba(255, 255, 255, 0.8)";
-                    ctx.textAlign = "center";
-                    ctx.textBaseline = "middle";
-                    ctx.fillText(icon.label, 0, 0);
-                    ctx.restore();
-                    continue;
-                }
-
-                if (icon.renderKind === RENDER.WALL || icon.renderKind === RENDER.CIRCLE) continue;
-
-                const px = (icon.x / 100) * 1024;
-                const py = (icon.y / 100) * 1024;
-                ctx.save();
-                ctx.translate(px, py);
-                ctx.rotate((Number(icon.rotation) || 0) * Math.PI / 180);
-                const scale = Number(icon.scale) || 1;
-                ctx.scale(scale, scale);
-
-                if (icon.type === "agent") {
-                    const src = agentIconSrc(icon.name);
-                    if (src) {
-                        const img = new Image();
-                        img.crossOrigin = "anonymous";
-                        img.src = src;
-                        await new Promise((r) => {
-                            img.onload = r;
-                            img.onerror = r;
-                        });
-                        ctx.beginPath();
-                        ctx.arc(0, 0, 25, 0, Math.PI * 2);
-                        ctx.clip();
-                        ctx.drawImage(img, -25, -25, 50, 50);
-                        ctx.strokeStyle = "#fff";
-                        ctx.lineWidth = 2;
-                        ctx.stroke();
-                    } else {
-                        ctx.fillStyle = "#111";
-                        ctx.beginPath();
-                        ctx.arc(0, 0, 24, 0, Math.PI * 2);
-                        ctx.fill();
-                        ctx.fillStyle = "rgba(255,255,255,0.85)";
-                        ctx.font = "bold 22px Arial";
-                        ctx.textAlign = "center";
-                        ctx.textBaseline = "middle";
-                        ctx.fillText(String(icon.name).slice(0, 1).toUpperCase(), 0, 1);
-                        ctx.strokeStyle = "#fff";
-                        ctx.lineWidth = 2;
-                        ctx.beginPath();
-                        ctx.arc(0, 0, 24, 0, Math.PI * 2);
-                        ctx.stroke();
-                    }
-                } else if (icon.type === "ability") {
-                    const img = new Image();
-                    img.crossOrigin = "anonymous";
-                    img.src = icon.icon;
-                    await new Promise((r) => {
-                        img.onload = r;
-                        img.onerror = r;
-                    });
-                    ctx.drawImage(img, -20, -20, 40, 40);
-                } else {
-                    ctx.beginPath();
-                    if (icon.shape === "ring") {
-                        ctx.arc(0, 0, 20, 0, Math.PI * 2);
-                        ctx.fillStyle = icon.color;
-                        ctx.fill();
-                        ctx.lineWidth = 3;
-                        ctx.strokeStyle = icon.border;
-                        ctx.stroke();
-                    } else if (icon.shape === "square") {
-                        ctx.fillStyle = icon.color;
-                        ctx.rect(-15, -15, 30, 30);
-                        ctx.fill();
-                        ctx.lineWidth = 2;
-                        ctx.strokeStyle = icon.border;
-                        ctx.stroke();
-                    } else if (icon.shape === "rect") {
-                        ctx.fillStyle = icon.color;
-                        ctx.rect(-25, -8, 50, 16);
-                        ctx.fill();
-                        ctx.lineWidth = 2;
-                        ctx.strokeStyle = icon.border;
-                        ctx.stroke();
-                    } else if (icon.shape === "cross") {
-                        ctx.strokeStyle = icon.border;
-                        ctx.lineWidth = 4;
-                        ctx.moveTo(-15, -15);
-                        ctx.lineTo(15, 15);
-                        ctx.moveTo(15, -15);
-                        ctx.lineTo(-15, 15);
-                        ctx.stroke();
-                    } else if (icon.shape === "diamond") {
-                        ctx.fillStyle = icon.color;
-                        ctx.moveTo(0, -20);
-                        ctx.lineTo(20, 0);
-                        ctx.lineTo(0, 20);
-                        ctx.lineTo(-20, 0);
-                        ctx.fill();
-                        ctx.lineWidth = 2;
-                        ctx.strokeStyle = icon.border;
-                        ctx.stroke();
-                    } else if (icon.shape === "triangle") {
-                        ctx.fillStyle = icon.color;
-                        ctx.moveTo(0, -15);
-                        ctx.lineTo(15, 15);
-                        ctx.lineTo(-15, 15);
-                        ctx.fill();
-                    } else {
-                        ctx.fillStyle = icon.color;
-                        ctx.arc(0, 0, 15, 0, Math.PI * 2);
-                        ctx.fill();
-                    }
-                }
-
-                ctx.restore();
-            }
-
-            const dataUrl = tempCanvas.toDataURL("image/jpeg", 0.7);
-
-            const canWrite = typeof db !== "undefined" && typeof addDoc !== "undefined" && typeof collection !== "undefined";
-
-            if (!canWrite) {
-                addToast("Saved locally (Firestore not configured)", "error");
-                setViewingStrat(dataUrl);
-                return;
-            }
-
-            await addDoc(collection(db, "strats"), {
+            await addDoc(collection(db, 'strats'), {
+                name: stratName.trim() || `${selectedMap} ${side} strat`,
                 map: selectedMap,
                 side,
-                step: sequenceStep,
-                image: dataUrl,
+                objects,
                 date: new Date().toISOString(),
+                updatedAt: new Date().toISOString()
             });
-            addToast("Strat Saved!");
-        } catch (e) {
-            console.error(e);
-            addToast("Save failed (Firestore permission-denied or image too large)", "error");
+            setStratName('');
+            addToast('Strategy saved');
+        } catch (error) {
+            console.error('Save strat failed:', error);
+            addToast('Unable to save strategy', 'error');
+        } finally {
+            setLoadingSave(false);
         }
+    };
+
+    const loadStrat = (strat) => {
+        const loaded = Array.isArray(strat.objects) ? strat.objects : [];
+        setObjects(loaded);
+        setHistory([loaded]);
+        setHistoryStep(0);
+        setSide(strat.side || 'Attack');
+        setSelectedId(null);
+        if (!loaded.length && strat.image) addToast('This older saved strat only has an image preview', 'error');
     };
 
     const deleteStrat = async (id) => {
         try {
-            const canDelete = typeof db !== "undefined" && typeof deleteDoc !== "undefined" && typeof doc !== "undefined";
-            if (!canDelete) return addToast("Delete disabled (Firestore not configured)", "error");
-            if (viewingStrat) setViewingStrat(null);
-            await deleteDoc(doc(db, "strats", id));
-            addToast("Strategy Deleted");
-        } catch (e) {
-            console.error(e);
-            addToast("Delete failed (Firestore permission-denied)", "error");
+            await deleteDoc(doc(db, 'strats', id));
+            addToast('Strategy deleted');
+        } catch (error) {
+            console.error('Delete strat failed:', error);
+            addToast('Unable to delete strategy', 'error');
         }
     };
 
-    // --------------------------
-    // UI (RED THEME + FIT SCREEN + AGENTS ONLY IN BOTTOM BAR)
-    // --------------------------
+    const exportJson = () => {
+        const payload = JSON.stringify({ name: stratName || `${selectedMap}-${side}`, map: selectedMap, side, objects }, null, 2);
+        const blob = new Blob([payload], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = `${selectedMap}-${side}-strat.json`.toLowerCase().replace(/\s+/g, '-');
+        link.click();
+        URL.revokeObjectURL(url);
+    };
+
+    const renderArrowHead = (obj) => {
+        const angle = Math.atan2(obj.y2 - obj.y1, obj.x2 - obj.x1) * 180 / Math.PI;
+        return `translate(${obj.x2} ${obj.y2}) rotate(${angle})`;
+    };
+
+    const renderObject = (obj) => {
+        const isSelected = selectedId === obj.id;
+        if (obj.type === 'line' || obj.type === 'arrow') {
+            return (
+                <g key={obj.id} className="cursor-pointer" onPointerDown={(e) => startDragObject(e, obj, 'body')}>
+                    <line x1={`${obj.x1}%`} y1={`${obj.y1}%`} x2={`${obj.x2}%`} y2={`${obj.y2}%`} stroke="transparent" strokeWidth="3%" />
+                    <line x1={`${obj.x1}%`} y1={`${obj.y1}%`} x2={`${obj.x2}%`} y2={`${obj.y2}%`} stroke={obj.color} strokeWidth={obj.width || 3} strokeLinecap="round" />
+                    {obj.type === 'arrow' && <path d="M 0 0 L -2.8 -1.8 L -2.8 1.8 Z" transform={renderArrowHead(obj)} fill={obj.color} />}
+                    {isSelected && (
+                        <>
+                            <circle cx={`${obj.x1}%`} cy={`${obj.y1}%`} r="1.1%" fill="#020617" stroke="#22c55e" strokeWidth="2" onPointerDown={(e) => startDragObject(e, obj, 'start')} />
+                            <circle cx={`${obj.x2}%`} cy={`${obj.y2}%`} r="1.1%" fill="#020617" stroke="#22c55e" strokeWidth="2" onPointerDown={(e) => startDragObject(e, obj, 'end')} />
+                        </>
+                    )}
+                </g>
+            );
+        }
+
+        if (obj.type === 'freehand') {
+            const points = obj.points?.map(p => `${p.x},${p.y}`).join(' ') || '';
+            return <polyline key={obj.id} points={points} fill="none" stroke={obj.color} strokeWidth={obj.width || 3} strokeLinecap="round" strokeLinejoin="round" onPointerDown={(e) => startDragObject(e, obj)} className="cursor-pointer" />;
+        }
+
+        if (obj.type === 'ability' || obj.type === 'area') {
+            return (
+                <g key={obj.id} className="cursor-grab" onPointerDown={(e) => startDragObject(e, obj)}>
+                    <circle cx={`${obj.x}%`} cy={`${obj.y}%`} r={`${(obj.radius || 5) * (obj.size || 1)}%`} fill={obj.fill} stroke={obj.stroke} strokeWidth="2" strokeDasharray={obj.kind === 'flash' ? '4 3' : '0'} />
+                    {obj.icon && <image href={obj.icon} x={`${obj.x - 2}%`} y={`${obj.y - 2}%`} width="4%" height="4%" opacity="0.95" />}
+                    {isSelected && <circle cx={`${obj.x}%`} cy={`${obj.y}%`} r={`${(obj.radius || 5) * (obj.size || 1) + 1}%`} fill="none" stroke="#22c55e" strokeWidth="2" />}
+                </g>
+            );
+        }
+
+        return (
+            <foreignObject key={obj.id} x={`${obj.x - 3}%`} y={`${obj.y - 3}%`} width="6%" height="6%" className="overflow-visible">
+                <div
+                    className={`relative flex items-center justify-center select-none cursor-grab ${isSelected ? 'ring-2 ring-green-400 rounded-full' : ''}`}
+                    style={{ transform: `rotate(${obj.rotation || 0}deg) scale(${obj.size || 1})`, transformOrigin: 'center' }}
+                    onPointerDown={(e) => startDragObject(e, obj)}
+                >
+                    {obj.type === 'agent' && (obj.icon ? <img src={obj.icon} alt={obj.name} className="w-10 h-10 rounded-full border-2 border-white bg-black shadow-lg pointer-events-none" /> : <div className="w-10 h-10 rounded-full border-2 border-white bg-black text-white flex items-center justify-center text-xs font-black">{obj.name?.slice(0, 2)}</div>)}
+                    {obj.type === 'text' && <div className="px-2 py-1 rounded bg-black/80 border border-white/20 text-xs font-black uppercase whitespace-nowrap shadow-lg" style={{ color: obj.color }}>{obj.text}</div>}
+                    {obj.type === 'spike' && <div className="w-9 h-9 rotate-45 bg-yellow-400 border-2 border-yellow-100 shadow-[0_0_18px_rgba(250,204,21,0.7)]" />}
+                    {obj.type === 'ping' && <div className="w-10 h-10 rounded-full border-4 bg-transparent animate-pulse" style={{ borderColor: obj.color }} />}
+                </div>
+            </foreignObject>
+        );
+    };
+
+    const allObjects = draft ? [...objects, draft] : objects;
+
     return (
-        <div className="w-full h-[100dvh] flex flex-col bg-[#0b1116] overflow-hidden">
-            <div className="flex-1 grid grid-cols-1 lg:grid-cols-[320px_1fr_320px] overflow-hidden">
-                {/* LEFT */}
-                <div className="border-r border-white/10 bg-[#0b1116] overflow-hidden">
-                    <div className="h-full overflow-y-auto custom-scrollbar">
-                        {/* Map header */}
-                        <div className="p-4 border-b border-white/10">
-                            <div className="flex items-center gap-3">
-                                <div className="flex-1">
-                                    <div className="text-[11px] text-white/50 font-black uppercase tracking-widest mb-1">Map</div>
-                                    <select
-                                        value={selectedMap}
-                                        onChange={(e) => {
-                                            setSelectedMap(e.target.value);
-                                            clearCanvas();
-                                            setViewingStrat(null);
-                                        }}
-                                        className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-white font-bold"
-                                    >
-                                        {MAPS.map((m) => (
-                                            <option key={m} value={m}>
-                                                {m}
-                                            </option>
-                                        ))}
-                                    </select>
-                                </div>
+        <div className="h-full min-h-[760px] grid grid-cols-1 xl:grid-cols-[280px_minmax(420px,1fr)_320px] bg-[#070b0f] border border-white/10 rounded-2xl overflow-hidden shadow-2xl">
+            <aside className="border-b xl:border-b-0 xl:border-r border-white/10 bg-black/40 overflow-y-auto custom-scrollbar">
+                <div className="p-4 border-b border-white/10">
+                    <div className="text-2xl font-black text-white italic tracking-tighter"><span className="text-red-600">/</span> STRAT PLANNER</div>
+                    <div className="text-[10px] text-neutral-500 font-bold uppercase tracking-widest mt-1">Valo-style tactical board</div>
+                </div>
 
-                                {/* Attack/Defense */}
-                                <button
-                                    onClick={() => setSide((s) => (s === "attack" ? "defense" : "attack"))}
-                                    className={`w-24 h-[44px] rounded-lg border font-black text-xs ${side === "attack"
-                                        ? "bg-red-600/70 border-red-300 text-white"
-                                        : "bg-white/5 border-white/10 text-white/80 hover:bg-white/10"
-                                        }`}
-                                    title="Toggle Attack/Defense"
-                                >
-                                    {side === "attack" ? "Attack" : "Defense"}
-                                </button>
-                            </div>
+                <div className="p-4 space-y-5">
+                    <div>
+                        <label className="text-[10px] font-black text-red-500 uppercase mb-2 block">Map</label>
+                        <Select value={selectedMap} onChange={e => { setSelectedMap(e.target.value); setSelectedId(null); }}>
+                            {MAPS.map(map => <option key={map} value={map}>{map}</option>)}
+                        </Select>
+                    </div>
+
+                    <div>
+                        <label className="text-[10px] font-black text-red-500 uppercase mb-2 block">Side</label>
+                        <div className="grid grid-cols-2 gap-2">
+                            {['Attack', 'Defense'].map(value => <button key={value} onClick={() => setSide(value)} className={`h-10 rounded-lg border text-xs font-black uppercase ${side === value ? 'bg-red-700 text-white border-red-500' : 'bg-white/5 text-neutral-400 border-white/10 hover:text-white'}`}>{value}</button>)}
                         </div>
+                    </div>
 
-                        {/* Sequence */}
-                        <div className="p-4 border-b border-white/10">
-                            <div className="flex items-center justify-between mb-3">
-                                <div className="text-white text-2xl font-black">Sequence</div>
-                                <div className="text-white/30 font-black">i</div>
-                            </div>
-
-                            <button className="w-full bg-red-700/60 hover:bg-red-700 text-white font-black py-3 rounded-lg mb-3">
-                                SEQ. Tutorial
-                            </button>
-
-                            <div className="grid grid-cols-5 gap-2">
-                                {Array.from({ length: 10 }).map((_, idx) => {
-                                    const step = idx + 1;
-                                    const active = sequenceStep === step;
-                                    return (
-                                        <button
-                                            key={idx}
-                                            onClick={() => setSequenceStep(step)}
-                                            className={`h-12 rounded-lg font-black border ${active ? "bg-red-600/70 border-red-300 text-white" : "bg-white/5 border-white/10 text-white/80 hover:bg-white/10"
-                                                }`}
-                                            title={`Sequence ${step}`}
-                                        >
-                                            {step}
-                                        </button>
-                                    );
-                                })}
-                            </div>
-
-                            <button className="w-full mt-3 bg-white/5 hover:bg-white/10 border border-white/10 rounded-lg py-3 text-white font-bold">
-                                🎧 Audio
-                            </button>
+                    <div>
+                        <label className="text-[10px] font-black text-red-500 uppercase mb-2 block">Tools</label>
+                        <div className="grid grid-cols-2 gap-2">
+                            {tools.map(item => <button key={item.id} title={item.hint} onClick={() => setTool(item.id)} className={`h-10 rounded-lg border text-[11px] font-black uppercase ${tool === item.id ? 'bg-red-700 text-white border-red-500' : 'bg-white/5 text-neutral-400 border-white/10 hover:text-white hover:border-white/20'}`}>{item.label}</button>)}
                         </div>
+                    </div>
 
-                        {/* Delete */}
-                        <div className="p-4 border-b border-white/10">
-                            <div className="flex items-center justify-between mb-3">
-                                <div className="text-white text-2xl font-black">Delete</div>
-                                <div className="text-white/30 font-black">i</div>
-                            </div>
-
-                            <button onClick={clearCanvas} className="w-full bg-red-700/60 hover:bg-red-700 text-white font-black py-3 rounded-lg mb-3">
-                                Everything
-                            </button>
-
-                            <button
-                                onClick={() => {
-                                    if (selectedIconId) deleteSelectedIcon();
-                                }}
-                                className="w-full bg-white/5 hover:bg-white/10 border border-white/10 rounded-lg py-3 text-white font-bold"
-                            >
-                                Selected
-                            </button>
+                    <div>
+                        <label className="text-[10px] font-black text-red-500 uppercase mb-2 block">Color</label>
+                        <div className="flex flex-wrap gap-2">
+                            {palette.map(value => <button key={value} onClick={() => setColor(value)} className={`w-8 h-8 rounded-full border-2 ${color === value ? 'border-white' : 'border-transparent'}`} style={{ backgroundColor: value }} title={value} />)}
                         </div>
+                    </div>
 
-                        {/* Tools row */}
-                        <div className="p-4">
-                            <div className="text-[11px] text-white/50 font-black uppercase tracking-widest mb-3">Tools</div>
+                    <div>
+                        <label className="text-[10px] font-black text-red-500 uppercase mb-2 block">Line Width</label>
+                        <input type="range" min="1" max="10" value={strokeWidth} onChange={e => setStrokeWidth(Number(e.target.value))} className="w-full accent-red-600" />
+                    </div>
 
-                            <div className="grid grid-cols-5 gap-2">
-                                <button
-                                    onClick={() => {
-                                        setTool(TOOLS.SELECT);
-                                        setPlacingItem(null);
-                                        setPlacingWallStart(null);
-                                    }}
-                                    className={`h-12 rounded-lg border font-black ${tool === TOOLS.SELECT ? "bg-red-700/70 border-red-300 text-white" : "bg-white/5 border-white/10 text-white/70 hover:bg-white/10"
-                                        }`}
-                                    title="Select"
-                                >
-                                    ⬚
+                    <div className="grid grid-cols-2 gap-2">
+                        <ButtonSecondary onClick={undo} className="text-xs" disabled={historyStep === 0}>Undo</ButtonSecondary>
+                        <ButtonSecondary onClick={redo} className="text-xs" disabled={historyStep === history.length - 1}>Redo</ButtonSecondary>
+                        <ButtonSecondary onClick={duplicateSelected} className="text-xs" disabled={!selectedObject}>Duplicate</ButtonSecondary>
+                        <ButtonSecondary onClick={deleteSelected} className="text-xs" disabled={!selectedObject}>Delete</ButtonSecondary>
+                    </div>
+                    <ButtonSecondary onClick={clearBoard} className="w-full text-xs">Clear Board</ButtonSecondary>
+                </div>
+            </aside>
+
+            <section className="relative min-h-[540px] bg-[#0b1116] overflow-hidden flex items-center justify-center p-4 md:p-8">
+                <div className="absolute top-4 left-4 right-4 z-20 flex flex-wrap items-center gap-2 pointer-events-none">
+                    <div className="px-3 py-2 rounded-lg bg-black/70 border border-white/10 text-xs font-black uppercase text-white pointer-events-auto">{selectedMap} / {side} / {tool}</div>
+                    <div className="ml-auto px-3 py-2 rounded-lg bg-black/70 border border-white/10 text-xs font-bold text-neutral-400 pointer-events-auto">{objects.length} items</div>
+                </div>
+
+                <div
+                    ref={boardRef}
+                    className="relative aspect-square w-full max-w-[min(78vh,920px)] rounded-xl overflow-hidden border border-white/10 bg-neutral-950 shadow-2xl touch-none"
+                    onPointerDown={handleBoardPointerDown}
+                    onPointerMove={handleBoardPointerMove}
+                    onPointerUp={finishBoardAction}
+                    onPointerLeave={finishBoardAction}
+                >
+                    {mapImages?.[selectedMap] ? (
+                        <img src={mapImages[selectedMap]} alt={`${selectedMap} tactical map`} className="absolute inset-0 w-full h-full object-cover opacity-95 pointer-events-none" draggable={false} />
+                    ) : (
+                        <div className="absolute inset-0 flex items-center justify-center text-neutral-700 font-black text-5xl italic">{selectedMap}</div>
+                    )}
+                    <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,transparent_45%,rgba(0,0,0,0.35)_100%)] pointer-events-none" />
+                    <svg className="absolute inset-0 w-full h-full z-10" viewBox="0 0 100 100" preserveAspectRatio="none">
+                        {allObjects.map(renderObject)}
+                    </svg>
+                </div>
+            </section>
+
+            <aside className="border-t xl:border-t-0 xl:border-l border-white/10 bg-black/40 overflow-y-auto custom-scrollbar">
+                <div className="p-4 border-b border-white/10">
+                    <label className="text-[10px] font-black text-red-500 uppercase mb-2 block">Agent</label>
+                    <Select value={selectedAgent} onChange={e => { setSelectedAgent(e.target.value); setSelectedAbility(null); }}>
+                        {AGENT_NAMES.map(agent => <option key={agent} value={agent}>{agent}</option>)}
+                    </Select>
+                    <div className="mt-3 grid grid-cols-4 gap-2 max-h-52 overflow-y-auto custom-scrollbar pr-1">
+                        {AGENT_NAMES.map(agent => {
+                            const data = getAgentData(agent);
+                            return (
+                                <button key={agent} onClick={() => { setSelectedAgent(agent); setSelectedAbility(null); setTool('agent'); }} className={`aspect-square rounded-lg overflow-hidden border bg-neutral-900 flex items-center justify-center ${selectedAgent === agent ? 'border-red-500' : 'border-white/10 hover:border-white/30'}`} title={agent}>
+                                    {data?.icon ? <img src={data.icon} alt={agent} className="w-full h-full object-cover" loading="lazy" /> : <span className="text-[10px] font-black text-neutral-500">{agent.slice(0, 2).toUpperCase()}</span>}
                                 </button>
-
-                                <button
-                                    onClick={() => {
-                                        setTool(TOOLS.DRAW);
-                                        setPlacingItem(null);
-                                        setPlacingWallStart(null);
-                                    }}
-                                    className={`h-12 rounded-lg border font-black ${tool === TOOLS.DRAW ? "bg-red-700/70 border-red-300 text-white" : "bg-white/5 border-white/10 text-white/70 hover:bg-white/10"
-                                        }`}
-                                    title="Draw"
-                                >
-                                    ✎
-                                </button>
-
-                                <button
-                                    onClick={() => {
-                                        setTool(TOOLS.ERASE);
-                                        setPlacingItem(null);
-                                        setPlacingWallStart(null);
-                                    }}
-                                    className={`h-12 rounded-lg border font-black ${tool === TOOLS.ERASE ? "bg-red-700/70 border-red-300 text-white" : "bg-white/5 border-white/10 text-white/70 hover:bg-white/10"
-                                        }`}
-                                    title="Erase (select then delete)"
-                                >
-                                    ⌫
-                                </button>
-
-                                <button
-                                    onClick={handleUndo}
-                                    disabled={historyStep === 0}
-                                    className="h-12 rounded-lg border bg-white/5 border-white/10 text-white/70 hover:bg-white/10 disabled:opacity-30"
-                                    title="Undo"
-                                >
-                                    ↩
-                                </button>
-
-                                <button
-                                    onClick={handleRedo}
-                                    disabled={historyStep === history.length - 1}
-                                    className="h-12 rounded-lg border bg-white/5 border-white/10 text-white/70 hover:bg-white/10 disabled:opacity-30"
-                                    title="Redo"
-                                >
-                                    ↪
-                                </button>
-                            </div>
-
-                            {/* Colors (red theme) */}
-                            <div className="flex items-center gap-2 mt-3">
-                                <button onClick={() => setColor("#ef4444")} className={`w-7 h-7 rounded-full bg-red-500 border ${color === "#ef4444" ? "border-white" : "border-transparent"}`} />
-                                <button onClick={() => setColor("#f97316")} className={`w-7 h-7 rounded-full bg-orange-500 border ${color === "#f97316" ? "border-white" : "border-transparent"}`} />
-                                <button onClick={() => setColor("#ffffff")} className={`w-7 h-7 rounded-full bg-white border ${color === "#ffffff" ? "border-white" : "border-transparent"}`} />
-                                <div className="ml-auto text-[10px] text-white/40 font-bold">{tool === TOOLS.PLACE && placingItem ? "PLACING..." : tool.toUpperCase()}</div>
-                            </div>
-
-                            {/* Palette */}
-                            <div className="mt-5 space-y-4">
-                                <div>
-                                    <div className="flex items-center justify-between mb-2">
-                                        <div className="text-[11px] text-white/50 font-black uppercase tracking-widest">Abilities</div>
-                                        <div className="text-[11px] text-white/60 font-black truncate">
-                                            {selectedAgentForUtil}
-                                        </div>
-                                    </div>
-
-                                    <div className="grid grid-cols-5 gap-2">
-                                        {(agentData?.[selectedAgentForUtil]?.abilities ?? (() => {
-                                            // fallback: try normalized lookup if direct key missing
-                                            const target = normKey(selectedAgentForUtil);
-                                            const foundKey = agentData ? Object.keys(agentData).find((k) => normKey(k) === target) : null;
-                                            return foundKey ? agentData?.[foundKey]?.abilities ?? [] : [];
-                                        })()).map((ability, i) => {
-                                            const item = abilityRender(selectedAgentForUtil, ability);
-                                            const special = item.renderKind !== RENDER.ICON;
-                                            return (
-                                                <button
-                                                    key={i}
-                                                    onClick={() => beginPlace(item)}
-                                                    className={`aspect-square rounded-lg border bg-black p-1 hover:border-red-300 ${special ? "border-red-500/50" : "border-white/10"
-                                                        }`}
-                                                    title={ability.name}
-                                                >
-                                                    <img src={ability.icon} alt={ability.name} className="w-full h-full object-contain opacity-80 hover:opacity-100" />
-                                                </button>
-                                            );
-                                        })}
-                                    </div>
-
-                                    {placingWallStart && <div className="mt-2 text-[10px] text-green-400">Wall: click the end point</div>}
-                                </div>
-
-                                {/* ✅ REMOVED: Agents grid from the LEFT panel */}
-
-                                <div>
-                                    <div className="text-[11px] text-white/50 font-black uppercase tracking-widest mb-2">Generic Util</div>
-                                    <div className="grid grid-cols-5 gap-2">
-                                        {UTILITY_TYPES.map((u) => (
-                                            <button
-                                                key={u.id}
-                                                onClick={() => beginPlace({ type: "util", ...u, renderKind: RENDER.SHAPE })}
-                                                className="w-12 h-12 rounded-xl border border-white/10 bg-black hover:border-white/30 flex items-center justify-center"
-                                                title={u.label}
-                                            >
-                                                <div
-                                                    className="w-7 h-7"
-                                                    style={{
-                                                        backgroundColor: u.color,
-                                                        border: `2px solid ${u.border}`,
-                                                        borderRadius: u.shape === "ring" ? "50%" : "2px",
-                                                    }}
-                                                />
-                                            </button>
-                                        ))}
-                                    </div>
-                                </div>
-
-                                <div>
-                                    <div className="text-[11px] text-white/50 font-black uppercase tracking-widest mb-2">Labels</div>
-                                    <div className="flex gap-2">
-                                        {["A", "B", "C", "S"].map((l) => (
-                                            <button
-                                                key={l}
-                                                onClick={() => beginPlace({ type: "site_label", label: l })}
-                                                className="w-12 h-12 rounded-xl border border-white/10 bg-black hover:border-white/30 text-white font-black text-lg"
-                                            >
-                                                {l}
-                                            </button>
-                                        ))}
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
+                            );
+                        })}
                     </div>
                 </div>
 
-                {/* CENTER MAP */}
-                <div className="relative bg-gradient-to-b from-black/50 to-[#0b1116] overflow-hidden">
-                    {/* Top toolbar */}
-                    <div className="absolute top-4 left-4 z-50 flex gap-2">
-                        <button
-                            onClick={() => {
-                                setTool(TOOLS.SELECT);
-                                setPlacingItem(null);
-                                setPlacingWallStart(null);
-                            }}
-                            className="w-12 h-12 rounded-lg bg-white/5 border border-white/10 hover:bg-white/10 text-white/80 font-black"
-                            title="Select tool"
-                        >
-                            ⬚
-                        </button>
-
-                        <button onClick={saveStrat} className="w-12 h-12 rounded-lg bg-white/5 border border-white/10 hover:bg-white/10 text-white/80 font-black" title="Save">
-                            💾
-                        </button>
-
-                        <button onClick={clearCanvas} className="w-12 h-12 rounded-lg bg-red-700/60 border border-red-300/40 hover:bg-red-700 text-white font-black" title="Clear">
-                            ⟲
-                        </button>
-                    </div>
-
-                    {/* Trash zone */}
-                    <div className="absolute top-4 right-4 z-50 w-14 h-14 rounded-lg border-2 border-dashed border-red-500/60 bg-black/30 flex items-center justify-center text-red-300/90">
-                        🗑
-                    </div>
-
-                    {/* Map container */}
-                    <div className="h-full w-full flex items-center justify-center px-4 py-14 lg:py-10">
-                        <div
-                            ref={containerRef}
-                            className="relative rounded-xl overflow-hidden border border-white/10 bg-[#0e151b] shadow-2xl"
-                            style={{
-                                width: "min(78vh, calc(100vw - 320px - 320px - 48px))",
-                                height: "min(78vh, calc(100vw - 320px - 320px - 48px))",
-                                maxWidth: "92vw",
-                                maxHeight: "72vh",
-                            }}
-                            onPointerDown={handleMapPointerDown}
-                            onPointerMove={onMovePointer}
-                            onPointerUp={(e) => {
-                                if (moving && isInTrash(e.clientX, e.clientY)) {
-                                    addToHistory(mapIcons.filter((x) => x.id !== moving.id), drawLines);
-                                    setSelectedIconId(null);
-                                    setMoving(null);
-                                    addToast("Deleted");
-                                    return;
-                                }
-                                endMove();
-                            }}
-                            onPointerLeave={endMove}
-                            onClick={() => setSelectedIconId(null)}
-                        >
-                            {mapImages?.[selectedMap] && (
-                                <img src={mapImages[selectedMap]} alt="Map" className="absolute inset-0 w-full h-full object-cover pointer-events-none opacity-95" />
-                            )}
-
-                            {/* SVG overlays */}
-                            <svg className="absolute inset-0 w-full h-full z-10 pointer-events-none">
-                                {mapIcons
-                                    .filter((i) => i.renderKind === RENDER.WALL)
-                                    .map((w) => (
-                                        <g key={w.id}>
-                                            <line x1={`${w.x1}%`} y1={`${w.y1}%`} x2={`${w.x2}%`} y2={`${w.y2}%`} stroke={w.wallColor} strokeWidth={(w.thickness ?? 2.2) * 10} strokeLinecap="round" opacity="0.95" />
-                                            <line x1={`${w.x1}%`} y1={`${w.y1}%`} x2={`${w.x2}%`} y2={`${w.y2}%`} stroke={w.wallOutline} strokeWidth={Math.max(2, (w.thickness ?? 2.2) * 2)} strokeLinecap="round" opacity="0.9" />
-                                        </g>
-                                    ))}
-                                {mapIcons
-                                    .filter((i) => i.renderKind === RENDER.CIRCLE)
-                                    .map((c) => (
-                                        <g key={c.id}>
-                                            <circle cx={`${c.cx}%`} cy={`${c.cy}%`} r={`${c.radius}%`} fill={c.fill} stroke={c.outline} strokeWidth="2" />
-                                        </g>
-                                    ))}
-                            </svg>
-
-                            {/* Draw layer */}
-                            <canvas
-                                ref={canvasRef}
-                                width={1024}
-                                height={1024}
-                                className={`absolute inset-0 w-full h-full z-20 ${viewingStrat ? "hidden" : ""}`}
-                                style={{ touchAction: "none", cursor: tool === TOOLS.DRAW ? "crosshair" : "default" }}
-                                onPointerDown={startDraw}
-                                onPointerMove={draw}
-                                onPointerUp={stopDraw}
-                                onPointerLeave={stopDraw}
-                            />
-
-                            {/* Entities */}
-                            {!viewingStrat &&
-                                mapIcons.map((icon) => {
-                                    if (icon.renderKind === RENDER.WALL) {
-                                        const cx = (icon.x1 + icon.x2) / 2;
-                                        const cy = (icon.y1 + icon.y2) / 2;
-                                        const isSel = selectedIconId === icon.id;
-
-                                        return (
-                                            <React.Fragment key={icon.id}>
-                                                <div
-                                                    className="absolute z-30"
-                                                    style={{ left: `${cx}%`, top: `${cy}%`, transform: "translate(-50%,-50%)" }}
-                                                    onPointerDown={(e) => startMoveEntity(e, icon, "icon")}
-                                                    onClick={(e) => {
-                                                        e.stopPropagation();
-                                                        setSelectedIconId(icon.id);
-                                                    }}
-                                                >
-                                                    <div className={`w-3 h-3 rounded-full ${isSel ? "bg-green-400" : "bg-white/50"} shadow`} />
-                                                </div>
-
-                                                {isSel && (
-                                                    <>
-                                                        <div
-                                                            className="absolute z-40"
-                                                            style={{ left: `${icon.x1}%`, top: `${icon.y1}%`, transform: "translate(-50%,-50%)" }}
-                                                            onPointerDown={(e) => startMoveEntity(e, icon, "wallP1")}
-                                                        >
-                                                            <div className="w-4 h-4 rounded-full bg-black border-2 border-green-400 shadow" />
-                                                        </div>
-                                                        <div
-                                                            className="absolute z-40"
-                                                            style={{ left: `${icon.x2}%`, top: `${icon.y2}%`, transform: "translate(-50%,-50%)" }}
-                                                            onPointerDown={(e) => startMoveEntity(e, icon, "wallP2")}
-                                                        >
-                                                            <div className="w-4 h-4 rounded-full bg-black border-2 border-green-400 shadow" />
-                                                        </div>
-                                                    </>
-                                                )}
-                                            </React.Fragment>
-                                        );
-                                    }
-
-                                    if (icon.renderKind === RENDER.CIRCLE) {
-                                        const isSel = selectedIconId === icon.id;
-                                        return (
-                                            <div
-                                                key={icon.id}
-                                                className="absolute z-30"
-                                                style={{ left: `${icon.cx}%`, top: `${icon.cy}%`, transform: "translate(-50%,-50%)" }}
-                                                onPointerDown={(e) => startMoveEntity(e, icon, "icon")}
-                                                onClick={(e) => {
-                                                    e.stopPropagation();
-                                                    setSelectedIconId(icon.id);
-                                                }}
-                                            >
-                                                <div className={`w-3 h-3 rounded-full ${isSel ? "bg-green-400" : "bg-white/50"} shadow`} />
-                                            </div>
-                                        );
-                                    }
-
-                                    if (icon.type === "site_label") {
-                                        return (
-                                            <div
-                                                key={icon.id}
-                                                className="absolute z-30 cursor-grab"
-                                                style={{ left: `${icon.x}%`, top: `${icon.y}%`, transform: "translate(-50%, -50%)" }}
-                                                onPointerDown={(e) => startMoveEntity(e, icon, "icon")}
-                                                onClick={(e) => {
-                                                    e.stopPropagation();
-                                                    setSelectedIconId(icon.id);
-                                                }}
-                                            >
-                                                <div className="text-4xl font-black text-white drop-shadow-lg select-none" style={{ textShadow: "0 0 10px black" }}>
-                                                    {icon.label}
-                                                </div>
-                                            </div>
-                                        );
-                                    }
-
-                                    const isSelected = selectedIconId === icon.id;
-
-                                    return (
-                                        <div
-                                            key={icon.id}
-                                            className={`absolute ${tool === TOOLS.SELECT ? "cursor-grab active:cursor-grabbing" : "cursor-default"} group ${isSelected ? "z-50" : "z-30"
-                                                }`}
-                                            style={{
-                                                left: `${icon.x}%`,
-                                                top: `${icon.y}%`,
-                                                transform: `translate(-50%, -50%) rotate(${Number(icon.rotation || 0)}deg) scale(${Number(icon.scale || 1)})`,
-                                                transition: "transform 0.1s",
-                                            }}
-                                            onPointerDown={(e) => startMoveEntity(e, icon, "icon")}
-                                            onClick={(e) => {
-                                                e.stopPropagation();
-                                                setSelectedIconId(icon.id);
-                                            }}
-                                        >
-                                            {icon.type === "agent" ? (
-                                                (() => {
-                                                    const src = agentIconSrc(icon.name);
-                                                    return src ? (
-                                                        <img
-                                                            src={src}
-                                                            alt={icon.name}
-                                                            className={`w-10 h-10 rounded-full border-2 shadow-md pointer-events-none bg-black ${isSelected ? "border-green-500" : "border-white"}`}
-                                                            onError={(e) => {
-                                                                e.currentTarget.style.display = "none";
-                                                            }}
-                                                        />
-                                                    ) : (
-                                                        <div
-                                                            className={`w-10 h-10 rounded-full border-2 shadow-md bg-black flex items-center justify-center font-black text-white/80 ${isSelected ? "border-green-500" : "border-white"
-                                                                }`}
-                                                        >
-                                                            {String(icon.name).slice(0, 1).toUpperCase()}
-                                                        </div>
-                                                    );
-                                                })()
-                                            ) : icon.type === "ability" ? (
-                                                <img src={icon.icon} alt={icon.name} className={`w-8 h-8 drop-shadow-md pointer-events-none ${isSelected ? "brightness-125" : "opacity-90"}`} />
-                                            ) : (
-                                                renderShapeIcon(icon)
-                                            )}
-                                        </div>
-                                    );
-                                })}
-
-                            {viewingStrat && (
-                                <div className="absolute inset-0 z-50 bg-black flex items-center justify-center">
-                                    <img src={viewingStrat} alt="Saved Strat" className="w-full h-full object-contain" />
-                                </div>
-                            )}
-
-                            {/* Inspector popup */}
-                            {selectedIconId && (
-                                <div
-                                    className="absolute bottom-3 left-1/2 -translate-x-1/2 z-50 bg-neutral-900/90 backdrop-blur border border-white/20 p-3 rounded-xl flex gap-4 items-center shadow-2xl"
-                                    onClick={(e) => e.stopPropagation()}
-                                >
-                                    <div className="flex flex-col gap-1">
-                                        <label className="text-[9px] font-bold text-neutral-400 uppercase">Rotate</label>
-                                        <input type="range" min="0" max="360" onChange={(e) => updateSelectedIcon("rotation", Number(e.target.value))} className="w-24 accent-red-600" />
-                                    </div>
-                                    <div className="flex flex-col gap-1">
-                                        <label className="text-[9px] font-bold text-neutral-400 uppercase">Size</label>
-                                        <input type="range" min="0.5" max="3" step="0.1" onChange={(e) => updateSelectedIcon("scale", Number(e.target.value))} className="w-24 accent-red-600" />
-                                    </div>
-                                    <button onClick={deleteSelectedIcon} className="bg-red-600 hover:bg-red-700 text-white p-2 rounded-lg text-xs font-bold">
-                                        DELETE
-                                    </button>
-                                </div>
-                            )}
-                        </div>
-                    </div>
-
-                    {/* Bottom agent bar */}
-                    <div className="absolute bottom-0 left-0 right-0 z-50 border-t border-white/10 bg-black/70 backdrop-blur">
-                        <div className="flex items-center gap-4 px-4 md:px-6 py-3">
-                            <div className="text-white/70 font-bold shrink-0">Ally</div>
-
-                            <div className="w-14 h-7 shrink-0 rounded-full bg-red-400/20 border border-red-300/30 relative">
-                                <div className="w-6 h-6 rounded-full bg-red-400 absolute right-0 top-0.5 translate-x-[-2px]" />
-                            </div>
-
-                            <div className="flex-1 overflow-x-auto custom-scrollbar">
-                                <div className="flex gap-2 items-center">
-                                    {AGENT_NAMES.map((a) => {
-                                        const src = agentData?.[a]?.icon;
-
-                                        return (
-                                            <button
-                                                key={a}
-                                                type="button"
-                                                onClick={() => setSelectedAgentForUtil(a)}
-                                                className={`w-16 h-16 shrink-0 rounded-lg overflow-hidden border bg-black flex items-center justify-center ${selectedAgentForUtil === a ? "border-red-400" : "border-white/10"
-                                                    }`}
-                                                title={a}
-                                            >
-                                                {src ? (
-                                                    <img
-                                                        src={src}
-                                                        alt={a}
-                                                        className="w-full h-full object-cover block"
-                                                        loading="lazy"
-                                                        draggable={false}
-                                                        onError={(e) => {
-                                                            e.currentTarget.style.display = "none";
-                                                        }}
-                                                    />
-                                                ) : (
-                                                    <div className="w-full h-full flex items-center justify-center text-white/80 font-black bg-white/10">
-                                                        {String(a).slice(0, 2).toUpperCase()}
-                                                    </div>
-                                                )}
-                                            </button>
-                                        );
-                                    })}
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-
-                    {/* RIGHT */}
-                    <div className="border-l border-white/10 bg-[#0b1116] overflow-hidden block">
-                        <div className="h-full overflow-y-auto custom-scrollbar">
-                            <div className="p-4 border-b border-white/10">
-                                <div className="text-white text-3xl font-black">Home</div>
-                                <div className="text-white/40 text-xs font-bold mt-1 uppercase tracking-widest">
-                                    {selectedMap} • {side} • step {sequenceStep}
-                                </div>
-                            </div>
-
-                            <div className="p-4">
-                                <button
-                                    onClick={() => {
-                                        setViewingStrat(null);
-                                        addToast("Ready: place items on the map");
-                                    }}
-                                    className="w-full py-4 rounded-xl bg-white/10 hover:bg-white/15 border border-white/10 text-white font-black text-lg"
-                                >
-                                    Add Strategy
-                                </button>
-                            </div>
-
-                            <div className="p-4">
-                                <div className="text-[11px] text-white/50 font-black uppercase tracking-widest mb-2">
-                                    Saved Strats
-                                </div>
-                                <div className="grid grid-cols-2 gap-3 max-h-[70vh] overflow-y-auto custom-scrollbar">
-                                    {savedStrats.map((s) => (
-                                        <div
-                                            key={s.id}
-                                            onClick={() => setViewingStrat(s.image)}
-                                            className="bg-black/40 p-2 rounded-lg border border-white/10 hover:border-red-500 cursor-pointer group relative aspect-square"
-                                        >
-                                            <img
-                                                src={s.image}
-                                                alt="saved"
-                                                className="w-full h-full object-cover rounded opacity-70 group-hover:opacity-100"
-                                            />
-                                            <div className="absolute bottom-0 left-0 w-full bg-black/80 p-1 text-[9px] text-center text-white truncate">
-                                                {new Date(s.date).toLocaleDateString()}
-                                            </div>
-                                            <button
-                                                onClick={(e) => {
-                                                    e.stopPropagation();
-                                                    deleteStrat(s.id);
-                                                }}
-                                                className="absolute top-1 right-1 text-red-500 bg-black rounded-full w-6 h-6 flex items-center justify-center font-black text-sm opacity-0 group-hover:opacity-100"
-                                            >
-                                                ×
-                                            </button>
-                                        </div>
-                                    ))}
-                                </div>
-                            </div>
-
-                            <div className="p-4 text-white/40 text-xs leading-relaxed">
-                                <div className="font-black text-white/60 mb-2">Tips</div>
-                                <ul className="list-disc pl-4 space-y-1">
-                                    <li>Pick an agent from the bottom bar (it also places the agent).</li>
-                                    <li>Abilities shown on the left match the currently selected agent.</li>
-                                    <li>Walls need 2 clicks.</li>
-                                    <li>Drag markers/abilities into 🗑 to delete.</li>
-                                </ul>
-                            </div>
-                        </div>
+                <div className="p-4 border-b border-white/10">
+                    <label className="text-[10px] font-black text-red-500 uppercase mb-2 block">Abilities</label>
+                    <div className="grid grid-cols-2 gap-2">
+                        {availableAbilities.length ? availableAbilities.map(ability => (
+                            <button key={ability.name} onClick={() => { setSelectedAbility(ability); setTool('ability'); }} className={`min-h-16 rounded-xl border p-2 flex items-center gap-2 text-left ${selectedAbility?.name === ability.name ? 'bg-red-900/30 border-red-500 text-white' : 'bg-white/5 border-white/10 text-neutral-400 hover:text-white'}`}>
+                                {ability.icon && <img src={ability.icon} alt="" className="w-7 h-7 object-contain" />}
+                                <span className="text-[10px] font-bold uppercase leading-tight">{ability.name}</span>
+                            </button>
+                        )) : <div className="col-span-2 text-xs text-neutral-500 italic">Ability data loading...</div>}
                     </div>
                 </div>
-            </div>
+
+                {selectedObject && (
+                    <div className="p-4 border-b border-white/10 bg-red-950/10">
+                        <div className="text-[10px] font-black text-red-500 uppercase mb-3">Inspector</div>
+                        <div className="space-y-3">
+                            <div className="text-sm font-bold text-white truncate">{selectedObject.name || selectedObject.text || selectedObject.type}</div>
+                            {'size' in selectedObject && <div><label className="text-[10px] text-neutral-500 uppercase font-bold">Size</label><input type="range" min="0.5" max="2.5" step="0.1" value={selectedObject.size || 1} onChange={e => updateSelected({ size: Number(e.target.value) })} className="w-full accent-red-600" /></div>}
+                            {'rotation' in selectedObject && <div><label className="text-[10px] text-neutral-500 uppercase font-bold">Rotation</label><input type="range" min="0" max="360" value={selectedObject.rotation || 0} onChange={e => updateSelected({ rotation: Number(e.target.value) })} className="w-full accent-red-600" /></div>}
+                            {'radius' in selectedObject && <div><label className="text-[10px] text-neutral-500 uppercase font-bold">Radius</label><input type="range" min="2" max="16" step="0.5" value={selectedObject.radius || 5} onChange={e => updateSelected({ radius: Number(e.target.value) })} className="w-full accent-red-600" /></div>}
+                            {selectedObject.type === 'text' && <Input value={selectedObject.text} onChange={e => updateSelected({ text: e.target.value })} />}
+                        </div>
+                    </div>
+                )}
+
+                <div className="p-4 border-b border-white/10 space-y-3">
+                    <label className="text-[10px] font-black text-red-500 uppercase block">Save Strategy</label>
+                    <Input value={stratName} onChange={e => setStratName(e.target.value)} placeholder="Strategy name" />
+                    <div className="grid grid-cols-2 gap-2">
+                        <ButtonPrimary onClick={saveStrat} disabled={loadingSave} className="text-xs py-2">{loadingSave ? 'Saving...' : 'Save'}</ButtonPrimary>
+                        <ButtonSecondary onClick={exportJson} className="text-xs">Export</ButtonSecondary>
+                    </div>
+                </div>
+
+                <div className="p-4">
+                    <div className="text-[10px] font-black text-red-500 uppercase mb-3">Saved On {selectedMap}</div>
+                    <div className="space-y-2 max-h-80 overflow-y-auto custom-scrollbar pr-1">
+                        {savedStrats.length ? savedStrats.map(strat => (
+                            <div key={strat.id} className="p-3 rounded-xl bg-white/5 border border-white/10 hover:border-red-500/40 transition-colors">
+                                <div className="font-bold text-white text-sm truncate">{strat.name || strat.title || 'Untitled strategy'}</div>
+                                <div className="text-[10px] text-neutral-500 uppercase mt-1">{strat.side || 'Attack'} / {strat.objects?.length || 0} items</div>
+                                <div className="grid grid-cols-2 gap-2 mt-3">
+                                    <ButtonSecondary onClick={() => loadStrat(strat)} className="text-[10px] py-1">Load</ButtonSecondary>
+                                    <ButtonSecondary onClick={() => deleteStrat(strat.id)} className="text-[10px] py-1">Delete</ButtonSecondary>
+                                </div>
+                            </div>
+                        )) : <div className="text-xs text-neutral-500 italic">No saved strategies for this map yet.</div>}
+                    </div>
+                </div>
+            </aside>
         </div>
     );
 }
-
-
 
 function LineupLibrary() {
     const [selectedMap, setSelectedMap] = useState(MAPS[0]);
