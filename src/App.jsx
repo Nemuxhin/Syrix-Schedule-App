@@ -44,8 +44,14 @@ const timezones = ["UTC", "GMT", "Europe/London", "Europe/Paris", "Europe/Berlin
 
 // --- UTILITY FUNCTIONS ---
 function timeToMinutes(t) { if (!t || t === '24:00') return 1440; const [h, m] = t.split(":").map(Number); return h * 60 + m; }
-function minutesToTime(m) { const minutes = m % 1440; const hh = Math.floor(minutes / 60).toString().padStart(2, '0'); const mm = (minutes % 60).toString().padStart(2, '0'); return `${hh}:${mm}`; }
-const safeDocId = (value, fallback = 'Unknown_User') => String(value || fallback).trim().replace(/[\/#?\[\]]/g, '-').slice(0, 120) || fallback;
+const safeDocId = (value, fallback = 'Unknown_User') => String(value || fallback)
+    .trim()
+    .replaceAll('/', '-')
+    .replaceAll('#', '-')
+    .replaceAll('?', '-')
+    .replaceAll('[', '-')
+    .replaceAll(']', '-')
+    .slice(0, 120) || fallback;
 
 const normalizeAvailabilitySlots = (data = {}) => {
     if (Array.isArray(data.slots)) return data.slots;
@@ -459,18 +465,18 @@ const LandingPage = ({ onEnterHub }) => {
     const PlayerCard = ({ player, delay }) => {
         const initials = String(player.id || '?').slice(0, 2).toUpperCase();
         return (
-            <div className="player-card group w-full sm:w-72" data-aos="fade-up" data-aos-delay={delay}>
+            <div className="player-card group w-full sm:w-[18.5rem]" data-aos="fade-up" data-aos-delay={delay}>
                 <div className="card-inner h-full">
-                    <div className="card-front glass-panel rounded-xl overflow-hidden border border-white/10 relative h-full flex flex-col">
-                        <div className="w-full h-52 bg-neutral-950 flex items-center justify-center overflow-hidden relative">
+                    <div className="card-front bg-[#0d1016] overflow-hidden border border-white/10 relative h-full flex flex-col hover:border-red-500/50 transition-colors">
+                        <div className="w-full h-64 bg-neutral-950 flex items-center justify-center overflow-hidden relative">
                             {player.pfp ? (
-                                <img src={player.pfp} alt={player.id} className="w-full h-full object-cover group-hover:scale-[1.04] transition-transform duration-500" />
+                                <img src={player.pfp} alt={player.id} className="w-full h-full object-cover object-top group-hover:scale-[1.04] transition-transform duration-500" />
                             ) : (
-                                <span className="text-6xl font-black text-neutral-700 group-hover:text-red-500 transition-colors">{initials}</span>
+                                <span className="text-7xl font-black text-neutral-700 group-hover:text-red-500 transition-colors">{initials}</span>
                             )}
-                            <div className="absolute inset-x-0 bottom-0 h-20 bg-gradient-to-t from-black to-transparent"></div>
+                            <div className="absolute inset-x-0 bottom-0 h-28 bg-gradient-to-t from-[#0d1016] to-transparent"></div>
                             {player.ingameRole && (
-                                <div className="absolute top-3 right-3 bg-red-600 text-white text-[10px] font-black uppercase px-2.5 py-1 rounded-md shadow-lg">
+                                <div className="absolute top-3 right-3 bg-red-600 text-white text-[10px] font-black uppercase px-2.5 py-1 rounded-sm shadow-lg">
                                     {player.ingameRole}
                                 </div>
                             )}
@@ -495,6 +501,350 @@ const LandingPage = ({ onEnterHub }) => {
         );
     };
 
+    const SectionHeading = ({ kicker, title, copy, align = 'left' }) => (
+        <div className={`mb-10 ${align === 'center' ? 'text-center mx-auto max-w-3xl' : 'max-w-4xl'}`} data-aos="fade-up">
+            <div className="section-kicker mb-3">{kicker}</div>
+            <h3 className="section-title">{title}</h3>
+            {copy && <p className="mt-4 text-sm md:text-base text-neutral-400 leading-relaxed">{copy}</p>}
+        </div>
+    );
+
+    const StatBlock = ({ label, value, sub }) => (
+        <div className="border-l border-white/10 pl-4">
+            <div className="text-3xl md:text-5xl font-black text-white tracking-tight">{value}</div>
+            <div className="mt-1 text-[10px] uppercase tracking-[0.22em] text-neutral-500 font-black">{label}</div>
+            {sub && <div className="mt-2 text-xs text-neutral-400">{sub}</div>}
+        </div>
+    );
+
+    const nextMatch = matches[0];
+    const fallbackNews = featuredNews || { title: 'Syrix Operations Online', body: 'Follow the latest roster moves, match prep, and community updates from the team hub.', date: new Date().toISOString().split('T')[0], type: 'Update' };
+    const heroVideo = intelData[0];
+    const matchPreview = matches.slice(0, 3);
+    const featuredProducts = merchData.slice(0, 3);
+    const videoIdFromUrl = (url = '') => url.split('v=')[1]?.split('&')[0] || url.split('/').pop();
+    const useNewLanding = true;
+
+    if (useNewLanding) return (
+        <div className="min-h-screen w-full font-sans text-white flex flex-col relative overflow-x-hidden bg-[#050608]">
+            <Background />
+
+            <header className="fixed top-0 w-full z-50 bg-[#050608]/90 backdrop-blur-xl border-b border-white/10 flex justify-center">
+                <nav className="max-w-[1480px] w-full px-5 md:px-8 py-3 flex justify-between items-center">
+                    <a href="#home" className="flex items-center gap-3 text-white hover:text-red-500 transition-colors">
+                        <span className="h-9 w-9 bg-red-600 text-white flex items-center justify-center font-black italic text-2xl">S</span>
+                        <span className="text-xl font-black uppercase tracking-tight italic">Syrix</span>
+                    </a>
+                    <button onClick={() => setMobileMenuOpen(!mobileMenuOpen)} className="md:hidden text-2xl z-50 p-2 focus:outline-none text-white">☰</button>
+                    <div className="hidden md:flex items-center space-x-7 text-[11px] font-black uppercase tracking-[0.18em]">
+                        <a href="#roster" className="text-white hover:text-red-500 transition duration-300">Roster</a>
+                        <a href="#schedule" className="text-white hover:text-red-500 transition duration-300">Matches</a>
+                        <a href="#vods" className="text-white hover:text-red-500 transition duration-300">Media</a>
+                        <a href="#news" className="text-white hover:text-red-500 transition duration-300">News</a>
+                        <a href="#merch" className="text-white hover:text-red-500 transition duration-300">Shop</a>
+                        <button onClick={onEnterHub} className="px-5 py-2.5 rounded-sm bg-white hover:bg-red-600 text-black hover:text-white transition duration-300 flex items-center gap-2">
+                            <span>TEAM HUB</span>
+                            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M9 5l7 7-7 7"></path></svg>
+                        </button>
+                    </div>
+                </nav>
+            </header>
+
+            <div className={`fixed inset-0 bg-black/95 z-40 transform transition-transform duration-300 md:hidden pt-24 ${mobileMenuOpen ? 'translate-x-0' : '-translate-x-full'}`}>
+                <div className="flex flex-col items-center space-y-8 text-xl font-black uppercase italic tracking-tight">
+                    {['roster', 'schedule', 'vods', 'news', 'merch'].map(item => (
+                        <a key={item} onClick={() => setMobileMenuOpen(false)} href={`#${item}`} className="text-white hover:text-red-500">{item === 'vods' ? 'Media' : item}</a>
+                    ))}
+                    <button onClick={() => { setMobileMenuOpen(false); onEnterHub(); }} className="px-8 py-4 rounded-sm bg-red-600 text-white shadow-xl">TEAM HUB</button>
+                </div>
+            </div>
+
+            <main className="flex-1 relative z-10 flex flex-col items-center w-full">
+                <section id="home" className="w-full min-h-[94vh] flex items-end justify-center relative overflow-hidden bg-black pt-28 pb-10">
+                    <div className="absolute inset-0 w-full h-full z-0 pointer-events-none overflow-hidden">
+                        <iframe className="absolute top-1/2 left-1/2 w-full h-full min-w-[177vh] min-h-[56.25vw] -translate-x-1/2 -translate-y-1/2 scale-[2.15] opacity-35 mix-blend-luminosity" src="https://www.youtube.com/embed/y9zweO_hU1U?autoplay=1&mute=1&controls=0&loop=1&playlist=y9zweO_hU1U&showinfo=0&rel=0&iv_load_policy=3&modestbranding=1&playsinline=1&enablejsapi=1&origin=http://localhost:3000" title="Hero Background" frameBorder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowFullScreen></iframe>
+                        <div className="absolute inset-0 bg-[linear-gradient(90deg,#050608_0%,rgba(5,6,8,0.84)_38%,rgba(5,6,8,0.35)_100%)]"></div>
+                        <div className="absolute inset-0 bg-gradient-to-t from-[#050608] via-transparent to-[#050608]/90"></div>
+                    </div>
+
+                    <div className="relative z-10 max-w-[1480px] w-full mx-auto px-5 md:px-8 grid grid-cols-1 lg:grid-cols-[1.05fr_0.95fr] gap-8 items-end">
+                        <div className="pb-6" data-aos="fade-up">
+                            <div className="inline-flex items-center gap-3 border border-white/15 bg-white/5 backdrop-blur-md px-3 py-1.5 mb-6">
+                                <span className="w-2 h-2 bg-red-600 animate-pulse"></span>
+                                <span className="text-[10px] font-black uppercase tracking-[0.28em] text-neutral-300">Official Valorant Team Portal</span>
+                            </div>
+                            <h1 className="text-[18vw] sm:text-[7.8rem] lg:text-[9.5rem] font-black leading-[0.78] tracking-tight italic text-white">SYRIX</h1>
+                            <p className="text-neutral-300 text-base md:text-xl font-medium mt-7 mb-8 max-w-2xl leading-relaxed">
+                                Matchday, roster, media, shop, community, and private team operations in one premium esports experience.
+                            </p>
+                            <div className="flex flex-col sm:flex-row gap-3 w-full sm:w-auto">
+                                <button onClick={() => document.getElementById('roster')?.scrollIntoView({ behavior: 'smooth' })} className="group relative px-8 py-4 bg-red-600 text-white font-black uppercase tracking-widest overflow-hidden hover:bg-red-700 transition-all border border-red-500 rounded-sm">
+                                    <span className="relative z-10 flex items-center gap-2 justify-center">View Roster <span className="group-hover:translate-x-1 transition-transform">→</span></span>
+                                </button>
+                                <button onClick={onEnterHub} className="px-8 py-4 bg-white text-black border border-white font-black uppercase tracking-widest hover:bg-neutral-200 transition-all rounded-sm">Team Hub</button>
+                            </div>
+                        </div>
+
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4" data-aos="fade-left">
+                            <div className="bg-[#0d1016]/90 border border-white/10 p-5 min-h-56 flex flex-col justify-between">
+                                <div>
+                                    <div className="text-[10px] uppercase tracking-[0.24em] text-red-400 font-black mb-3">Next Fixture</div>
+                                    <div className="text-3xl font-black italic uppercase leading-none">SYRIX <span className="text-red-500">vs</span><br />{nextMatch?.opponent || 'TBD'}</div>
+                                    <div className="mt-4 text-xs uppercase tracking-widest text-neutral-500">{nextMatch?.type || 'Match'} • {nextMatch?.map || 'Map TBD'}</div>
+                                </div>
+                                <div className="mt-6 border-t border-white/10 pt-4 flex items-end justify-between gap-3">
+                                    <div>
+                                        <div className="text-white font-black uppercase">{formatEventDate(nextMatch?.date)}</div>
+                                        <div className="text-xs text-neutral-500 font-mono">{nextMatch?.time || 'Time TBD'} {nextMatch?.timezone || ''}</div>
+                                    </div>
+                                    <a href="#schedule" className="text-xs font-black uppercase text-red-400 hover:text-white">Schedule</a>
+                                </div>
+                            </div>
+                            <div className="bg-white text-black p-5 min-h-56 flex flex-col justify-between">
+                                <div>
+                                    <div className="text-[10px] uppercase tracking-[0.24em] text-red-700 font-black mb-3">Featured</div>
+                                    <div className="text-2xl font-black uppercase leading-tight">{fallbackNews.title}</div>
+                                    <p className="mt-3 text-sm text-neutral-700 line-clamp-3">{fallbackNews.body}</p>
+                                </div>
+                                <a href="#news" className="text-xs font-black uppercase text-black hover:text-red-700">Latest News</a>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div className="absolute bottom-0 w-full bg-red-600/10 border-y border-red-600/25 backdrop-blur-sm overflow-hidden py-3">
+                        <div className="flex gap-8 animate-marquee whitespace-nowrap">
+                            {[...Array(10)].map((_, i) => (
+                                <div key={i} className="flex items-center gap-8">
+                                    <span className="text-xs font-black uppercase tracking-[0.2em] text-red-500/80">VALORANT</span>
+                                    <span className="w-1 h-1 bg-red-500 rounded-full"></span>
+                                    <span className="text-xs font-black uppercase tracking-[0.2em] text-white/80">MATCHDAY READY</span>
+                                    <span className="w-1 h-1 bg-red-500 rounded-full"></span>
+                                    <span className="text-xs font-black uppercase tracking-[0.2em] text-neutral-500">SYRIX TEAM PORTAL</span>
+                                    <span className="w-1 h-1 bg-red-500 rounded-full"></span>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                    <style>{`@keyframes marquee { 0% { transform: translateX(0); } 100% { transform: translateX(-50%); } } .animate-marquee { animation: marquee 20s linear infinite; }`}</style>
+                </section>
+
+                <section className="w-full py-10 bg-[#080a0f] border-b border-white/10 flex justify-center relative z-20">
+                    <div className="max-w-[1480px] w-full px-5 md:px-8 grid grid-cols-2 lg:grid-cols-4 gap-6">
+                        <StatBlock label="Season WR" value={`${teamStats.winRate}%`} sub="Recorded matches" />
+                        <StatBlock label="Current Record" value={`${teamStats.wins}W ${teamStats.losses}L`} sub="Completed events" />
+                        <StatBlock label="Active Roster" value={activePlayers.length} sub={`${coachingStaff.length} staff`} />
+                        <div className="border-l border-white/10 pl-4 relative min-h-24">
+                            <div className="text-[10px] uppercase tracking-[0.22em] text-neutral-500 font-black mb-2">Performance Trend</div>
+                            <svg className="w-full h-16 opacity-80" viewBox="0 0 150 50" preserveAspectRatio="none">
+                                <path d={`M 0,25 ${generateTrendPath(teamStats.trendPoints)}`} fill="none" stroke={teamStats.trendPoints[teamStats.trendPoints.length - 1] >= 0 ? '#22c55e' : '#ef4444'} strokeWidth="3" />
+                                <line x1="0" y1="25" x2="150" y2="25" stroke="#525252" strokeWidth="1" strokeDasharray="4" />
+                            </svg>
+                        </div>
+                    </div>
+                </section>
+
+                <section id="schedule" className="w-full py-20 bg-[#f2f2f2] text-black relative flex justify-center">
+                    <div className="max-w-[1480px] w-full px-5 md:px-8">
+                        <div className="flex flex-col lg:flex-row lg:items-end justify-between gap-8 mb-10">
+                            <div>
+                                <div className="text-[11px] uppercase tracking-[0.28em] text-red-700 font-black mb-3">Match Center</div>
+                                <h3 className="text-5xl md:text-7xl font-black italic uppercase leading-none">Upcoming Matches</h3>
+                            </div>
+                            <button onClick={onEnterHub} className="self-start lg:self-auto bg-black text-white px-6 py-3 text-xs font-black uppercase tracking-widest hover:bg-red-700 transition-colors">Manage Schedule</button>
+                        </div>
+                        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+                            {matchPreview.length > 0 ? matchPreview.map((match, i) => (
+                                <div key={match.id || i} className="bg-white border border-black/10 p-5 min-h-56 flex flex-col justify-between group hover:border-red-700 transition-colors" data-aos="fade-up" data-aos-delay={i * 80}>
+                                    <div>
+                                        <div className="flex items-center justify-between mb-8">
+                                            <span className="text-[10px] font-black uppercase tracking-[0.24em] text-red-700">{match.type || 'Match'}</span>
+                                            <span className="text-xs font-mono text-neutral-500">{String(i + 1).padStart(2, '0')}</span>
+                                        </div>
+                                        <div className="text-3xl font-black italic uppercase leading-none">SYRIX <span className="text-red-700">vs</span><br />{match.opponent || 'TBD'}</div>
+                                        <div className="mt-4 text-xs uppercase tracking-widest text-neutral-500">{match.map || 'Map TBD'}</div>
+                                    </div>
+                                    <div className="border-t border-black/10 pt-4 flex justify-between items-end">
+                                        <div>
+                                            <div className="font-black uppercase">{formatEventDate(match.date)}</div>
+                                            <div className="text-xs font-mono text-neutral-500">{match.time || 'TBD'} {match.timezone || ''}</div>
+                                        </div>
+                                        <span className="text-red-700 font-black group-hover:translate-x-1 transition-transform">→</span>
+                                    </div>
+                                </div>
+                            )) : (
+                                <div className="lg:col-span-3 bg-white border border-black/10 p-10 text-center text-neutral-500">No upcoming operations scheduled.</div>
+                            )}
+                        </div>
+                    </div>
+                </section>
+
+                <section id="roster" className="w-full py-24 relative flex flex-col items-center">
+                    <div className="max-w-[1480px] w-full px-5 md:px-8">
+                        <SectionHeading kicker="The Squad" title="Active Roster" copy="Large portraits, clear role tags, and readable player detail make the roster feel like a real team presentation instead of a database list." />
+                        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-5 mb-20">
+                            {activePlayers.length > 0 ? activePlayers.map((p, i) => (
+                                <PlayerCard key={p.id} player={p} delay={i * 50} />
+                            )) : (
+                                <div className="sm:col-span-2 xl:col-span-4 text-center text-neutral-500 py-12 border border-dashed border-neutral-800">Roster loading.</div>
+                            )}
+                        </div>
+                        {coachingStaff.length > 0 && (
+                            <div className="border-t border-white/10 pt-12">
+                                <SectionHeading kicker="Tactical Command" title="Coaching Staff" />
+                                <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-5">
+                                    {coachingStaff.map((p, i) => <PlayerCard key={p.id} player={p} delay={i * 50} />)}
+                                </div>
+                            </div>
+                        )}
+                    </div>
+                </section>
+
+                <section className="w-full py-10 border-y border-white/5 bg-[#080a0f] flex justify-center relative overflow-hidden">
+                    <div className="max-w-[1480px] w-full px-5 md:px-8 grid grid-cols-2 md:grid-cols-4 gap-6 text-left">
+                        {achievements.length > 0 ? achievements.map((item, index) => (
+                            <div key={item.id} className="group border-l border-white/10 pl-4" data-aos="fade-up" data-aos-delay={index * 100}>
+                                <div className="text-xs text-red-400 font-black uppercase tracking-widest mb-2">{item.icon || 'Achievement'}</div>
+                                <div className="text-2xl font-black text-white italic tracking-tight uppercase">{item.highlight ? <span className="text-red-600">{item.title}</span> : item.title}</div>
+                                <div className="text-xs text-neutral-500 font-bold uppercase tracking-widest">{item.subtitle}</div>
+                            </div>
+                        )) : <div className="col-span-2 md:col-span-4 text-neutral-600 italic text-sm">Achievements loading.</div>}
+                    </div>
+                </section>
+
+                <section id="vods" className="w-full py-24 relative flex justify-center">
+                    <div className="max-w-[1480px] w-full px-5 md:px-8">
+                        <SectionHeading kicker="Media" title="Highlights, VODs, Intel" copy="Org sites stay sticky by giving visitors something to watch. This puts recent video content beside a larger featured media slot." />
+                        <div className="grid grid-cols-1 lg:grid-cols-[1.3fr_0.7fr] gap-5">
+                            <a href={heroVideo?.url || '#news'} target={heroVideo?.url ? "_blank" : "_self"} rel="noopener noreferrer" className="group bg-[#0d1016] border border-white/10 overflow-hidden min-h-[26rem]" data-aos="fade-up">
+                                <div className="aspect-video bg-neutral-900 relative">
+                                    {heroVideo?.url && <img src={`https://img.youtube.com/vi/${videoIdFromUrl(heroVideo.url)}/maxresdefault.jpg`} alt={heroVideo.title} className="absolute inset-0 w-full h-full object-cover opacity-70 group-hover:scale-[1.03] transition-transform duration-500" onError={(e) => { e.target.style.display = 'none' }} />}
+                                    <div className="absolute inset-0 bg-gradient-to-t from-black/85 to-transparent"></div>
+                                    <div className="absolute left-6 bottom-6 right-6">
+                                        <div className="text-[10px] uppercase tracking-[0.24em] text-red-400 font-black mb-3">Featured Video</div>
+                                        <h4 className="text-3xl md:text-5xl font-black uppercase italic leading-none">{heroVideo?.title || 'Media Hub Coming Online'}</h4>
+                                        <p className="mt-3 text-sm text-neutral-300">{heroVideo?.subtitle || 'Add VODs from the content manager to power this section.'}</p>
+                                    </div>
+                                </div>
+                            </a>
+                            <div className="grid grid-cols-1 gap-5">
+                                {intelData.slice(0, 3).map((item, i) => (
+                                    <a key={item.id} href={item.url} target="_blank" rel="noopener noreferrer" className="bg-[#0d1016] border border-white/10 p-4 flex gap-4 items-center group hover:border-red-500/50 transition-colors" data-aos="fade-up" data-aos-delay={i * 80}>
+                                        <div className="w-24 aspect-video bg-neutral-900 relative overflow-hidden flex-none">
+                                            <img src={`https://img.youtube.com/vi/${videoIdFromUrl(item.url)}/mqdefault.jpg`} alt={item.title} className="absolute inset-0 w-full h-full object-cover opacity-70 group-hover:scale-105 transition-transform" onError={(e) => { e.target.style.display = 'none' }} />
+                                        </div>
+                                        <div className="min-w-0">
+                                            <div className="text-[10px] text-red-400 font-black uppercase tracking-widest">Watch</div>
+                                            <h4 className="font-black text-white uppercase line-clamp-2">{item.title}</h4>
+                                            <p className="text-xs text-neutral-500 line-clamp-1">{item.subtitle}</p>
+                                        </div>
+                                    </a>
+                                ))}
+                                {!intelData.length && <div className="bg-[#0d1016] border border-white/10 p-8 text-neutral-500">No recent media posted.</div>}
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <section id="news" className="w-full py-24 relative flex justify-center bg-[#080a0f]">
+                    <div className="max-w-[1480px] w-full px-5 md:px-8">
+                        <SectionHeading kicker="Newsroom" title="Latest From Syrix" align="center" />
+                        <div className="grid grid-cols-1 lg:grid-cols-[1.1fr_0.9fr] gap-5">
+                            <div className="bg-white text-black p-8 md:p-10 min-h-96 flex flex-col justify-between" data-aos="fade-right">
+                                <div>
+                                    <span className="text-red-700 text-xs font-black uppercase tracking-widest mb-4 block">Featured • {fallbackNews.date}</span>
+                                    <h4 className="text-4xl md:text-6xl font-black mb-5 uppercase italic leading-none">{fallbackNews.title}</h4>
+                                    <p className="text-neutral-700 mb-6 line-clamp-5 leading-relaxed">{fallbackNews.body}</p>
+                                </div>
+                                {fallbackNews.url && <a href={fallbackNews.url} target="_blank" rel="noopener noreferrer" className="text-black font-black text-sm hover:text-red-700 transition-colors self-start uppercase tracking-widest">Read Full Report →</a>}
+                            </div>
+                            <div className="grid grid-cols-1 gap-4" data-aos="fade-left">
+                                {otherNews.length ? otherNews.map(item => (
+                                    <div key={item.id} className="bg-[#0d1016] border border-white/10 p-5 flex gap-4 items-center group hover:border-red-500/50 transition-all">
+                                        <div className="w-16 h-16 bg-red-600 flex-shrink-0 flex items-center justify-center text-xl font-black text-white">{item.title.substring(0, 2).toUpperCase()}</div>
+                                        <div className="min-w-0">
+                                            <h5 className="font-black text-white group-hover:text-red-400 transition-colors line-clamp-1 uppercase">{item.title}</h5>
+                                            <p className="text-xs text-neutral-500 uppercase tracking-wider">{item.type} • {item.date}</p>
+                                            <p className="text-xs text-neutral-400 mt-1 line-clamp-2">{item.body}</p>
+                                        </div>
+                                    </div>
+                                )) : <div className="bg-[#0d1016] border border-white/10 p-8 text-neutral-500">More updates will appear here.</div>}
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <section id="merch" className="w-full py-24 relative flex justify-center">
+                    <div className="max-w-[1480px] w-full px-5 md:px-8">
+                        <div className="grid grid-cols-1 lg:grid-cols-[0.75fr_1.25fr] gap-8 items-start">
+                            <div className="lg:sticky lg:top-24">
+                                <SectionHeading kicker="Official Gear" title="Armory Drop" copy="Commerce is one of the biggest differences between a team page and an org page. This section now feels more like a real product rail." />
+                                <a href={featuredProducts[0]?.link || '#community'} target={featuredProducts[0]?.link ? "_blank" : "_self"} rel="noreferrer" className="inline-flex bg-white text-black px-6 py-3 text-xs font-black uppercase tracking-widest hover:bg-red-600 hover:text-white transition-colors">Shop Latest</a>
+                            </div>
+                            <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+                                {featuredProducts.length > 0 ? featuredProducts.map((item, i) => (
+                                    <div key={item.id} className="bg-[#0d1016] border border-white/10 overflow-hidden group" data-aos="fade-up" data-aos-delay={i * 80}>
+                                        <div className="aspect-[4/5] bg-neutral-900 flex items-center justify-center relative overflow-hidden">
+                                            {item.image ? <img src={item.image} alt={item.name} className="absolute inset-0 w-full h-full object-cover opacity-85 group-hover:scale-105 transition-transform duration-500" /> : <span className="text-neutral-500 font-black uppercase tracking-widest z-10">{item.name}</span>}
+                                            <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-transparent to-transparent"></div>
+                                        </div>
+                                        <div className="p-5 flex justify-between items-end gap-4">
+                                            <div className="min-w-0">
+                                                <h4 className="font-black text-white uppercase truncate">{item.name}</h4>
+                                                <p className="text-xs text-red-400 font-black mt-1">{item.price}</p>
+                                            </div>
+                                            <a href={item.link || '#'} target={item.link ? "_blank" : "_self"} rel="noreferrer" className="bg-white text-black px-3 py-2 font-black text-xs uppercase hover:bg-red-600 hover:text-white transition-colors">Buy</a>
+                                        </div>
+                                    </div>
+                                )) : <div className="md:col-span-3 text-center text-neutral-500 italic py-12 border border-dashed border-neutral-800">New collection dropping soon.</div>}
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <section id="partners" className="w-full py-14 relative flex justify-center border-y border-white/5 bg-[#080a0f]">
+                    <div className="max-w-[1480px] w-full px-5 md:px-8">
+                        <div className="grid grid-cols-1 md:grid-cols-[auto_1fr] items-center gap-8">
+                            <p className="text-neutral-500 text-xs font-black uppercase tracking-[0.3em]">Partners</p>
+                            <div className="flex flex-wrap gap-8 md:gap-16 opacity-60">
+                                {['RougeEnergy', 'Logitech', 'Discord', 'Valorant'].map((p) => <div key={p} className="text-2xl font-black text-white italic tracking-tight">{p}</div>)}
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <section id="community" className="w-full py-24 relative flex justify-center">
+                    <div className="max-w-[1480px] w-full px-5 md:px-8">
+                        <div className="bg-red-600 text-white p-8 md:p-14 grid grid-cols-1 lg:grid-cols-[1fr_auto] gap-8 items-center" data-aos="zoom-in">
+                            <div>
+                                <div className="text-[10px] font-black uppercase tracking-[0.28em] text-white/70 mb-4">Community</div>
+                                <h3 className="text-5xl md:text-7xl font-black italic uppercase leading-none">Join The Syndicate</h3>
+                                <p className="text-red-50/90 mt-5 max-w-2xl text-lg leading-relaxed">Match-day chat, roster updates, community nights, and direct connection with the team.</p>
+                            </div>
+                            <a href="https://discord.gg/HWbJr8sCse" target="_blank" rel="noopener noreferrer" className="inline-flex justify-center px-8 py-4 bg-white text-black font-black text-sm uppercase tracking-widest hover:bg-black hover:text-white transition-colors">Join Discord</a>
+                        </div>
+                    </div>
+                </section>
+            </main>
+
+            <footer className="bg-black border-t border-white/10 py-12 relative z-10 flex justify-center">
+                <div className="max-w-[1480px] w-full px-5 md:px-8">
+                    <div className="grid grid-cols-1 md:grid-cols-[1fr_auto] gap-8 items-end">
+                        <div>
+                            <div className="text-4xl font-black text-white italic tracking-tight mb-3">SYRIX</div>
+                            <div className="text-sm text-neutral-500 max-w-xl">A competitive Valorant organization page with public content and private team operations in one build.</div>
+                        </div>
+                        <div className="flex flex-wrap gap-5 text-[10px] font-black uppercase tracking-[0.2em] text-neutral-500">
+                            <a href="#roster" className="hover:text-white">Roster</a>
+                            <a href="#schedule" className="hover:text-white">Matches</a>
+                            <a href="#news" className="hover:text-white">News</a>
+                            <button onClick={onEnterHub} className="hover:text-white uppercase">Team Hub</button>
+                        </div>
+                    </div>
+                    <div className="mt-10 pt-6 border-t border-white/10 text-xs text-neutral-700 uppercase tracking-widest">© 2026 Syrix Team Portal. All rights reserved.</div>
+                </div>
+            </footer>
+        </div>
+    );
 
     return (
         <div className="min-h-screen w-full font-sans text-white flex flex-col relative overflow-x-hidden bg-black">
@@ -1089,7 +1439,7 @@ const AdminPanel = () => {
 
 function AvailabilityHeatmap({ availabilities, members }) {
     const bucketSize = 60; const numBuckets = (24 * 60) / bucketSize;
-    const data = useMemo(() => { const d = {}; for (const day of DAYS) { const b = new Array(numBuckets).fill(0); members.forEach(m => { (availabilities[m] || []).filter(s => s.day === day).forEach(s => { const start = Math.floor(timeToMinutes(s.start) / bucketSize); const end = Math.ceil(timeToMinutes(s.end) / bucketSize); for (let i = start; i < end && i < numBuckets; i++) b[i]++; }); }); d[day] = b; } return d; }, [availabilities, members]);
+    const data = useMemo(() => { const d = {}; for (const day of DAYS) { const b = new Array(numBuckets).fill(0); members.forEach(m => { (availabilities[m] || []).filter(s => s.day === day).forEach(s => { const start = Math.floor(timeToMinutes(s.start) / bucketSize); const end = Math.ceil(timeToMinutes(s.end) / bucketSize); for (let i = start; i < end && i < numBuckets; i++) b[i]++; }); }); d[day] = b; } return d; }, [availabilities, members, bucketSize, numBuckets]);
     return (<div className="overflow-x-auto rounded-xl border border-neutral-800 bg-black/50 shadow-inner"><div className="min-w-[600px]"><div className="flex border-b border-neutral-800"><div className="w-24 bg-black/50 sticky left-0 p-2 text-xs font-bold text-red-500 border-r border-neutral-800">DAY</div>{Array.from({ length: 24 }).map((_, i) => <div key={i} className="flex-1 text-[10px] text-center text-neutral-500 py-1 border-l border-neutral-800">{i}</div>)}</div>{DAYS.map(day => <div key={day} className="flex border-b border-neutral-800/50"><div className="w-24 bg-black/50 sticky left-0 p-2 text-xs font-bold text-neutral-400 border-r border-neutral-800">{day.substring(0, 3).toUpperCase()}</div>{data[day]?.map((c, i) => <div key={i} className="flex-1 h-8 border-l border-neutral-800/30 relative group bg-red-600" style={{ opacity: c > 0 ? (c / members.length) * 0.9 + 0.1 : 0 }}>{c > 0 && <span className="absolute inset-0 flex items-center justify-center text-[10px] font-bold text-white opacity-0 group-hover:opacity-100">{c}</span>}</div>)}</div>)}</div></div>);
 }
 
@@ -1218,7 +1568,7 @@ function PerformanceWidget({ events }) {
         Object.keys(mapStats).forEach(m => { const r = mapStats[m].wins / mapStats[m].played; if (r > bestRate) { bestRate = r; bestMap = m; } });
 
         let cumulative = 0;
-        const trendPoints = recentMatches.slice(-10).map((m, i) => {
+        const trendPoints = recentMatches.slice(-10).map((m) => {
             const diff = parseInt(m.result.myScore) - parseInt(m.result.enemyScore);
             cumulative += diff;
             return cumulative;
@@ -1427,7 +1777,9 @@ function StratBook() {
     const uid = () => {
         try {
             if (typeof crypto !== 'undefined' && crypto.randomUUID) return crypto.randomUUID();
-        } catch { }
+        } catch {
+            // Fall through to timestamp fallback when crypto is unavailable.
+        }
         return `${Date.now()}-${Math.random().toString(16).slice(2)}`;
     };
 
@@ -2670,7 +3022,8 @@ function MatchHistory({ currentUser, members }) {
     };
 
     const saveEdit = async () => {
-        const { opponent, date, isFinalizing, ...resultData } = editForm;
+        const { opponent, date, ...resultData } = editForm;
+        delete resultData.isFinalizing;
         await updateDoc(doc(db, 'events', editingId), {
             opponent,
             date,
@@ -3542,7 +3895,7 @@ function SyrixDashboard({ onBack }) {
             });
 
             setEvents(upcomingOnly.sort((a, b) => new Date(a.date + 'T' + a.time) - new Date(b.date + 'T' + b.time)));
-        });;
+        });
 
         // --- NEW LISTENER 4: FETCH ALL ROSTER NAMES ---
         // This ensures members show up even if they haven't set availability yet
