@@ -26,7 +26,7 @@ const SHORT_DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 const MAPS = ["Ascent", "Bind", "Breeze", "Fracture", "Haven", "Icebox", "Lotus", "Pearl", "Split", "Sunset", "Abyss", "Corrode"];
 const ROLES = ["Flex", "Duelist", "Initiator", "Controller", "Sentinel", "Coach"];
 const RANKS = ["Unranked", "Iron", "Bronze", "Silver", "Gold", "Platinum", "Diamond", "Ascendant", "Immortal", "Radiant"];
-const AGENT_NAMES = ["Jett", "Raze", "Reyna", "Yoru", "Phoenix", "Neon", "Iso", "Vyse", "Waylay", "Omen", "Astra", "Brimstone", "Viper", "Harbor", "Clove", "Sova", "Fade", "Skye", "Breach", "KAY/O", "Gekko", "Killjoy", "Cypher", "Sage", "Chamber", "Deadlock", "Veto"];
+const AGENT_NAMES = ["Jett", "Raze", "Reyna", "Yoru", "Phoenix", "Neon", "Iso", "Tejo", "Vyse", "Waylay", "Omen", "Astra", "Brimstone", "Viper", "Harbor", "Clove", "Sova", "Fade", "Skye", "Breach", "KAY/O", "Gekko", "Killjoy", "Cypher", "Sage", "Chamber", "Deadlock", "Miks", "Veto"];
 const ROLE_ABBREVIATIONS = { Flex: "FLX", Duelist: "DUEL", Initiator: "INIT", Controller: "CTRL", Sentinel: "SENT", Coach: "HC" };
 
 const UTILITY_TYPES = [
@@ -1408,40 +1408,236 @@ function StratBook() {
         };
     };
 
+    const area = (kind, radius, fill, stroke, extra = {}) => ({ shape: 'circle', kind, radius, fill, stroke, ...extra });
+    const beam = (kind, length, width, fill, stroke, extra = {}) => ({ shape: 'beam', kind, length, width, fill, stroke, rotation: 0, ...extra });
+    const wall = (kind, length, width, stroke, extra = {}) => ({ shape: 'wall', kind, length, width, stroke, rotation: 0, ...extra });
+    const cone = (kind, length, width, fill, stroke, extra = {}) => ({ shape: 'cone', kind, length, width, fill, stroke, rotation: 0, ...extra });
+    const marker = (kind, stroke, extra = {}) => ({ shape: 'marker', kind, stroke, size: 1, rotation: 0, ...extra });
+
+    const UTIL = {
+        smoke: area('smoke', 2.45, 'rgba(226, 232, 240, 0.16)', '#e2e8f0'),
+        smokeLarge: area('smoke', 2.75, 'rgba(226, 232, 240, 0.16)', '#e2e8f0'),
+        smokeSmall: area('smoke', 2.05, 'rgba(226, 232, 240, 0.16)', '#e2e8f0'),
+        molly: area('molly', 2.05, 'rgba(239, 68, 68, 0.18)', '#ef4444'),
+        grenade: area('molly', 1.75, 'rgba(239, 68, 68, 0.18)', '#ef4444'),
+        stun: area('stun', 2.15, 'rgba(249, 115, 22, 0.14)', '#f97316'),
+        slow: area('slow', 2.75, 'rgba(125, 211, 252, 0.14)', '#7dd3fc'),
+        scan: area('scan', 2.35, 'rgba(59, 130, 246, 0.13)', '#3b82f6'),
+        trap: area('trap', 1.65, 'rgba(168, 85, 247, 0.16)', '#a855f7'),
+        flashCone: cone('flash', 6.5, 4.8, 'rgba(250, 204, 21, 0.18)', '#facc15'),
+        blindCone: cone('blind', 7.5, 5.2, 'rgba(168, 85, 247, 0.18)', '#c084fc'),
+        paranoia: beam('blind', 17, 3.1, 'rgba(168, 85, 247, 0.23)', '#c084fc'),
+        aftershock: beam('molly', 12, 2.4, 'rgba(239, 68, 68, 0.20)', '#ef4444'),
+        faultLine: beam('stun', 19, 2.8, 'rgba(249, 115, 22, 0.20)', '#f97316'),
+        wall: wall('wall', 20, 1.05, '#2dd4bf'),
+        longWall: wall('wall', 28, 1.05, '#22c55e'),
+        harborWall: wall('wall', 24, 1.2, '#38bdf8'),
+        marker: marker('ability', '#f8fafc'),
+        movement: marker('movement', '#38bdf8'),
+        deployable: marker('deployable', '#f8fafc'),
+        sentry: marker('trap', '#a855f7'),
+        ult: marker('ultimate', '#facc15', { size: 1.15 })
+    };
+
+    const clonePreset = (preset) => ({ ...preset });
+    const abilityKey = (agentName, abilityName) => `${norm(agentName)}:${norm(abilityName)}`;
+
+    const UTILITY_PRESETS = {
+        // Astra
+        'astra:gravity well': UTIL.stun,
+        'astra:nova pulse': UTIL.stun,
+        'astra:nebula / dissipate': UTIL.smoke,
+        'astra:nebula': UTIL.smoke,
+        'astra:cosmic divide': wall('wall', 32, 1.4, '#a855f7'),
+        'astra:astral form / cosmic divide': wall('wall', 32, 1.4, '#a855f7'),
+
+        // Breach
+        'breach:aftershock': UTIL.aftershock,
+        'breach:flashpoint': beam('flash', 9, 2.2, 'rgba(250, 204, 21, 0.18)', '#facc15'),
+        'breach:fault line': UTIL.faultLine,
+        'breach:rolling thunder': beam('stun', 28, 7, 'rgba(249, 115, 22, 0.14)', '#f97316'),
+
+        // Brimstone
+        'brimstone:stim beacon': area('buff', 2.2, 'rgba(34, 197, 94, 0.14)', '#22c55e'),
+        'brimstone:incendiary': UTIL.molly,
+        'brimstone:sky smoke': UTIL.smoke,
+        'brimstone:orbital strike': area('ultimate', 3.2, 'rgba(239, 68, 68, 0.18)', '#ef4444'),
+
+        // Chamber
+        'chamber:trademark': UTIL.sentry,
+        'chamber:rendezvous': marker('teleport', '#38bdf8'),
+        'chamber:headhunter': UTIL.marker,
+        'chamber:tour de force': UTIL.ult,
+
+        // Clove
+        'clove:ruse': UTIL.smoke,
+        'clove:meddle': area('decay', 2.25, 'rgba(168, 85, 247, 0.16)', '#a855f7'),
+        'clove:pick-me-up': marker('self', '#22c55e'),
+        'clove:not dead yet': UTIL.ult,
+
+        // Cypher
+        'cypher:trapwire': wall('trap', 7.5, 0.55, '#38bdf8'),
+        'cypher:cyber cage': UTIL.smokeSmall,
+        'cypher:spycam': marker('camera', '#38bdf8'),
+        'cypher:neural theft': UTIL.ult,
+
+        // Deadlock
+        'deadlock:gravnet': area('net', 2.35, 'rgba(56, 189, 248, 0.15)', '#38bdf8'),
+        'deadlock:sonic sensor': area('trap', 1.75, 'rgba(56, 189, 248, 0.14)', '#38bdf8'),
+        'deadlock:barrier mesh': wall('wall', 8, 1.2, '#7dd3fc'),
+        'deadlock:annihilation': beam('ultimate', 18, 1.6, 'rgba(56, 189, 248, 0.16)', '#38bdf8'),
+
+        // Fade
+        'fade:prowler': marker('seek', '#a855f7'),
+        'fade:seize': area('seize', 2.55, 'rgba(168, 85, 247, 0.15)', '#a855f7'),
+        'fade:haunt': UTIL.scan,
+        'fade:nightfall': beam('ultimate', 28, 7, 'rgba(168, 85, 247, 0.13)', '#a855f7'),
+
+        // Gekko
+        'gekko:wingman': marker('deployable', '#22c55e'),
+        'gekko:dizzy': UTIL.flashCone,
+        'gekko:mosh pit': area('molly', 2.55, 'rgba(34, 197, 94, 0.16)', '#22c55e'),
+        'gekko:thrash': marker('ultimate', '#22c55e', { size: 1.15 }),
+
+        // Harbor
+        'harbor:cascade': wall('wall', 12, 1.25, '#38bdf8'),
+        'harbor:cove': UTIL.smokeLarge,
+        'harbor:high tide': UTIL.harborWall,
+        'harbor:reckoning': area('ultimate', 6.2, 'rgba(56, 189, 248, 0.10)', '#38bdf8'),
+
+        // Iso
+        'iso:undercut': beam('vulnerable', 12, 2.3, 'rgba(168, 85, 247, 0.18)', '#a855f7'),
+        'iso:double tap': marker('self', '#a855f7'),
+        'iso:contingency': wall('wall', 8.5, 1.35, '#a855f7'),
+        'iso:kill contract': UTIL.ult,
+
+        // Jett
+        'jett:cloudburst': area('smoke', 1.65, 'rgba(226, 232, 240, 0.16)', '#e2e8f0'),
+        'jett:updraft': UTIL.movement,
+        'jett:tailwind': UTIL.movement,
+        'jett:blade storm': UTIL.ult,
+
+        // KAY/O
+        'kay/o:frag/ment': area('molly', 2.25, 'rgba(239, 68, 68, 0.18)', '#ef4444'),
+        'kay/o:flash/drive': UTIL.flashCone,
+        'kay/o:zero/point': UTIL.scan,
+        'kay/o:null/cmd': area('ultimate', 5.2, 'rgba(59, 130, 246, 0.10)', '#3b82f6'),
+
+        // Killjoy
+        'killjoy:nanoswarm': area('molly', 2.15, 'rgba(239, 68, 68, 0.16)', '#ef4444'),
+        'killjoy:alarmbot': UTIL.sentry,
+        'killjoy:turret': marker('sentry', '#facc15'),
+        'killjoy:lockdown': area('ultimate', 7.6, 'rgba(250, 204, 21, 0.10)', '#facc15'),
+
+        // Miks
+        'miks:m-pulse': area('stun', 2.35, 'rgba(168, 85, 247, 0.14)', '#a855f7'),
+        'miks:waveform': wall('wall', 16, 1.15, '#38bdf8'),
+        'miks:harmonize': marker('support', '#22c55e'),
+        'miks:bassquake': beam('ultimate', 20, 5, 'rgba(168, 85, 247, 0.13)', '#a855f7'),
+
+        // Neon
+        'neon:fast lane': wall('wall', 18, 1.4, '#38bdf8'),
+        'neon:relay bolt': UTIL.stun,
+        'neon:high gear': UTIL.movement,
+        'neon:overdrive': UTIL.ult,
+
+        // Omen
+        'omen:shrouded step': marker('teleport', '#a855f7'),
+        'omen:paranoia': UTIL.paranoia,
+        'omen:dark cover': UTIL.smoke,
+        'omen:from the shadows': UTIL.ult,
+
+        // Phoenix
+        'phoenix:blaze': wall('wall', 10, 1.2, '#f97316'),
+        'phoenix:curveball': UTIL.flashCone,
+        'phoenix:hot hands': UTIL.molly,
+        'phoenix:run it back': UTIL.ult,
+
+        // Raze
+        'raze:boom bot': marker('deployable', '#f97316'),
+        'raze:blast pack': UTIL.movement,
+        'raze:paint shells': UTIL.grenade,
+        'raze:showstopper': UTIL.ult,
+
+        // Reyna
+        'reyna:leer': UTIL.blindCone,
+        'reyna:devour': marker('self', '#a855f7'),
+        'reyna:dismiss': marker('self', '#a855f7'),
+        'reyna:empress': UTIL.ult,
+
+        // Sage
+        'sage:barrier orb': wall('wall', 6.2, 1.45, '#7dd3fc'),
+        'sage:slow orb': UTIL.slow,
+        'sage:healing orb': marker('heal', '#22c55e'),
+        'sage:resurrection': UTIL.ult,
+
+        // Skye
+        'skye:regrowth': marker('heal', '#22c55e'),
+        'skye:trailblazer': marker('seek', '#22c55e'),
+        'skye:guiding light': UTIL.flashCone,
+        'skye:seekers': marker('ultimate', '#22c55e', { size: 1.15 }),
+
+        // Sova
+        'sova:shock bolt': area('damage', 1.65, 'rgba(59, 130, 246, 0.12)', '#3b82f6'),
+        'sova:recon bolt': UTIL.scan,
+        'sova:owl drone': marker('drone', '#3b82f6'),
+        'sova:hunter’s fury': beam('ultimate', 32, 1.8, 'rgba(59, 130, 246, 0.16)', '#3b82f6'),
+        "sova:hunter's fury": beam('ultimate', 32, 1.8, 'rgba(59, 130, 246, 0.16)', '#3b82f6'),
+
+        // Tejo
+        'tejo:guided salvo': area('molly', 2.35, 'rgba(239, 68, 68, 0.18)', '#ef4444'),
+        'tejo:special delivery': UTIL.stun,
+        'tejo:stealth drone': marker('drone', '#38bdf8'),
+        'tejo:armageddon': beam('ultimate', 30, 5.8, 'rgba(239, 68, 68, 0.13)', '#ef4444'),
+
+        // Viper
+        'viper:snake bite': UTIL.molly,
+        'viper:poison cloud': UTIL.smoke,
+        'viper:toxic screen': UTIL.longWall,
+        'viper:viper’s pit': area('ultimate', 6.5, 'rgba(34, 197, 94, 0.10)', '#22c55e'),
+        "viper:viper's pit": area('ultimate', 6.5, 'rgba(34, 197, 94, 0.10)', '#22c55e'),
+
+        // Vyse
+        'vyse:arc rose': UTIL.flashCone,
+        'vyse:shear': wall('trap', 5.8, 1, '#facc15'),
+        'vyse:razorvine': area('slow', 2.6, 'rgba(250, 204, 21, 0.13)', '#facc15'),
+        'vyse:steel garden': area('ultimate', 5.2, 'rgba(250, 204, 21, 0.10)', '#facc15'),
+
+        // Waylay
+        'waylay:refract': UTIL.movement,
+        'waylay:light speed': UTIL.movement,
+        'waylay:lightspeed': UTIL.movement,
+        'waylay:saturate': area('debuff', 2.25, 'rgba(250, 204, 21, 0.13)', '#facc15'),
+        'waylay:convergent paths': beam('ultimate', 18, 5, 'rgba(250, 204, 21, 0.13)', '#facc15'),
+
+        // Yoru
+        'yoru:fakeout': marker('decoy', '#38bdf8'),
+        'yoru:blindside': UTIL.flashCone,
+        'yoru:gatecrash': marker('teleport', '#38bdf8'),
+        'yoru:dimensional drift': UTIL.ult,
+
+        // Veto, fallback names may shift as Riot updates the agent.
+        'veto:crosscut': wall('wall', 7, 1, '#a855f7'),
+        'veto:chokehold': area('trap', 2.3, 'rgba(168, 85, 247, 0.14)', '#a855f7'),
+        'veto:interceptor': marker('sentry', '#a855f7'),
+        'veto:evolution': UTIL.ult
+    };
+
     const utilityPresetFor = (agentName, abilityName) => {
-        const agent = norm(agentName);
+        const key = abilityKey(agentName, abilityName);
+        const exact = UTILITY_PRESETS[key];
+        if (exact) return clonePreset(exact);
+
         const name = norm(abilityName);
-        const smoke = { shape: 'circle', kind: 'smoke', fill: 'rgba(226, 232, 240, 0.16)', stroke: '#e2e8f0', radius: 2.65 };
-        const molly = { shape: 'circle', kind: 'molly', fill: 'rgba(239, 68, 68, 0.18)', stroke: '#ef4444', radius: 2.05 };
-        const recon = { shape: 'circle', kind: 'recon', fill: 'rgba(59, 130, 246, 0.13)', stroke: '#3b82f6', radius: 2.35 };
-        const stun = { shape: 'circle', kind: 'stun', fill: 'rgba(249, 115, 22, 0.14)', stroke: '#f97316', radius: 2.2 };
-
-        if (agent === 'omen' && name.includes('paranoia')) {
-            return { shape: 'beam', kind: 'blind', fill: 'rgba(168, 85, 247, 0.24)', stroke: '#c084fc', length: 17, width: 3.4, rotation: 0 };
-        }
-        if (agent === 'breach' && name.includes('fault line')) {
-            return { shape: 'beam', kind: 'stun', fill: 'rgba(249, 115, 22, 0.20)', stroke: '#f97316', length: 19, width: 3, rotation: 0 };
-        }
-        if (agent === 'breach' && name.includes('aftershock')) {
-            return { shape: 'beam', kind: 'molly', fill: 'rgba(239, 68, 68, 0.20)', stroke: '#ef4444', length: 12, width: 2.5, rotation: 0 };
-        }
-        if (agent === 'fade' && name.includes('seize')) return { ...stun, kind: 'seize', radius: 2.6, stroke: '#a855f7' };
-        if (agent === 'deadlock' && name.includes('gravnet')) return { ...stun, kind: 'net', radius: 2.4, stroke: '#38bdf8' };
-
-        if (/toxic screen|high tide|cascade|barrier orb|wall|fast lane|blaze/.test(name)) {
-            return { shape: 'wall', kind: 'wall', fill: 'rgba(45, 212, 191, 0.18)', stroke: '#2dd4bf', length: 20, width: 1.1, rotation: 0 };
-        }
-        if (/smoke|cloud|dark cover|sky smoke|nebula|astral|cove|cage|ruse/.test(name)) return smoke;
-        if (/molly|snake bite|snakebite|incendiary|hot hands|nanoswarm|paint shells|grenade/.test(name)) return molly;
-        if (/recon|dart|haunt|eye|knife|zero\/point|sonic sensor|trapwire|trademark/.test(name)) return recon;
-        if (/stun|relay bolt|slow orb|seismic/.test(name)) return stun;
-        if (/flash|curveball|blind|leer|guiding light|flashpoint|dizzy|arc rose|blindside/.test(name)) {
-            return { shape: 'cone', kind: 'flash', fill: 'rgba(250, 204, 21, 0.18)', stroke: '#facc15', length: 7, width: 5, rotation: 0 };
-        }
-        if (/dash|updraft|dismiss|teleport|gatecrash|satchel|blast pack|tailwind|wingman/.test(name)) {
-            return { shape: 'marker', kind: 'movement', stroke: '#38bdf8', size: 1, rotation: 0 };
-        }
-        return { shape: 'marker', kind: 'ability', stroke: color, size: 1, rotation: 0 };
+        if (/toxic screen|high tide|cascade|barrier orb|wall|fast lane|blaze/.test(name)) return clonePreset(UTIL.wall);
+        if (/smoke|cloud|dark cover|sky smoke|nebula|astral|cove|cage|ruse/.test(name)) return clonePreset(UTIL.smoke);
+        if (/molly|snake bite|snakebite|incendiary|hot hands|nanoswarm|paint shells|grenade|mosh/.test(name)) return clonePreset(UTIL.molly);
+        if (/recon|dart|haunt|eye|knife|zero\/point|sonic sensor|trapwire|trademark|alarmbot|turret/.test(name)) return clonePreset(UTIL.scan);
+        if (/stun|relay bolt|slow orb|seismic|gravnet/.test(name)) return clonePreset(UTIL.stun);
+        if (/paranoia/.test(name)) return clonePreset(UTIL.paranoia);
+        if (/flash|curveball|blind|leer|guiding light|flashpoint|dizzy|arc rose|blindside/.test(name)) return clonePreset(UTIL.flashCone);
+        if (/dash|updraft|dismiss|teleport|gatecrash|satchel|blast pack|tailwind|wingman|prowler|drone|bot/.test(name)) return clonePreset(UTIL.movement);
+        return clonePreset(UTIL.marker);
     };
 
     const circleStyleFor = (kind) => {
@@ -1506,6 +1702,10 @@ function StratBook() {
                 if (obj.id !== dragging.id) return obj;
                 if (dragging.handle === 'start') return { ...obj, x1: point.x, y1: point.y };
                 if (dragging.handle === 'end') return { ...obj, x2: point.x, y2: point.y };
+                if (dragging.handle === 'rotate') {
+                    const angle = Math.atan2(point.y - dragging.original.y, point.x - dragging.original.x) * 180 / Math.PI;
+                    return { ...obj, rotation: Math.round(angle) };
+                }
 
                 const deltaX = point.x - dragging.startPoint.x;
                 const deltaY = point.y - dragging.startPoint.y;
@@ -1697,7 +1897,12 @@ function StratBook() {
                         <rect x="0" y={`${-(obj.width || 3) / 2}`} width={obj.length || 12} height={obj.width || 3} rx={(obj.width || 3) / 2} fill={obj.fill} stroke={obj.stroke} strokeWidth="0.45" />
                         <line x1="0" y1="0" x2={obj.length || 12} y2="0" stroke={obj.stroke} strokeWidth="0.35" strokeDasharray="1.5 1.2" />
                         {obj.icon && <image href={obj.icon} x="-1.4" y="-1.4" width="2.8" height="2.8" />}
-                        {isSelected && <rect x="-0.4" y={`${-(obj.width || 3) / 2 - 0.4}`} width={(obj.length || 12) + 0.8} height={(obj.width || 3) + 0.8} rx={(obj.width || 3) / 2} fill="none" stroke="#22c55e" strokeWidth="0.35" />}
+                        {isSelected && (
+                            <>
+                                <rect x="-0.4" y={`${-(obj.width || 3) / 2 - 0.4}`} width={(obj.length || 12) + 0.8} height={(obj.width || 3) + 0.8} rx={(obj.width || 3) / 2} fill="none" stroke="#22c55e" strokeWidth="0.35" />
+                                <circle cx={obj.length || 12} cy="0" r="1" fill="#22c55e" stroke="#020617" strokeWidth="0.35" onPointerDown={(e) => startDragObject(e, obj, 'rotate')} />
+                            </>
+                        )}
                     </g>
                 );
             }
@@ -1708,7 +1913,12 @@ function StratBook() {
                         <line x1={-length / 2} y1="0" x2={length / 2} y2="0" stroke={obj.stroke} strokeWidth={obj.width || 1.1} strokeLinecap="round" opacity="0.9" />
                         <line x1={-length / 2} y1="0" x2={length / 2} y2="0" stroke="rgba(255,255,255,0.55)" strokeWidth="0.25" strokeLinecap="round" />
                         {obj.icon && <image href={obj.icon} x="-1.25" y="-1.25" width="2.5" height="2.5" />}
-                        {isSelected && <rect x={-length / 2} y="-1.4" width={length} height="2.8" fill="none" stroke="#22c55e" strokeWidth="0.35" />}
+                        {isSelected && (
+                            <>
+                                <rect x={-length / 2} y="-1.4" width={length} height="2.8" fill="none" stroke="#22c55e" strokeWidth="0.35" />
+                                <circle cx={length / 2} cy="0" r="1" fill="#22c55e" stroke="#020617" strokeWidth="0.35" onPointerDown={(e) => startDragObject(e, obj, 'rotate')} />
+                            </>
+                        )}
                     </g>
                 );
             }
@@ -1719,7 +1929,12 @@ function StratBook() {
                     <g key={obj.id} className="cursor-grab" transform={`translate(${obj.x} ${obj.y}) rotate(${obj.rotation || 0})`} onPointerDown={(e) => startDragObject(e, obj)}>
                         <path d={`M 0 0 L ${length} ${-width / 2} L ${length} ${width / 2} Z`} fill={obj.fill} stroke={obj.stroke} strokeWidth="0.35" />
                         {obj.icon && <image href={obj.icon} x="-1.25" y="-1.25" width="2.5" height="2.5" />}
-                        {isSelected && <path d={`M -0.4 0 L ${length + 0.4} ${-width / 2 - 0.4} L ${length + 0.4} ${width / 2 + 0.4} Z`} fill="none" stroke="#22c55e" strokeWidth="0.35" />}
+                        {isSelected && (
+                            <>
+                                <path d={`M -0.4 0 L ${length + 0.4} ${-width / 2 - 0.4} L ${length + 0.4} ${width / 2 + 0.4} Z`} fill="none" stroke="#22c55e" strokeWidth="0.35" />
+                                <circle cx={length} cy="0" r="1" fill="#22c55e" stroke="#020617" strokeWidth="0.35" onPointerDown={(e) => startDragObject(e, obj, 'rotate')} />
+                            </>
+                        )}
                     </g>
                 );
             }
