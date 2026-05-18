@@ -119,8 +119,11 @@ const GlobalStyles = () => (
         }
 
         /* Shared & Hub Styles */
-        .glass-panel { background: rgba(15, 15, 15, 0.85); backdrop-filter: blur(12px); border: 1px solid rgba(255,255,255,0.08); box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5); }
-        .card-shine:hover { border-color: rgba(220, 38, 38, 0.3); background: rgba(20, 20, 20, 0.95); box-shadow: 0 8px 32px rgba(220, 38, 38, 0.1); }
+        .glass-panel { background: rgba(12, 14, 18, 0.86); backdrop-filter: blur(14px); border: 1px solid rgba(255,255,255,0.10); box-shadow: 0 14px 40px rgba(0, 0, 0, 0.36); }
+        .card-shine:hover { border-color: rgba(239, 68, 68, 0.34); background: rgba(17, 20, 26, 0.94); box-shadow: 0 18px 44px rgba(0,0,0,0.4); }
+        .section-kicker { color: #ef4444; font-size: 0.72rem; font-weight: 900; letter-spacing: 0.24em; text-transform: uppercase; }
+        .section-title { color: #fff; font-size: clamp(2rem, 5vw, 3.8rem); line-height: 0.95; font-weight: 900; letter-spacing: 0; font-style: italic; text-transform: uppercase; }
+        .surface-band { background: rgba(9, 11, 15, 0.74); border-block: 1px solid rgba(255,255,255,0.06); }
         @keyframes slideIn { from { transform: translateX(100%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
         .animate-slide-in { animation: slideIn 0.3s cubic-bezier(0.2, 0.8, 0.2, 1); }
         @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
@@ -132,7 +135,7 @@ const GlobalStyles = () => (
         .mask-fade { -webkit-mask-image: linear-gradient(to right, black 90%, transparent 100%); mask-image: linear-gradient(to right, black 90%, transparent 100%); }
 
         /* Landing Page Specific Styles */
-        :root { --primary-red: #ff3333; --dark-bg: #1a1a1a; --card-bg: #282828; }
+        :root { --primary-red: #ef4444; --dark-bg: #050608; --card-bg: #111318; }
         .accent-text { color: var(--primary-red); }
         .accent-bg { background-color: var(--primary-red); transition: background-color 0.3s; }
         .accent-bg:hover { background-color: #e02c2c; }
@@ -154,11 +157,10 @@ const GlobalStyles = () => (
 
         @keyframes pulse-red { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
         .live-indicator { animation: pulse-red 2s cubic-bezier(0.4, 0, 0.6, 1) infinite; }
-        .player-card { perspective: 1000px; min-height: 350px; }
-        .card-inner { position: relative; width: 100%; height: 100%; transition: transform 0.7s; transform-style: preserve-3d; }
-        .player-card:hover .card-inner { transform: rotateY(180deg); }
-        .card-front, .card-back { position: absolute; width: 100%; height: 100%; backface-visibility: hidden; border-radius: 0.75rem; }
-        .card-back { background-color: var(--card-bg); color: white; transform: rotateY(180deg); display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 1.5rem; text-align: center; }
+        .player-card { min-height: 350px; }
+        .card-inner { position: relative; width: 100%; height: 100%; }
+        .card-front { position: relative; width: 100%; height: 100%; border-radius: 0.75rem; }
+        .card-back { display: none; }
         /* Scroll Mouse Animation */
         .scroll-mouse {
             width: 26px;
@@ -188,11 +190,9 @@ const GlobalStyles = () => (
 
 // --- SHARED COMPONENTS ---
 const Background = () => (
-    <div className="fixed inset-0 w-full h-full z-0 pointer-events-none bg-black">
-        <div className="absolute top-[-10%] left-[-10%] w-[50%] h-[50%] rounded-full bg-[radial-gradient(circle,rgba(127,29,29,0.25)_0%,rgba(0,0,0,0)_70%)]"></div>
-        <div className="absolute bottom-[-10%] right-[-10%] w-[60%] h-[60%] rounded-full bg-[radial-gradient(circle,rgba(69,10,10,0.25)_0%,rgba(0,0,0,0)_70%)]"></div>
-        <div className="absolute inset-0 opacity-[0.07] bg-[linear-gradient(to_right,#555_1px,transparent_1px),linear-gradient(to_bottom,#555_1px,transparent_1px)] bg-[size:4rem_4rem]"></div>
-        <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,transparent_10%,#000_100%)] opacity-80"></div>
+    <div className="fixed inset-0 w-full h-full z-0 pointer-events-none bg-[#050608]">
+        <div className="absolute inset-0 opacity-[0.08] bg-[linear-gradient(to_right,#ffffff_1px,transparent_1px),linear-gradient(to_bottom,#ffffff_1px,transparent_1px)] bg-[size:4rem_4rem]"></div>
+        <div className="absolute inset-0 bg-[linear-gradient(to_bottom,rgba(5,6,8,0.35),#050608_82%)]"></div>
     </div>
 );
 
@@ -455,14 +455,15 @@ const LandingPage = ({ onEnterHub }) => {
         <div className="min-h-screen w-full font-sans text-white flex flex-col relative overflow-x-hidden bg-black">
             <Background />
 
-            <header className="fixed top-0 w-full z-50 bg-black/40 backdrop-blur-md shadow-2xl border-b border-white/10 flex justify-center">
-                <nav className="max-w-7xl w-full px-6 py-4 flex justify-between items-center">
+            <header className="fixed top-0 w-full z-50 bg-[#050608]/82 backdrop-blur-xl border-b border-white/10 flex justify-center">
+                <nav className="max-w-7xl w-full px-5 md:px-6 py-3.5 flex justify-between items-center">
                     <a href="#home" className="flex items-center space-x-2 text-white hover:text-red-500 transition-colors"><span className="text-3xl font-black text-red-600 italic">/</span><h1 className="text-xl font-black uppercase tracking-tighter italic">Syrix</h1></a>
                     <button onClick={() => setMobileMenuOpen(!mobileMenuOpen)} className="md:hidden text-2xl z-50 p-2 focus:outline-none text-white">☰</button>
                     <div className="hidden md:flex items-center space-x-8 text-xs font-bold uppercase tracking-widest">
                         <a href="#roster" className="text-white hover:text-red-500 transition duration-300">Roster</a>
                         <a href="#schedule" className="text-white hover:text-red-500 transition duration-300">Matches</a>
                         <a href="#vods" className="text-white hover:text-red-500 transition duration-300">VODs</a>
+                        <a href="#news" className="text-white hover:text-red-500 transition duration-300">News</a>
                         <a href="#merch" className="text-white hover:text-red-500 transition duration-300">Shop</a>
                         <button onClick={onEnterHub} className="px-6 py-2 rounded-full bg-gradient-to-r from-red-800 to-red-600 hover:from-red-700 hover:to-red-500 text-white shadow-[0_0_20px_rgba(220,38,38,0.4)] transition duration-300 flex items-center gap-2 transform hover:scale-105">
                             <span>TEAM HUB</span>
@@ -485,16 +486,16 @@ const LandingPage = ({ onEnterHub }) => {
 
             <main className="flex-1 relative z-10 flex flex-col items-center w-full">
                 {/* --- HERO SECTION: YOUTUBE NO-UPLOAD VERSION --- */}
-                <section id="home" className="w-full h-screen flex flex-col justify-center items-center text-center relative overflow-hidden bg-black">
+                <section id="home" className="w-full min-h-[92vh] flex flex-col justify-center items-center text-center relative overflow-hidden bg-black">
 
                     {/* 1. YOUTUBE BACKGROUND LAYER */}
                     <div className="absolute inset-0 w-full h-full z-0 pointer-events-none overflow-hidden">
                         {/* THE TRICK: 
-           We make the video 300% larger (scale-[3.0]) to push the YouTube title 
+           We scale the video background enough to keep YouTube chrome outside the viewport.
            and play buttons off the screen so no one sees them.
         */}
                         <iframe
-                            className="absolute top-1/2 left-1/2 w-full h-full min-w-[177vh] min-h-[56.25vw] -translate-x-1/2 -translate-y-1/2 scale-[3.0] opacity-60 mix-blend-overlay"
+                            className="absolute top-1/2 left-1/2 w-full h-full min-w-[177vh] min-h-[56.25vw] -translate-x-1/2 -translate-y-1/2 scale-[2.35] opacity-38 mix-blend-luminosity"
                             src="https://www.youtube.com/embed/y9zweO_hU1U?autoplay=1&mute=1&controls=0&loop=1&playlist=y9zweO_hU1U&showinfo=0&rel=0&iv_load_policy=3&modestbranding=1&playsinline=1&enablejsapi=1&origin=http://localhost:3000"
                             title="Hero Background"
                             frameBorder="0"
@@ -503,7 +504,7 @@ const LandingPage = ({ onEnterHub }) => {
                         ></iframe>
 
                         {/* Gradient & Texture Overlays to make it look cinematic */}
-                        <div className="absolute inset-0 bg-gradient-to-t from-black via-transparent to-black/80"></div>
+                        <div className="absolute inset-0 bg-gradient-to-t from-black via-black/55 to-black/80"></div>
                         <div className="absolute inset-0 bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-20"></div>
                     </div>
 
@@ -515,22 +516,28 @@ const LandingPage = ({ onEnterHub }) => {
                             <span className="text-[10px] font-bold uppercase tracking-widest text-neutral-300">Official Team Portal</span>
                         </div>
 
-                        <h1 className="text-[15vw] md:text-[12rem] font-black leading-[0.85] tracking-tighter italic text-transparent bg-clip-text bg-gradient-to-b from-white via-neutral-200 to-neutral-600 drop-shadow-2xl">
+                        <h1 className="text-[15vw] md:text-[11rem] font-black leading-[0.85] tracking-tighter italic text-white drop-shadow-2xl">
                             SYRIX
                         </h1>
 
-                        <p className="text-neutral-400 text-lg md:text-2xl font-medium tracking-wide mt-4 mb-10 max-w-2xl">
-                            PRECISION. STRATEGY. <span className="text-red-600 font-bold">DOMINANCE.</span>
+                        <p className="text-neutral-300 text-base md:text-xl font-medium mt-5 mb-8 max-w-2xl leading-relaxed">
+                            Competitive Valorant operations, match prep, roster management, and team strategy in one command center.
                         </p>
 
+                        <div className="grid grid-cols-3 gap-3 w-full max-w-xl mb-8">
+                            <div className="glass-panel rounded-lg p-3 border-white/10"><div className="text-2xl font-black text-white">{teamStats.winRate}%</div><div className="text-[10px] font-bold uppercase text-neutral-500 tracking-widest">Win Rate</div></div>
+                            <div className="glass-panel rounded-lg p-3 border-white/10"><div className="text-2xl font-black text-white">{activePlayers.length}</div><div className="text-[10px] font-bold uppercase text-neutral-500 tracking-widest">Roster</div></div>
+                            <div className="glass-panel rounded-lg p-3 border-white/10"><div className="text-2xl font-black text-white">{matches.length}</div><div className="text-[10px] font-bold uppercase text-neutral-500 tracking-widest">Upcoming</div></div>
+                        </div>
+
                         <div className="flex flex-col md:flex-row gap-4 w-full md:w-auto">
-                            <button onClick={() => document.getElementById('roster').scrollIntoView({ behavior: 'smooth' })} className="group relative px-10 py-4 bg-red-600 text-white font-black uppercase tracking-widest overflow-hidden hover:bg-red-700 transition-all shadow-[0_0_40px_rgba(220,38,38,0.5)] border border-red-500">
+                            <button onClick={() => document.getElementById('roster').scrollIntoView({ behavior: 'smooth' })} className="group relative px-10 py-4 bg-red-600 text-white font-black uppercase tracking-widest overflow-hidden hover:bg-red-700 transition-all border border-red-500 rounded-lg">
                                 <span className="relative z-10 flex items-center gap-2">
                                     View Roster <span className="group-hover:translate-x-1 transition-transform">→</span>
                                 </span>
                                 <div className="absolute inset-0 bg-white/20 translate-x-[-100%] skew-x-[-15deg] group-hover:translate-x-[100%] transition-transform duration-700 ease-in-out"></div>
                             </button>
-                            <button onClick={onEnterHub} className="px-10 py-4 bg-black/50 backdrop-blur-md border border-white/20 text-white font-black uppercase tracking-widest hover:bg-white hover:text-black transition-all">
+                            <button onClick={onEnterHub} className="px-10 py-4 bg-white text-black border border-white text-black font-black uppercase tracking-widest hover:bg-neutral-200 transition-all rounded-lg">
                                 Team Hub
                             </button>
                         </div>
@@ -611,7 +618,7 @@ const LandingPage = ({ onEnterHub }) => {
                                 <li className="flex items-center gap-3 text-neutral-300"><span className="text-red-600 font-bold">03.</span> Unrivaled Professionalism</li>
                             </ul>
                         </div>
-                        <div className="relative h-96 glass-panel rounded-3xl border-white/10 overflow-hidden" data-aos="fade-left">
+                        <div className="relative h-96 glass-panel rounded-xl border-white/10 overflow-hidden" data-aos="fade-left">
                             <div className="absolute inset-0 bg-gradient-to-tr from-red-900/20 to-transparent"></div>
                             <div className="absolute inset-0 flex items-center justify-center text-neutral-700 font-black text-9xl opacity-20 italic tracking-tighter">SYRIX</div>
                         </div>
@@ -644,8 +651,8 @@ const LandingPage = ({ onEnterHub }) => {
                     <div className="max-w-7xl w-full px-6">
                         {/* --- ACTIVE ROSTER --- */}
                         <div className="text-center mb-16" data-aos="fade-up">
-                            <h3 className="text-4xl md:text-5xl font-black text-white italic tracking-tighter mb-4"><span className="text-red-600">/</span> ACTIVE ROSTER</h3>
-                            <p className="text-neutral-500 uppercase tracking-widest font-bold text-sm">The Squad</p>
+                            <div className="section-kicker mb-3">The Squad</div>
+                            <h3 className="section-title">Active Roster</h3>
                         </div>
                         <div className="flex flex-wrap justify-center gap-8 mb-24">
                             {activePlayers.length > 0 ? activePlayers.map((p, i) => (
@@ -675,8 +682,8 @@ const LandingPage = ({ onEnterHub }) => {
                 <section id="schedule" className="w-full py-24 bg-gradient-to-b from-transparent to-neutral-900/20 border-y border-white/5 relative flex justify-center">
                     <div className="max-w-5xl w-full px-6">
                         <div className="text-center mb-16" data-aos="fade-up">
-                            <h3 className="text-4xl md:text-5xl font-black text-white italic tracking-tighter mb-4"><span className="text-red-600">/</span> UPCOMING OPS</h3>
-                            <p className="text-neutral-500 uppercase tracking-widest font-bold text-sm">Mission Log</p>
+                            <div className="section-kicker mb-3">Mission Log</div>
+                            <h3 className="section-title">Upcoming Matches</h3>
                         </div>
                         <div className="space-y-4" data-aos="fade-up">
                             {matches.length > 0 ? matches.map((match, i) => (
@@ -707,8 +714,8 @@ const LandingPage = ({ onEnterHub }) => {
                 <section id="vods" className="w-full py-24 relative flex justify-center">
                     <div className="max-w-7xl w-full px-6">
                         <div className="text-center mb-16" data-aos="fade-up">
-                            <h3 className="text-4xl md:text-5xl font-black text-white italic tracking-tighter mb-4"><span className="text-red-600">/</span> RECENT INTEL</h3>
-                            <p className="text-neutral-500 uppercase tracking-widest font-bold text-sm">VODs & Highlights</p>
+                            <div className="section-kicker mb-3">VODs & Highlights</div>
+                            <h3 className="section-title">Recent Intel</h3>
                         </div>
                         <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
                             {intelData.length > 0 ? intelData.map((item, i) => (
@@ -738,15 +745,15 @@ const LandingPage = ({ onEnterHub }) => {
                 <section id="news" className="w-full py-24 relative flex justify-center bg-black/50">
                     <div className="max-w-7xl w-full px-6">
                         <div className="text-center mb-16" data-aos="fade-up">
-                            <h3 className="text-4xl md:text-5xl font-black text-white italic tracking-tighter mb-4"><span className="text-red-600">/</span> SITREP</h3>
-                            <p className="text-neutral-500 uppercase tracking-widest font-bold text-sm">News & Updates</p>
+                            <div className="section-kicker mb-3">News & Updates</div>
+                            <h3 className="section-title">SITREP</h3>
                         </div>
 
                         {newsData.length > 0 ? (
                             <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
                                 {/* Featured Article */}
                                 {featuredNews && (
-                                    <div className="glass-panel p-8 rounded-3xl border border-red-900/30 flex flex-col justify-center" data-aos="fade-right">
+                                    <div className="glass-panel p-8 rounded-xl border border-red-900/30 flex flex-col justify-center" data-aos="fade-right">
                                         <span className="text-red-500 text-xs font-bold uppercase tracking-widest mb-2 block">Featured • {featuredNews.date}</span>
                                         <h4 className="text-3xl font-black text-white mb-4 uppercase leading-none">{featuredNews.title}</h4>
                                         <p className="text-neutral-400 mb-6 line-clamp-4">{featuredNews.body}</p>
@@ -780,8 +787,8 @@ const LandingPage = ({ onEnterHub }) => {
                 <section id="merch" className="w-full py-24 relative flex justify-center">
                     <div className="max-w-7xl w-full px-6">
                         <div className="text-center mb-16" data-aos="fade-up">
-                            <h3 className="text-4xl md:text-5xl font-black text-white italic tracking-tighter mb-4"><span className="text-red-600">/</span> ARMORY</h3>
-                            <p className="text-neutral-500 uppercase tracking-widest font-bold text-sm">Official Gear</p>
+                            <div className="section-kicker mb-3">Official Gear</div>
+                            <h3 className="section-title">Armory</h3>
                         </div>
                         <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
                             {merchData.length > 0 ? merchData.map((item, i) => (
@@ -821,8 +828,8 @@ const LandingPage = ({ onEnterHub }) => {
 
                 <section id="community" className="w-full py-24 relative flex justify-center">
                     <div className="max-w-4xl w-full px-6">
-                        <div className="glass-panel rounded-[3rem] p-12 text-center border border-red-600/30 relative overflow-hidden" data-aos="zoom-in">
-                            <div className="absolute top-0 right-0 w-64 h-64 bg-red-600/20 rounded-full blur-[100px] pointer-events-none"></div>
+                        <div className="glass-panel rounded-xl p-12 text-center border border-red-600/30 relative overflow-hidden" data-aos="zoom-in">
+                            <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-red-500/60 to-transparent"></div>
                             <div className="relative z-10">
                                 <h3 className="text-4xl md:text-6xl font-black text-white italic tracking-tighter mb-6">JOIN THE <span className="text-red-600">SYNDICATE</span></h3>
                                 <p className="text-neutral-400 mb-10 max-w-xl mx-auto text-lg">Become part of the Syrix family. Join our official Discord server for match-day chats, community events, and direct interaction with the team.</p>
@@ -869,7 +876,7 @@ const ButtonSecondary = ({ children, onClick, disabled, className = "" }) => (
     </button>
 );
 const Card = ({ children, className = "" }) => (
-    <div className={`glass-panel rounded-3xl p-6 relative overflow-hidden group card-shine transition-all duration-300 ${className}`}>
+    <div className={`glass-panel rounded-xl p-6 relative overflow-hidden group card-shine transition-all duration-300 ${className}`}>
         {children}
     </div>
 );
@@ -1199,7 +1206,7 @@ function Playbook() {
                 </div>
             </div>
 
-            <div className="flex-1 bg-neutral-900/80 border border-white/10 rounded-3xl p-1 relative overflow-hidden shadow-2xl flex flex-col min-h-[500px]">
+            <div className="flex-1 bg-neutral-900/80 border border-white/10 rounded-xl p-1 relative overflow-hidden shadow-2xl flex flex-col min-h-[500px]">
                 <div className={`absolute top-0 left-0 w-full h-1 z-10 ${side === 'Attack' ? 'bg-red-600' : 'bg-blue-600'}`}></div>
                 {loading && <div className="absolute inset-0 bg-black/50 z-20 flex items-center justify-center text-xs font-bold text-white animate-pulse">LOADING PROTOCOLS...</div>}
                 <textarea
@@ -2937,7 +2944,7 @@ function RosterManager({ members, events }) {
             {mode === 'edit' ? (
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 h-full">
                     {/* Sidebar List */}
-                    <div className="lg:col-span-1 bg-neutral-900/80 p-6 rounded-3xl border border-white/5 flex flex-col">
+                    <div className="lg:col-span-1 bg-neutral-900/80 p-6 rounded-xl border border-white/5 flex flex-col">
                         <h3 className="text-white font-bold mb-4">Members</h3>
                         <div className="flex-1 space-y-2 overflow-y-auto custom-scrollbar">
                             {sortedMembers.length === 0 ?
@@ -3234,7 +3241,7 @@ function LoginScreen({ signIn, onBack }) {
         <div className="fixed inset-0 bg-black text-white overflow-y-auto flex items-center justify-center p-6">
             <Background />
             <button onClick={onBack} className="absolute top-4 left-4 z-20 text-neutral-400 hover:text-white font-bold uppercase text-sm">&larr; Home</button>
-            <div className="relative z-10 w-full max-w-md glass-panel rounded-3xl border border-red-900/30 p-8 text-center">
+            <div className="relative z-10 w-full max-w-md glass-panel rounded-xl border border-red-900/30 p-8 text-center">
                 <div className="text-5xl font-black italic tracking-tighter mb-2">SYRIX</div>
                 <p className="text-neutral-400 text-sm mb-8">Sign in with Discord to access the team hub.</p>
                 <ButtonPrimary onClick={signIn} className="w-full">Sign In With Discord</ButtonPrimary>
@@ -3527,16 +3534,16 @@ function SyrixDashboard({ onBack }) {
     const isAdmin = currentUser && ADMIN_UIDS.includes(currentUser.uid);
 
     return (
-        <div className="fixed inset-0 h-full w-full text-neutral-200 font-sans selection:bg-red-500/30 flex flex-col overflow-hidden bg-black">
+        <div className="fixed inset-0 h-full w-full text-neutral-200 font-sans selection:bg-red-500/30 flex flex-col overflow-hidden bg-[#050608]">
             <Background />
 
-            <header className="flex-none flex flex-col gap-4 px-6 py-4 border-b border-white/10 bg-black/40 backdrop-blur-md z-40">
+            <header className="flex-none flex flex-col gap-4 px-4 md:px-6 py-3 border-b border-white/10 bg-[#080a0f]/88 backdrop-blur-xl z-40">
                 <div className="flex justify-between items-center">
                     <div className="flex items-center gap-4">
                         <button onClick={onBack} className="text-neutral-500 hover:text-white transition">
                             <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"></path></svg>
                         </button>
-                        <h1 className="text-3xl font-black tracking-tighter text-white drop-shadow-lg italic">SYRIX <span className="text-red-600">HUB</span></h1>
+                        <h1 className="text-2xl md:text-3xl font-black tracking-tighter text-white drop-shadow-lg italic">SYRIX <span className="text-red-600">HUB</span></h1>
                     </div>
                     <div className="flex items-center gap-4">
                         <div className="text-right hidden md:block">
@@ -3563,7 +3570,7 @@ function SyrixDashboard({ onBack }) {
                 </div>
             </header>
 
-            <main className="flex-1 overflow-y-auto p-6 scrollbar-thin scrollbar-thumb-red-900/50 scrollbar-track-black/20 relative z-10">
+            <main className="flex-1 overflow-y-auto p-4 md:p-6 scrollbar-thin scrollbar-thumb-red-900/50 scrollbar-track-black/20 relative z-10">
                 <div className="max-w-[1920px] mx-auto min-h-screen flex flex-col">
                     {activeTab === 'dashboard' && <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 animate-fade-in">
                         <div className="lg:col-span-4 space-y-8">
