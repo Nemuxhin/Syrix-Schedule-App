@@ -45,6 +45,7 @@ const timezones = ["UTC", "GMT", "Europe/London", "Europe/Paris", "Europe/Berlin
 // --- UTILITY FUNCTIONS ---
 function timeToMinutes(t) { if (!t || t === '24:00') return 1440; const [h, m] = t.split(":").map(Number); return h * 60 + m; }
 function minutesToTime(m) { const minutes = m % 1440; const hh = Math.floor(minutes / 60).toString().padStart(2, '0'); const mm = (minutes % 60).toString().padStart(2, '0'); return `${hh}:${mm}`; }
+const safeDocId = (value, fallback = 'Unknown_User') => String(value || fallback).trim().replace(/[\/#?\[\]]/g, '-').slice(0, 120) || fallback;
 
 const normalizeAvailabilitySlots = (data = {}) => {
     if (Array.isArray(data.slots)) return data.slots;
@@ -82,16 +83,49 @@ const convertFromGMT = (day, time, timezone) => {
     return { day: part('weekday'), time: `${localHours}:${part('minute')}` };
 };
 
-const convertToGMT = (day, time) => {
+const getTimeZoneOffset = (date, timezone) => {
+    const formatter = new Intl.DateTimeFormat('en-US', {
+        timeZone: timezone,
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit',
+        hour12: false
+    });
+    const parts = formatter.formatToParts(date);
+    const value = (type) => Number(parts.find(p => p.type === type)?.value || 0);
+    const hour = value('hour') === 24 ? 0 : value('hour');
+    const asUTC = Date.UTC(value('year'), value('month') - 1, value('day'), hour, value('minute'), value('second'));
+    return asUTC - date.getTime();
+};
+
+const zonedTimeToDate = (day, time, timezone) => {
     const jsDays = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
     const targetIndex = jsDays.indexOf(day);
-    const today = new Date();
-    const currentDayIndex = today.getDay();
-    let distance = targetIndex - currentDayIndex;
-    const d = new Date(today);
-    d.setDate(today.getDate() + distance);
+    const now = new Date();
+    const todayInZone = new Intl.DateTimeFormat('en-US', { timeZone: timezone, weekday: 'long', year: 'numeric', month: '2-digit', day: '2-digit' }).formatToParts(now);
+    const value = (type) => todayInZone.find(p => p.type === type)?.value;
+    const currentIndex = jsDays.indexOf(value('weekday'));
+    const distance = targetIndex - currentIndex;
+    const baseUTC = Date.UTC(Number(value('year')), Number(value('month')) - 1, Number(value('day')) + distance, 12, 0, 0);
     const [hours, minutes] = time.split(':').map(Number);
-    d.setHours(hours, minutes, 0, 0);
+    const localGuess = new Date(Date.UTC(
+        new Date(baseUTC).getUTCFullYear(),
+        new Date(baseUTC).getUTCMonth(),
+        new Date(baseUTC).getUTCDate(),
+        hours,
+        minutes,
+        0
+    ));
+    const firstPass = new Date(localGuess.getTime() - getTimeZoneOffset(localGuess, timezone));
+    return new Date(localGuess.getTime() - getTimeZoneOffset(firstPass, timezone));
+};
+
+const convertToGMT = (day, time, timezone = Intl.DateTimeFormat().resolvedOptions().timeZone) => {
+    const d = zonedTimeToDate(day, time, timezone);
+    const jsDays = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
     return { day: jsDays[d.getUTCDay()], time: `${String(d.getUTCHours()).padStart(2, '0')}:${String(d.getUTCMinutes()).padStart(2, '0')}` };
 };
 
@@ -898,8 +932,18 @@ const AdminPanel = () => {
         time: '20:00',
         timezone: 'GMT'
     });
+    const [applications, setApplications] = useState([]);
     const [saving, setSaving] = useState(false);
     const addToast = useToast();
+
+    useEffect(() => {
+        const unsub = onSnapshot(collection(db, 'applications'), (snap) => {
+            const rows = [];
+            snap.forEach(d => rows.push({ id: d.id, ...d.data() }));
+            setApplications(rows.sort((a, b) => new Date(b.submittedAt || 0) - new Date(a.submittedAt || 0)));
+        });
+        return () => unsub();
+    }, []);
 
     const submit = async () => {
         if (!form.opponent.trim() || !form.date || !form.time) {
@@ -924,57 +968,121 @@ const AdminPanel = () => {
         }
     };
 
-    return (
-        <div className="space-y-4 max-w-2xl">
-            <div>
-                <label className="text-xs font-bold text-red-500 block mb-1">EVENT TYPE</label>
-                <Select value={form.type} onChange={e => setForm({ ...form, type: e.target.value })}>
-                    <option value="Scrim">Scrim</option>
-                    <option value="Official">Official</option>
-                    <option value="Practice">Practice</option>
-                    <option value="VOD Review">VOD Review</option>
-                    <option value="Meeting">Meeting</option>
-                </Select>
-            </div>
-            <div>
-                <label className="text-xs font-bold text-red-500 block mb-1">
-                    {form.type === 'VOD Review' ? 'TOPIC' : 'OPPONENT'}
-                </label>
-                <Input
-                    value={form.opponent}
-                    onChange={e => setForm({ ...form, opponent: e.target.value })}
-                    placeholder={form.type === 'VOD Review' ? 'e.g. Reviewing Ascent Scrim' : 'e.g. Team Liquid'}
-                />
-            </div>
+    const approveApplication = async (application) => {
+        const memberName = safeDocId(application.user || application.ign || application.displayName);
+        try {
+            await setDoc(doc(db, 'roster', memberName), {
+                uid: application.uid || '',
+                role: 'Tryout',
+                rank: application.rank || 'Unranked',
+                ingameRole: application.role || 'Flex',
+                gameId: application.ign || application.user || '',
+                tracker: application.tracker || '',
+                notes: application.why || application.exp || '',
+                joinedAt: new Date().toISOString()
+            }, { merge: true });
+            await deleteDoc(doc(db, 'applications', application.id));
+            addToast(`${memberName} approved`);
+        } catch (error) {
+            console.error('Approve application failed:', error);
+            addToast('Unable to approve application', 'error');
+        }
+    };
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                    <label className="text-xs font-bold text-red-500 block mb-1">MAP</label>
-                    <Select value={form.map} onChange={e => setForm({ ...form, map: e.target.value })}>
-                        <option value="General">General / None</option>
-                        {MAPS.map(m => <option key={m} value={m}>{m}</option>)}
-                    </Select>
+    const rejectApplication = async (id) => {
+        try {
+            await deleteDoc(doc(db, 'applications', id));
+            addToast('Application removed');
+        } catch (error) {
+            console.error('Reject application failed:', error);
+            addToast('Unable to remove application', 'error');
+        }
+    };
+
+    return (
+        <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
+            <Card>
+                <h3 className="text-xl font-black text-white uppercase mb-4">Schedule Event</h3>
+                <div className="space-y-4">
+                    <div>
+                        <label className="text-xs font-bold text-red-500 block mb-1">EVENT TYPE</label>
+                        <Select value={form.type} onChange={e => setForm({ ...form, type: e.target.value })}>
+                            <option value="Scrim">Scrim</option>
+                            <option value="Official">Official</option>
+                            <option value="Practice">Practice</option>
+                            <option value="VOD Review">VOD Review</option>
+                            <option value="Meeting">Meeting</option>
+                        </Select>
+                    </div>
+                    <div>
+                        <label className="text-xs font-bold text-red-500 block mb-1">
+                            {form.type === 'VOD Review' ? 'TOPIC' : 'OPPONENT'}
+                        </label>
+                        <Input
+                            value={form.opponent}
+                            onChange={e => setForm({ ...form, opponent: e.target.value })}
+                            placeholder={form.type === 'VOD Review' ? 'e.g. Reviewing Ascent Scrim' : 'e.g. Team Liquid'}
+                        />
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                            <label className="text-xs font-bold text-red-500 block mb-1">MAP</label>
+                            <Select value={form.map} onChange={e => setForm({ ...form, map: e.target.value })}>
+                                <option value="General">General / None</option>
+                                {MAPS.map(m => <option key={m}>{m}</option>)}
+                            </Select>
+                        </div>
+                        <div>
+                            <label className="text-xs font-bold text-red-500 block mb-1">TIMEZONE</label>
+                            <Select value={form.timezone} onChange={e => setForm({ ...form, timezone: e.target.value })}>
+                                {timezones.map(t => <option key={t}>{t}</option>)}
+                            </Select>
+                        </div>
+                    </div>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                            <label className="text-xs font-bold text-red-500 block mb-1">DATE</label>
+                            <Input type="date" value={form.date} onChange={e => setForm({ ...form, date: e.target.value })} className="[color-scheme:dark]" />
+                        </div>
+                        <div>
+                            <label className="text-xs font-bold text-red-500 block mb-1">TIME</label>
+                            <Input type="time" value={form.time} onChange={e => setForm({ ...form, time: e.target.value })} className="[color-scheme:dark]" />
+                        </div>
+                    </div>
+                    <ButtonPrimary onClick={submit} disabled={saving} className="w-full py-3">
+                        {saving ? 'SCHEDULING...' : 'SCHEDULE EVENT'}
+                    </ButtonPrimary>
                 </div>
-                <div>
-                    <label className="text-xs font-bold text-red-500 block mb-1">TIMEZONE</label>
-                    <Select value={form.timezone} onChange={e => setForm({ ...form, timezone: e.target.value })}>
-                        {timezones.map(t => <option key={t} value={t}>{t}</option>)}
-                    </Select>
+            </Card>
+
+            <Card>
+                <div className="flex items-center justify-between mb-4">
+                    <h3 className="text-xl font-black text-white uppercase">Applications</h3>
+                    <span className="text-[10px] font-black text-red-400 bg-red-950/30 border border-red-900/40 px-2 py-1 rounded-md">{applications.length} PENDING</span>
                 </div>
-            </div>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                    <label className="text-xs font-bold text-red-500 block mb-1">DATE</label>
-                    <Input type="date" value={form.date} onChange={e => setForm({ ...form, date: e.target.value })} className="[color-scheme:dark]" />
+                <div className="space-y-3 max-h-[520px] overflow-y-auto custom-scrollbar pr-1">
+                    {applications.length ? applications.map(application => (
+                        <div key={application.id} className="bg-black/40 border border-neutral-800 rounded-xl p-4 space-y-3">
+                            <div className="flex justify-between gap-3">
+                                <div>
+                                    <div className="font-black text-white">{application.user || application.ign || 'Unknown Player'}</div>
+                                    <div className="text-xs text-neutral-500">{application.rank || 'Unranked'} • {application.role || 'Flex'}</div>
+                                </div>
+                                <div className="text-[10px] text-neutral-600 font-mono">{application.submittedAt ? new Date(application.submittedAt).toLocaleDateString() : 'No date'}</div>
+                            </div>
+                            {application.tracker && <a href={application.tracker} target="_blank" rel="noreferrer" className="block text-xs text-red-400 hover:text-red-300 truncate">{application.tracker}</a>}
+                            {(application.why || application.exp) && <p className="text-sm text-neutral-400 leading-relaxed line-clamp-3">{application.why || application.exp}</p>}
+                            <div className="flex gap-2">
+                                <ButtonPrimary onClick={() => approveApplication(application)} className="flex-1 text-xs py-2">Approve</ButtonPrimary>
+                                <ButtonSecondary onClick={() => rejectApplication(application.id)} className="text-xs py-2">Reject</ButtonSecondary>
+                            </div>
+                        </div>
+                    )) : (
+                        <div className="p-8 text-center text-sm text-neutral-500 border border-dashed border-neutral-800 rounded-xl">No pending applications.</div>
+                    )}
                 </div>
-                <div>
-                    <label className="text-xs font-bold text-red-500 block mb-1">TIME</label>
-                    <Input type="time" value={form.time} onChange={e => setForm({ ...form, time: e.target.value })} className="[color-scheme:dark]" />
-                </div>
-            </div>
-            <ButtonPrimary onClick={submit} disabled={saving} className="w-full py-3">
-                {saving ? 'SCHEDULING...' : 'SCHEDULE EVENT'}
-            </ButtonPrimary>
+            </Card>
         </div>
     );
 };
@@ -3454,6 +3562,8 @@ function SyrixDashboard({ onBack }) {
         return [...new Set([...allRosterNames, ...Object.keys(availabilities)])].sort();
     }, [allRosterNames, availabilities]);
 
+    const currentMemberName = safeDocId(rosterName || currentUser?.displayName || currentUser?.uid, 'Guest');
+
     // Process Availability for display
     const displayAvail = useMemo(() => {
         const c = {};
@@ -3473,6 +3583,19 @@ function SyrixDashboard({ onBack }) {
         return c;
     }, [availabilities, userTimezone]);
 
+    useEffect(() => {
+        const currentDaySlot = (displayAvail[currentMemberName] || []).find(s => s.day === day);
+        if (!currentDaySlot) {
+            setStart('12:00');
+            setEnd('23:30');
+            setRole('Flex');
+            return;
+        }
+        setStart(currentDaySlot.start === '24:00' ? '23:59' : currentDaySlot.start);
+        setEnd(currentDaySlot.end === '24:00' ? '23:59' : currentDaySlot.end);
+        setRole(currentDaySlot.role || 'Flex');
+    }, [currentMemberName, day, displayAvail]);
+
     const openModal = (t, c, f) => { setModalContent({ title: t, children: c, onConfirm: f }); setIsModalOpen(true); };
 
     const saveAvail = async () => {
@@ -3480,9 +3603,9 @@ function SyrixDashboard({ onBack }) {
         if (!start || !end) return addToast('Start and end times are required', 'error');
         if (start === end) return addToast('Start and end times cannot match', 'error');
 
-        const finalName = rosterName || currentUser.displayName || currentUser.uid;
-        const gmtStart = convertToGMT(day, start);
-        const gmtEnd = convertToGMT(day, end);
+        const finalName = currentMemberName;
+        const gmtStart = convertToGMT(day, start, userTimezone);
+        const gmtEnd = convertToGMT(day, end, userTimezone);
         const existing = availabilities[finalName] || [];
         const nextSlots = [
             ...existing.filter(s => convertFromGMT(s.day, s.start, userTimezone).day !== day),
@@ -3509,9 +3632,15 @@ function SyrixDashboard({ onBack }) {
     };
 
     const clearDay = async () => {
-        const finalName = rosterName || currentUser.displayName || 'Guest';
+        const finalName = currentMemberName;
         const old = availabilities[finalName] || [];
-        await setDoc(doc(db, 'availabilities', finalName), { slots: old.filter(s => convertFromGMT(s.day, s.start, userTimezone).day !== day) });
+        await setDoc(doc(db, 'availabilities', finalName), {
+            name: finalName,
+            uid: currentUser.uid,
+            slots: old.filter(s => convertFromGMT(s.day, s.start, userTimezone).day !== day),
+            lastUpdated: new Date().toISOString(),
+            timezone: userTimezone
+        }, { merge: true });
         setIsModalOpen(false);
         addToast(`Cleared ${day}`);
     };
@@ -3580,11 +3709,11 @@ function SyrixDashboard({ onBack }) {
                         <div className="lg:col-span-4 space-y-8">
                             <CaptainsMessage />
                             <LeaveLogger members={dynamicMembers} rosterName={rosterName} />
-                            <Card className="border-red-900/20"><div className="absolute top-0 left-0 w-1 h-full bg-red-600/50"></div><h2 className="text-xl font-bold text-white mb-6 uppercase tracking-wide">Set Availability</h2><div className="space-y-4"><div><label className="text-[10px] font-black text-red-500 uppercase mb-1 block">Day</label><Select value={day} onChange={e => setDay(e.target.value)}>{DAYS.map(d => <option key={d} value={d}>{d}</option>)}</Select></div><div className="grid grid-cols-2 gap-3"><div><label className="text-[10px] font-black text-red-500 uppercase mb-1 block">Start</label><Input type="time" value={start} onChange={e => setStart(e.target.value)} className="[color-scheme:dark]" /></div><div><label className="text-[10px] font-black text-red-500 uppercase mb-1 block">End</label><Input type="time" value={end} onChange={e => setEnd(e.target.value)} className="[color-scheme:dark]" /></div></div><div><label className="text-[10px] font-black text-red-500 uppercase mb-1 block">Pref. Role</label><div className="flex gap-2 overflow-x-auto pb-2 scrollbar-hide">{ROLES.map(r => (<button key={r} onClick={() => setRole(r)} className={`px-3 py-2 rounded-lg text-xs font-black border transition-all whitespace-nowrap flex items-center justify-center ${role === r ? 'bg-red-600 text-white border-red-500' : 'bg-black/50 border-neutral-800 text-neutral-500 hover:text-white'}`}>{ROLE_ABBREVIATIONS[r] || r}</button>))}</div></div><div className="pt-2 flex gap-2"><ButtonPrimary onClick={saveAvail} disabled={saveStatus !== 'idle'} className="flex-1">{saveStatus === 'idle' ? 'Save Slot' : 'Saved!'}</ButtonPrimary><ButtonSecondary onClick={() => openModal('Clear Day', `Clear all for ${day}?`, clearDay)}>Clear</ButtonSecondary></div></div></Card>
+                            <Card className="border-red-900/20"><div className="absolute top-0 left-0 w-1 h-full bg-red-600/50"></div><h2 className="text-xl font-bold text-white mb-6 uppercase tracking-wide">Set Availability</h2><div className="space-y-4"><div><label className="text-[10px] font-black text-red-500 uppercase mb-1 block">Day</label><Select value={day} onChange={e => setDay(e.target.value)}>{DAYS.map(d => <option key={d} value={d}>{d}</option>)}</Select><div className="mt-2 text-[11px] text-neutral-500">Editing availability for <span className="text-neutral-300 font-bold">{currentMemberName}</span>.</div></div><div className="grid grid-cols-2 gap-3"><div><label className="text-[10px] font-black text-red-500 uppercase mb-1 block">Start</label><Input type="time" value={start} onChange={e => setStart(e.target.value)} className="[color-scheme:dark]" /></div><div><label className="text-[10px] font-black text-red-500 uppercase mb-1 block">End</label><Input type="time" value={end} onChange={e => setEnd(e.target.value)} className="[color-scheme:dark]" /></div></div><div><label className="text-[10px] font-black text-red-500 uppercase mb-1 block">Pref. Role</label><div className="flex gap-2 overflow-x-auto pb-2 scrollbar-hide">{ROLES.map(r => (<button key={r} onClick={() => setRole(r)} className={`px-3 py-2 rounded-lg text-xs font-black border transition-all whitespace-nowrap flex items-center justify-center ${role === r ? 'bg-red-600 text-white border-red-500' : 'bg-black/50 border-neutral-800 text-neutral-500 hover:text-white'}`}>{ROLE_ABBREVIATIONS[r] || r}</button>))}</div></div><div className="pt-2 flex gap-2"><ButtonPrimary onClick={saveAvail} disabled={saveStatus !== 'idle'} className="flex-1">{saveStatus === 'idle' ? 'Save Slot' : 'Saving...'}</ButtonPrimary><ButtonSecondary onClick={() => openModal('Clear Day', `Clear all for ${day}?`, clearDay)}>Clear</ButtonSecondary></div></div></Card>
                             <Card className="border-red-900/20"><div className="absolute top-0 left-0 w-1 h-full bg-red-600/50"></div><h2 className="text-xl font-bold text-white mb-6 uppercase tracking-wide">Event Operations</h2><ScrimScheduler onSchedule={schedEvent} userTimezone={userTimezone} /></Card>
                         </div>
                         <div className="lg:col-span-8 space-y-8">
-                            <div className="grid grid-cols-1 xl:grid-cols-2 gap-8"><Card><h2 className="text-lg font-bold text-white mb-4 flex justify-between items-center uppercase tracking-wide"><span>Upcoming Events</span><span className="text-[10px] bg-red-900/30 text-red-400 border border-red-900/50 px-2 py-1 rounded font-bold">{events.length} ACTIVE</span></h2><div className="space-y-3 max-h-64 overflow-y-auto pr-2 scrollbar-thin scrollbar-thumb-neutral-700">{events.length > 0 ? events.map(ev => (<div key={ev.id} className="p-3 bg-black/40 rounded-xl border border-neutral-800 flex justify-between items-center group hover:border-red-900/50 transition-colors"><div><div className="font-bold text-white text-sm group-hover:text-red-400 transition-colors">{ev.type} <span className="text-neutral-500">vs</span> {ev.opponent || 'TBD'}</div><div className="text-xs text-neutral-400 mt-1">{ev.date} @ <span className="text-white font-mono">{ev.time}</span></div></div><button onClick={() => openModal('Delete Event', 'Remove?', () => deleteEvent(ev.id))} className="text-neutral-600 hover:text-red-500">×</button></div>)) : <div className="p-6 text-center text-sm text-neutral-500 border border-dashed border-neutral-800 rounded-xl">No active events scheduled.</div>}</div></Card><Card><h2 className="text-lg font-bold text-white mb-4 uppercase tracking-wide">Availability Heatmap</h2><AvailabilityHeatmap availabilities={availabilities} members={dynamicMembers} /></Card></div>
+                            <div className="grid grid-cols-1 xl:grid-cols-2 gap-8"><Card><h2 className="text-lg font-bold text-white mb-4 flex justify-between items-center uppercase tracking-wide"><span>Upcoming Events</span><span className="text-[10px] bg-red-900/30 text-red-400 border border-red-900/50 px-2 py-1 rounded font-bold">{events.length} ACTIVE</span></h2><div className="space-y-3 max-h-64 overflow-y-auto pr-2 scrollbar-thin scrollbar-thumb-neutral-700">{events.length > 0 ? events.map(ev => (<div key={ev.id} className="p-3 bg-black/40 rounded-xl border border-neutral-800 flex justify-between items-center group hover:border-red-900/50 transition-colors"><div><div className="font-bold text-white text-sm group-hover:text-red-400 transition-colors">{ev.type} <span className="text-neutral-500">vs</span> {ev.opponent || 'TBD'}</div><div className="text-xs text-neutral-400 mt-1">{ev.date} @ <span className="text-white font-mono">{ev.time}</span></div></div><button onClick={() => openModal('Delete Event', 'Remove?', () => deleteEvent(ev.id))} className="text-neutral-600 hover:text-red-500">×</button></div>)) : <div className="p-6 text-center text-sm text-neutral-500 border border-dashed border-neutral-800 rounded-xl">No active events scheduled.</div>}</div></Card><Card><h2 className="text-lg font-bold text-white mb-4 uppercase tracking-wide">Availability Heatmap</h2><AvailabilityHeatmap availabilities={displayAvail} members={dynamicMembers} /></Card></div>
                             <PerformanceWidget events={events} />
                             <Card><h2 className="text-xl font-bold text-white mb-6 uppercase tracking-wide">Detailed Timeline <span className="text-neutral-500 text-sm normal-case">({userTimezone})</span></h2><div className="overflow-x-auto scrollbar-thin scrollbar-thumb-neutral-700"><table className="w-full text-left border-collapse min-w-[600px]"><thead><tr className="border-b border-neutral-800"><th className="p-3 text-xs font-bold text-neutral-500 uppercase tracking-wider w-32">Team Member</th>{SHORT_DAYS.map(day => (<th key={day} className="p-3 text-xs font-bold text-red-600 uppercase tracking-wider text-center border-l border-neutral-800">{day}</th>))}</tr></thead><tbody className="divide-y divide-neutral-800/50">{dynamicMembers.map(member => (<tr key={member} className="hover:bg-neutral-800/30 transition-colors group"><td className="p-4 font-bold text-white text-sm flex items-center gap-2"><div className="w-2 h-2 rounded-full bg-red-500 shadow-red-500/50 shadow-sm"></div>{member}</td>{DAYS.map((day) => { const slots = (displayAvail[member] || []).filter(s => s.day === day); return (<td key={day} className="p-2 align-middle border-l border-neutral-800/50"><div className="flex flex-col gap-1 items-center justify-center">{slots.length > 0 ? slots.map((s, i) => (<div key={i} className="bg-gradient-to-br from-red-600 to-red-700 text-white text-[10px] font-bold px-2 py-1 rounded w-full text-center shadow-md whitespace-nowrap flex items-center justify-center gap-1">{s.start}-{s.end}<span className="opacity-75 ml-1 text-[9px] border border-white/20 px-1 rounded bg-black/20">{ROLE_ABBREVIATIONS[s.role] || s.role}</span></div>)) : <div className="h-1 w-4 bg-neutral-800 rounded-full"></div>}</div></td>); })}</tr>))}</tbody></table></div></Card>
                         </div>
