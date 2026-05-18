@@ -1277,7 +1277,7 @@ function StratBook() {
     const [side, setSide] = useState('Attack');
     const [tool, setTool] = useState('select');
     const [color, setColor] = useState('#ef4444');
-    const [strokeWidth, setStrokeWidth] = useState(3);
+    const [strokeWidth, setStrokeWidth] = useState(0.45);
     const [selectedAgent, setSelectedAgent] = useState(AGENT_NAMES[0]);
     const [selectedAbility, setSelectedAbility] = useState(null);
     const [objects, setObjects] = useState([]);
@@ -1421,13 +1421,13 @@ function StratBook() {
 
     const circleStyleFor = (kind) => {
         const styles = {
-            smoke: { fill: 'rgba(226, 232, 240, 0.20)', stroke: '#e2e8f0', r: 7 },
-            molly: { fill: 'rgba(239, 68, 68, 0.22)', stroke: '#ef4444', r: 6 },
-            flash: { fill: 'rgba(250, 204, 21, 0.22)', stroke: '#facc15', r: 4.5 },
-            recon: { fill: 'rgba(59, 130, 246, 0.18)', stroke: '#3b82f6', r: 6 },
-            stun: { fill: 'rgba(249, 115, 22, 0.18)', stroke: '#f97316', r: 5.5 }
+            smoke: { fill: 'rgba(226, 232, 240, 0.20)', stroke: '#e2e8f0', r: 4.2 },
+            molly: { fill: 'rgba(239, 68, 68, 0.22)', stroke: '#ef4444', r: 3.2 },
+            flash: { fill: 'rgba(250, 204, 21, 0.22)', stroke: '#facc15', r: 2.2 },
+            recon: { fill: 'rgba(59, 130, 246, 0.18)', stroke: '#3b82f6', r: 3 },
+            stun: { fill: 'rgba(249, 115, 22, 0.18)', stroke: '#f97316', r: 3 }
         };
-        return styles[kind] || { fill: `${color}30`, stroke: color, r: 5 };
+        return styles[kind] || { fill: `${color}30`, stroke: color, r: 2.8 };
     };
 
     const addObjectAt = (point) => {
@@ -1639,8 +1639,8 @@ function StratBook() {
             return (
                 <g key={obj.id} className="cursor-pointer" onPointerDown={(e) => startDragObject(e, obj, 'body')}>
                     <line x1={`${obj.x1}%`} y1={`${obj.y1}%`} x2={`${obj.x2}%`} y2={`${obj.y2}%`} stroke="transparent" strokeWidth="3%" />
-                    <line x1={`${obj.x1}%`} y1={`${obj.y1}%`} x2={`${obj.x2}%`} y2={`${obj.y2}%`} stroke={obj.color} strokeWidth={obj.width || 3} strokeLinecap="round" />
-                    {obj.type === 'arrow' && <path d="M 0 0 L -2.8 -1.8 L -2.8 1.8 Z" transform={renderArrowHead(obj)} fill={obj.color} />}
+                    <line x1={`${obj.x1}%`} y1={`${obj.y1}%`} x2={`${obj.x2}%`} y2={`${obj.y2}%`} stroke={obj.color} strokeWidth={obj.width || 0.45} strokeLinecap="round" />
+                    {obj.type === 'arrow' && <path d="M 0 0 L -1.4 -0.9 L -1.4 0.9 Z" transform={renderArrowHead(obj)} fill={obj.color} />}
                     {isSelected && (
                         <>
                             <circle cx={`${obj.x1}%`} cy={`${obj.y1}%`} r="1.1%" fill="#020617" stroke="#22c55e" strokeWidth="2" onPointerDown={(e) => startDragObject(e, obj, 'start')} />
@@ -1653,30 +1653,30 @@ function StratBook() {
 
         if (obj.type === 'freehand') {
             const points = obj.points?.map(p => `${p.x},${p.y}`).join(' ') || '';
-            return <polyline key={obj.id} points={points} fill="none" stroke={obj.color} strokeWidth={obj.width || 3} strokeLinecap="round" strokeLinejoin="round" onPointerDown={(e) => startDragObject(e, obj)} className="cursor-pointer" />;
+            return <polyline key={obj.id} points={points} fill="none" stroke={obj.color} strokeWidth={obj.width || 0.45} strokeLinecap="round" strokeLinejoin="round" onPointerDown={(e) => startDragObject(e, obj)} className="cursor-pointer" />;
         }
 
         if (obj.type === 'ability' || obj.type === 'area') {
             return (
                 <g key={obj.id} className="cursor-grab" onPointerDown={(e) => startDragObject(e, obj)}>
                     <circle cx={`${obj.x}%`} cy={`${obj.y}%`} r={`${(obj.radius || 5) * (obj.size || 1)}%`} fill={obj.fill} stroke={obj.stroke} strokeWidth="2" strokeDasharray={obj.kind === 'flash' ? '4 3' : '0'} />
-                    {obj.icon && <image href={obj.icon} x={`${obj.x - 2}%`} y={`${obj.y - 2}%`} width="4%" height="4%" opacity="0.95" />}
-                    {isSelected && <circle cx={`${obj.x}%`} cy={`${obj.y}%`} r={`${(obj.radius || 5) * (obj.size || 1) + 1}%`} fill="none" stroke="#22c55e" strokeWidth="2" />}
+                    {obj.icon && <image href={obj.icon} x={`${obj.x - 1.2}%`} y={`${obj.y - 1.2}%`} width="2.4%" height="2.4%" opacity="0.95" />}
+                    {isSelected && <circle cx={`${obj.x}%`} cy={`${obj.y}%`} r={`${(obj.radius || 5) * (obj.size || 1) + 0.45}%`} fill="none" stroke="#22c55e" strokeWidth="1.2" />}
                 </g>
             );
         }
 
         return (
-            <foreignObject key={obj.id} x={`${obj.x - 3}%`} y={`${obj.y - 3}%`} width="6%" height="6%" className="overflow-visible">
+            <foreignObject key={obj.id} x={`${obj.x - 2}%`} y={`${obj.y - 2}%`} width="4%" height="4%" className="overflow-visible">
                 <div
-                    className={`relative flex items-center justify-center select-none cursor-grab ${isSelected ? 'ring-2 ring-green-400 rounded-full' : ''}`}
+                    className={`relative flex h-full w-full items-center justify-center select-none cursor-grab ${isSelected ? 'ring-1 ring-green-400 rounded-full' : ''}`}
                     style={{ transform: `rotate(${obj.rotation || 0}deg) scale(${obj.size || 1})`, transformOrigin: 'center' }}
                     onPointerDown={(e) => startDragObject(e, obj)}
                 >
-                    {obj.type === 'agent' && (obj.icon ? <img src={obj.icon} alt={obj.name} className="w-10 h-10 rounded-full border-2 border-white bg-black shadow-lg pointer-events-none" /> : <div className="w-10 h-10 rounded-full border-2 border-white bg-black text-white flex items-center justify-center text-xs font-black">{obj.name?.slice(0, 2)}</div>)}
-                    {obj.type === 'text' && <div className="px-2 py-1 rounded bg-black/80 border border-white/20 text-xs font-black uppercase whitespace-nowrap shadow-lg" style={{ color: obj.color }}>{obj.text}</div>}
-                    {obj.type === 'spike' && <div className="w-9 h-9 rotate-45 bg-yellow-400 border-2 border-yellow-100 shadow-[0_0_18px_rgba(250,204,21,0.7)]" />}
-                    {obj.type === 'ping' && <div className="w-10 h-10 rounded-full border-4 bg-transparent animate-pulse" style={{ borderColor: obj.color }} />}
+                    {obj.type === 'agent' && (obj.icon ? <img src={obj.icon} alt={obj.name} className="h-full w-full rounded-full border border-white bg-black shadow-lg pointer-events-none" /> : <div className="h-full w-full rounded-full border border-white bg-black text-white flex items-center justify-center text-[8px] font-black">{obj.name?.slice(0, 2)}</div>)}
+                    {obj.type === 'text' && <div className="px-1.5 py-0.5 rounded bg-black/80 border border-white/20 text-[9px] font-black uppercase whitespace-nowrap shadow-lg" style={{ color: obj.color }}>{obj.text}</div>}
+                    {obj.type === 'spike' && <div className="h-3/4 w-3/4 rotate-45 bg-yellow-400 border border-yellow-100 shadow-[0_0_10px_rgba(250,204,21,0.65)]" />}
+                    {obj.type === 'ping' && <div className="h-full w-full rounded-full border-2 bg-transparent animate-pulse" style={{ borderColor: obj.color }} />}
                 </div>
             </foreignObject>
         );
@@ -1723,7 +1723,7 @@ function StratBook() {
 
                     <div>
                         <label className="text-[10px] font-black text-red-500 uppercase mb-2 block">Line Width</label>
-                        <input type="range" min="1" max="10" value={strokeWidth} onChange={e => setStrokeWidth(Number(e.target.value))} className="w-full accent-red-600" />
+                        <input type="range" min="0.15" max="1.5" step="0.05" value={strokeWidth} onChange={e => setStrokeWidth(Number(e.target.value))} className="w-full accent-red-600" />
                     </div>
 
                     <div className="grid grid-cols-2 gap-2">
@@ -1799,7 +1799,7 @@ function StratBook() {
                             <div className="text-sm font-bold text-white truncate">{selectedObject.name || selectedObject.text || selectedObject.type}</div>
                             {'size' in selectedObject && <div><label className="text-[10px] text-neutral-500 uppercase font-bold">Size</label><input type="range" min="0.5" max="2.5" step="0.1" value={selectedObject.size || 1} onChange={e => updateSelected({ size: Number(e.target.value) })} className="w-full accent-red-600" /></div>}
                             {'rotation' in selectedObject && <div><label className="text-[10px] text-neutral-500 uppercase font-bold">Rotation</label><input type="range" min="0" max="360" value={selectedObject.rotation || 0} onChange={e => updateSelected({ rotation: Number(e.target.value) })} className="w-full accent-red-600" /></div>}
-                            {'radius' in selectedObject && <div><label className="text-[10px] text-neutral-500 uppercase font-bold">Radius</label><input type="range" min="2" max="16" step="0.5" value={selectedObject.radius || 5} onChange={e => updateSelected({ radius: Number(e.target.value) })} className="w-full accent-red-600" /></div>}
+                            {'radius' in selectedObject && <div><label className="text-[10px] text-neutral-500 uppercase font-bold">Radius</label><input type="range" min="1" max="8" step="0.25" value={selectedObject.radius || 5} onChange={e => updateSelected({ radius: Number(e.target.value) })} className="w-full accent-red-600" /></div>}
                             {selectedObject.type === 'text' && <Input value={selectedObject.text} onChange={e => updateSelected({ text: e.target.value })} />}
                         </div>
                     </div>
