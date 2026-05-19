@@ -2254,6 +2254,8 @@ function StratPreviewBoard({ strat, mapImage, className = '' }) {
 function StratLibrary() {
     const { mapImages } = useValorantData();
     const addToast = useToast();
+    const MAX_UPLOAD_SIZE_MB = 3;
+    const MAX_UPLOAD_SIZE_BYTES = MAX_UPLOAD_SIZE_MB * 1024 * 1024;
     const [selectedMap, setSelectedMap] = useState(MAPS[0]);
     const [side, setSide] = useState('Attack');
     const [appStrats, setAppStrats] = useState([]);
@@ -2314,7 +2316,7 @@ function StratLibrary() {
         const file = event.target.files?.[0];
         if (!file) return;
         if (!file.type.startsWith('image/')) return addToast('Please choose an image file', 'error');
-        if (file.size > 700 * 1024) return addToast('Image is too large. Use an image under 700KB or paste an image URL.', 'error');
+        if (file.size > MAX_UPLOAD_SIZE_BYTES) return addToast(`Image is too large. Use an image under ${MAX_UPLOAD_SIZE_MB}MB or paste an image URL.`, 'error');
 
         const reader = new FileReader();
         reader.onload = () => setUploadForm(prev => ({ ...prev, imageUrl: String(reader.result || '') }));
