@@ -3266,6 +3266,164 @@ function NotificationCenter({ events }) {
     );
 }
 
+function PlayerAdminNotes({ members, currentUserName }) {
+    const [notes, setNotes] = useState([]);
+    const [form, setForm] = useState({
+        player: members[0] || '',
+        rating: '7',
+        playstyle: '',
+        comms: '',
+        improvement: '',
+        notes: ''
+    });
+    const [saving, setSaving] = useState(false);
+    const addToast = useToast();
+
+    useEffect(() => {
+        if (!form.player && members.length) setForm(prev => ({ ...prev, player: members[0] }));
+    }, [form.player, members]);
+
+    useEffect(() => {
+        const unsub = onSnapshot(collection(db, 'admin_player_notes'), (snap) => {
+            const rows = [];
+            snap.forEach(d => rows.push({ id: d.id, ...d.data() }));
+            setNotes(rows.sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0)));
+        });
+        return () => unsub();
+    }, []);
+
+    const selectedNotes = notes.filter(note => note.player === form.player);
+    const averageRating = selectedNotes.length
+        ? (selectedNotes.reduce((sum, note) => sum + Number(note.rating || 0), 0) / selectedNotes.length).toFixed(1)
+        : 'N/A';
+
+    const saveNote = async () => {
+        if (!form.player) return addToast('Select a player first', 'error');
+        const rating = Number(form.rating);
+        if (Number.isNaN(rating) || rating < 1 || rating > 10) return addToast('Rating must be between 1 and 10', 'error');
+        if (!form.playstyle.trim() && !form.comms.trim() && !form.improvement.trim() && !form.notes.trim()) {
+            return addToast('Add at least one coaching note', 'error');
+        }
+
+        setSaving(true);
+        try {
+            await addDoc(collection(db, 'admin_player_notes'), {
+                player: form.player,
+                rating,
+                playstyle: form.playstyle.trim(),
+                comms: form.comms.trim(),
+                improvement: form.improvement.trim(),
+                notes: form.notes.trim(),
+                author: currentUserName || 'Admin',
+                createdAt: new Date().toISOString()
+            });
+            await writeAuditLog('Player note added', `${form.player} rated ${rating}/10`, currentUserName || 'Admin');
+            setForm(prev => ({ ...prev, rating: '7', playstyle: '', comms: '', improvement: '', notes: '' }));
+            addToast('Player note saved');
+        } catch (error) {
+            console.error('Player note save failed:', error);
+            addToast('Unable to save player note', 'error');
+        } finally {
+            setSaving(false);
+        }
+    };
+
+    const removeNote = async (note) => {
+        try {
+            await deleteDoc(doc(db, 'admin_player_notes', note.id));
+            await writeAuditLog('Player note deleted', `${note.player} note removed`, currentUserName || 'Admin');
+            addToast('Player note removed');
+        } catch (error) {
+            console.error('Player note delete failed:', error);
+            addToast('Unable to delete player note', 'error');
+        }
+    };
+
+    return (
+        <div className="animate-fade-in grid grid-cols-1 xl:grid-cols-[0.82fr_1.18fr] gap-6">
+            <Card>
+                <div className="text-[10px] uppercase tracking-[0.28em] text-red-400 font-black mb-3">Private Coaching</div>
+                <h2 className="text-3xl font-black text-white uppercase italic mb-5">Player Notes</h2>
+                <div className="space-y-4">
+                    <div>
+                        <label className="text-[10px] font-black text-red-500 uppercase mb-1 block">Player</label>
+                        <Select value={form.player} onChange={e => setForm({ ...form, player: e.target.value })}>
+                            <option value="">Select player</option>
+                            {members.map(member => <option key={member} value={member}>{member}</option>)}
+                        </Select>
+                    </div>
+                    <div>
+                        <label className="text-[10px] font-black text-red-500 uppercase mb-1 block">Game Rating: {form.rating}/10</label>
+                        <input type="range" min="1" max="10" step="1" value={form.rating} onChange={e => setForm({ ...form, rating: e.target.value })} className="w-full accent-red-600" />
+                        <div className="mt-2 grid grid-cols-10 gap-1">
+                            {Array.from({ length: 10 }, (_, index) => (
+                                <button key={index + 1} onClick={() => setForm({ ...form, rating: String(index + 1) })} className={`h-8 rounded-md border text-[10px] font-black ${Number(form.rating) === index + 1 ? 'bg-red-600 border-red-500 text-white' : 'bg-black/40 border-white/10 text-neutral-500 hover:text-white'}`}>{index + 1}</button>
+                            ))}
+                        </div>
+                    </div>
+                    <div>
+                        <label className="text-[10px] font-black text-red-500 uppercase mb-1 block">Playstyle</label>
+                        <textarea value={form.playstyle} onChange={e => setForm({ ...form, playstyle: e.target.value })} placeholder="Positioning, pacing, decision-making, agent comfort..." className="w-full h-24 bg-black/40 border border-neutral-800 rounded-xl p-3 text-white text-sm outline-none focus:border-red-600 placeholder-neutral-600 resize-y" />
+                    </div>
+                    <div>
+                        <label className="text-[10px] font-black text-red-500 uppercase mb-1 block">Comms</label>
+                        <textarea value={form.comms} onChange={e => setForm({ ...form, comms: e.target.value })} placeholder="Clarity, timing, mid-round info, emotional control..." className="w-full h-24 bg-black/40 border border-neutral-800 rounded-xl p-3 text-white text-sm outline-none focus:border-red-600 placeholder-neutral-600 resize-y" />
+                    </div>
+                    <div>
+                        <label className="text-[10px] font-black text-red-500 uppercase mb-1 block">What To Improve</label>
+                        <textarea value={form.improvement} onChange={e => setForm({ ...form, improvement: e.target.value })} placeholder="Specific habits, drills, review points, next-session focus..." className="w-full h-28 bg-black/40 border border-neutral-800 rounded-xl p-3 text-white text-sm outline-none focus:border-red-600 placeholder-neutral-600 resize-y" />
+                    </div>
+                    <div>
+                        <label className="text-[10px] font-black text-red-500 uppercase mb-1 block">Extra Notes</label>
+                        <textarea value={form.notes} onChange={e => setForm({ ...form, notes: e.target.value })} placeholder="Anything else admins/coaches should remember..." className="w-full h-24 bg-black/40 border border-neutral-800 rounded-xl p-3 text-white text-sm outline-none focus:border-red-600 placeholder-neutral-600 resize-y" />
+                    </div>
+                    <ButtonPrimary onClick={saveNote} disabled={saving} className="w-full py-3 text-xs">{saving ? 'Saving...' : 'Save Player Note'}</ButtonPrimary>
+                </div>
+            </Card>
+
+            <Card>
+                <div className="flex flex-col md:flex-row md:items-end md:justify-between gap-4 mb-5">
+                    <div>
+                        <div className="text-[10px] uppercase tracking-[0.28em] text-neutral-500 font-black mb-2">Review History</div>
+                        <h3 className="text-2xl font-black text-white uppercase italic">{form.player || 'Select Player'}</h3>
+                    </div>
+                    <div className="grid grid-cols-2 gap-3 min-w-[12rem]">
+                        <div className="bg-black/40 border border-white/10 p-3 rounded-xl">
+                            <div className="text-[10px] uppercase tracking-widest text-neutral-500 font-black">Avg Rating</div>
+                            <div className="mt-1 text-2xl font-black text-white">{averageRating}</div>
+                        </div>
+                        <div className="bg-black/40 border border-white/10 p-3 rounded-xl">
+                            <div className="text-[10px] uppercase tracking-widest text-neutral-500 font-black">Notes</div>
+                            <div className="mt-1 text-2xl font-black text-white">{selectedNotes.length}</div>
+                        </div>
+                    </div>
+                </div>
+                <div className="space-y-3 max-h-[78vh] overflow-y-auto pr-2 custom-scrollbar">
+                    {selectedNotes.length ? selectedNotes.map(note => (
+                        <div key={note.id} className="bg-black/45 border border-white/10 rounded-xl p-4">
+                            <div className="flex items-start justify-between gap-3">
+                                <div>
+                                    <div className="flex flex-wrap gap-2 mb-2">
+                                        <span className="text-[9px] uppercase tracking-widest bg-red-600 text-white px-2 py-1 rounded">{note.rating || 'N/A'}/10</span>
+                                        <span className="text-[9px] uppercase tracking-widest bg-white/5 border border-white/10 text-neutral-400 px-2 py-1 rounded">{note.author || 'Admin'}</span>
+                                        <span className="text-[9px] uppercase tracking-widest text-neutral-500">{note.createdAt ? new Date(note.createdAt).toLocaleDateString() : 'Date TBD'}</span>
+                                    </div>
+                                    <div className="text-lg font-black text-white">{note.player}</div>
+                                </div>
+                                <button onClick={() => removeNote(note)} className="text-neutral-600 hover:text-red-500 text-xl leading-none">×</button>
+                            </div>
+                            {note.playstyle && <div className="mt-3 border-t border-white/10 pt-3"><div className="text-[9px] uppercase tracking-widest text-neutral-500 font-black mb-1">Playstyle</div><p className="text-sm text-neutral-300 whitespace-pre-wrap">{note.playstyle}</p></div>}
+                            {note.comms && <div className="mt-3 border-t border-white/10 pt-3"><div className="text-[9px] uppercase tracking-widest text-neutral-500 font-black mb-1">Comms</div><p className="text-sm text-neutral-300 whitespace-pre-wrap">{note.comms}</p></div>}
+                            {note.improvement && <div className="mt-3 border-t border-white/10 pt-3"><div className="text-[9px] uppercase tracking-widest text-neutral-500 font-black mb-1">Improve</div><p className="text-sm text-neutral-300 whitespace-pre-wrap">{note.improvement}</p></div>}
+                            {note.notes && <div className="mt-3 border-t border-white/10 pt-3"><div className="text-[9px] uppercase tracking-widest text-neutral-500 font-black mb-1">Extra</div><p className="text-sm text-neutral-300 whitespace-pre-wrap">{note.notes}</p></div>}
+                        </div>
+                    )) : <div className="p-8 text-center text-sm text-neutral-500 border border-dashed border-neutral-800 rounded-xl">No private notes for this player yet.</div>}
+                </div>
+            </Card>
+        </div>
+    );
+}
+
 function AuditLog() {
     const [logs, setLogs] = useState([]);
 
@@ -4165,7 +4323,7 @@ function SyrixDashboard({ onBack }) {
         { label: 'Team', items: [{ id: 'roster', label: 'Roster' }, { id: 'availability', label: 'Availability' }, { id: 'matches', label: 'Matches' }] },
         { label: 'Valorant', items: [{ id: 'practice', label: 'Practice' }, { id: 'strats', label: 'Stratbook' }, { id: 'comps', label: 'Comps' }, { id: 'prep', label: 'Match Prep' }, { id: 'mapveto', label: 'Map Veto' }] },
         { label: 'Library', items: [{ id: 'lineups', label: 'Lineups' }, { id: 'playbook', label: 'Playbook' }] },
-        ...(isAdmin ? [{ label: 'Admin', items: [{ id: 'content', label: 'Content' }, { id: 'partners', label: 'Partners' }, { id: 'audit', label: 'Audit Log' }, { id: 'admin', label: 'Admin Panel' }] }] : [])
+        ...(isAdmin ? [{ label: 'Admin', items: [{ id: 'playernotes', label: 'Player Notes' }, { id: 'content', label: 'Content' }, { id: 'partners', label: 'Partners' }, { id: 'audit', label: 'Audit Log' }, { id: 'admin', label: 'Admin Panel' }] }] : [])
     ];
     const flatNav = navGroups.flatMap(group => group.items);
     const activeLabel = flatNav.find(item => item.id === activeTab)?.label || 'Dashboard';
@@ -4188,6 +4346,7 @@ function SyrixDashboard({ onBack }) {
         mapveto: 'Track pick, ban, and comfort status for the active map pool.',
         prep: 'Create opponent files with veto plans, comps, win conditions, and review notes.',
         tasks: 'Assign and clear team action items for practice, matchday, and admin work.',
+        playernotes: 'Private coaching notes, player ratings, and improvement plans.',
         content: 'Manage public site news, merch, achievements, and media.',
         partners: 'Track partner contacts and sponsorship notes.',
         audit: 'Review a timeline of important operational changes.',
@@ -4318,6 +4477,7 @@ function SyrixDashboard({ onBack }) {
                     {activeTab === 'roster' && <div className="animate-fade-in h-full flex-1 flex flex-col"><RosterManager members={dynamicMembers} events={events} canManageRoster={isAdmin} /></div>}
                     {activeTab === 'prep' && <MatchPrep members={dynamicMembers} events={events} currentUserName={rosterName || currentUser.displayName || 'Unknown'} />}
                     {activeTab === 'tasks' && <ActionItems members={dynamicMembers} />}
+                    {activeTab === 'playernotes' && isAdmin && <PlayerAdminNotes members={dynamicMembers} currentUserName={rosterName || currentUser.displayName || 'Admin'} />}
                     {activeTab === 'partners' && isAdmin && <div className="animate-fade-in h-full"><PartnerDirectory /></div>}
                     {activeTab === 'content' && isAdmin && <div className="animate-fade-in h-full"><ContentManager /></div>}
                     {activeTab === 'audit' && isAdmin && <AuditLog />}
