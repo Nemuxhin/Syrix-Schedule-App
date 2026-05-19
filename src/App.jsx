@@ -1783,6 +1783,9 @@ function StratBook() {
 
     const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
     const norm = (value) => String(value || '').toLowerCase().replace(/\s+/g, ' ').trim();
+    const TEXT_MIN = 0.35;
+    const TEXT_DEFAULT = 0.55;
+    const TEXT_MAX = 1.25;
 
     const getAgentData = (name) => {
         if (!agentData) return null;
@@ -1821,8 +1824,9 @@ function StratBook() {
         const clean = nextObjects.map(obj => ({ ...obj }));
         const nextHistory = history.slice(0, historyStep + 1);
         nextHistory.push(clean);
-        setHistory(nextHistory);
-        setHistoryStep(nextHistory.length - 1);
+        const cappedHistory = nextHistory.slice(-80);
+        setHistory(cappedHistory);
+        setHistoryStep(cappedHistory.length - 1);
         setObjects(clean);
     }, [history, historyStep]);
 
@@ -2141,7 +2145,7 @@ function StratBook() {
         if (tool === 'text') {
             const label = window.prompt('Label text');
             if (!label) return;
-            item = { id: uid(), type: 'text', text: label, x: point.x, y: point.y, color, size: 1, side };
+            item = { id: uid(), type: 'text', text: label, x: point.x, y: point.y, color, size: TEXT_DEFAULT, rotation: 0, side };
         }
         if (tool === 'spike') item = { id: uid(), type: 'spike', x: point.x, y: point.y, color: '#facc15', size: 1, side };
         if (tool === 'ping') item = { id: uid(), type: 'ping', x: point.x, y: point.y, color, size: 1, side };
@@ -2208,7 +2212,13 @@ function StratBook() {
         }
         if (!draft) return;
         if (draft.type === 'line' || draft.type === 'arrow') setDraft(prev => ({ ...prev, x2: point.x, y2: point.y }));
-        if (draft.type === 'freehand') setDraft(prev => ({ ...prev, points: [...prev.points, point] }));
+        if (draft.type === 'freehand') {
+            setDraft(prev => {
+                const last = prev.points[prev.points.length - 1];
+                if (last && Math.hypot(point.x - last.x, point.y - last.y) < 0.35) return prev;
+                return { ...prev, points: [...prev.points, point] };
+            });
+        }
     };
 
     const finishBoardAction = () => {
@@ -2227,6 +2237,7 @@ function StratBook() {
     const startDragObject = (event, obj, handle = 'body') => {
         if (tool !== 'select') return;
         event.stopPropagation();
+        event.currentTarget.setPointerCapture?.(event.pointerId);
         const point = getBoardPoint(event);
         setSelectedId(obj.id);
         setDragging({
@@ -2379,6 +2390,21 @@ function StratBook() {
             return <polyline key={obj.id} points={points} fill="none" stroke={obj.color} strokeWidth={obj.width || 0.45} strokeLinecap="round" strokeLinejoin="round" onPointerDown={(e) => startDragObject(e, obj)} className="cursor-pointer" />;
         }
 
+        if (obj.type === 'text') {
+            const textSize = clamp(obj.size || TEXT_DEFAULT, TEXT_MIN, TEXT_MAX);
+            return (
+                <foreignObject key={obj.id} x={`${obj.x}%`} y={`${obj.y}%`} width="1%" height="1%" className="overflow-visible">
+                    <div
+                        className={`inline-flex items-center justify-center rounded-md bg-black/78 border border-white/20 px-1.5 py-0.5 text-[7px] font-black uppercase tracking-wide whitespace-nowrap shadow-[0_3px_14px_rgba(0,0,0,0.8)] select-none cursor-grab ${isSelected ? 'outline outline-1 outline-green-400 outline-offset-1' : ''}`}
+                        style={{ color: obj.color, transform: `translate(-50%, -50%) rotate(${obj.rotation || 0}deg) scale(${textSize})`, transformOrigin: 'center' }}
+                        onPointerDown={(e) => startDragObject(e, obj)}
+                    >
+                        {obj.text}
+                    </div>
+                </foreignObject>
+            );
+        }
+
         if (obj.type === 'ability' || obj.type === 'area') {
             const shape = obj.shape || 'circle';
             const markerSize = 3.2 * (obj.size || 1);
@@ -2455,7 +2481,6 @@ function StratBook() {
                     onPointerDown={(e) => startDragObject(e, obj)}
                 >
                     {obj.type === 'agent' && (obj.icon ? <img src={obj.icon} alt={obj.name} className="h-full w-full object-contain drop-shadow-[0_2px_8px_rgba(0,0,0,0.95)] pointer-events-none" /> : <div className="h-full w-full text-white flex items-center justify-center text-[10px] font-black drop-shadow-[0_2px_8px_rgba(0,0,0,0.95)]">{obj.name?.slice(0, 2)}</div>)}
-                    {obj.type === 'text' && <div className="px-1.5 py-0.5 rounded bg-black/80 border border-white/20 text-[9px] font-black uppercase whitespace-nowrap shadow-lg" style={{ color: obj.color }}>{obj.text}</div>}
                     {obj.type === 'spike' && <div className="h-2/3 w-2/3 rotate-45 bg-yellow-400 border border-yellow-100 shadow-[0_0_10px_rgba(250,204,21,0.65)]" />}
                     {obj.type === 'ping' && <div className="h-4/5 w-4/5 rounded-full border-2 bg-transparent animate-pulse" style={{ borderColor: obj.color }} />}
                 </div>
@@ -2596,7 +2621,7 @@ function StratBook() {
                         <div className="text-[10px] font-black text-red-500 uppercase mb-3">Inspector</div>
                         <div className="space-y-3">
                             <div className="text-sm font-bold text-white truncate">{selectedObject.name || selectedObject.text || selectedObject.type}</div>
-                            {'size' in selectedObject && <div><label className="text-[10px] text-neutral-500 uppercase font-bold">Size</label><input type="range" min="0.5" max="2.5" step="0.1" value={selectedObject.size || 1} onChange={e => updateSelected({ size: Number(e.target.value) })} className="w-full accent-red-600" /></div>}
+                            {'size' in selectedObject && <div><label className="text-[10px] text-neutral-500 uppercase font-bold">Size</label><input type="range" min={selectedObject.type === 'text' ? TEXT_MIN : 0.5} max={selectedObject.type === 'text' ? TEXT_MAX : 2.5} step="0.05" value={selectedObject.type === 'text' ? clamp(selectedObject.size || TEXT_DEFAULT, TEXT_MIN, TEXT_MAX) : selectedObject.size || 1} onChange={e => updateSelected({ size: Number(e.target.value) })} className="w-full accent-red-600" /></div>}
                             {'rotation' in selectedObject && <div><label className="text-[10px] text-neutral-500 uppercase font-bold">Rotation</label><input type="range" min="0" max="360" value={selectedObject.rotation || 0} onChange={e => updateSelected({ rotation: Number(e.target.value) })} className="w-full accent-red-600" /></div>}
                             {selectedObject.type === 'text' && <Input value={selectedObject.text} onChange={e => updateSelected({ text: e.target.value })} />}
                         </div>
