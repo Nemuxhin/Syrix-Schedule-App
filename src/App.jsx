@@ -1,348 +1,14 @@
-import React, { useState, useEffect, useMemo, useRef, useCallback, createContext, useContext } from 'react';
-import { initializeApp } from 'firebase/app';
-import { getFirestore, collection, onSnapshot, doc, setDoc, deleteDoc, addDoc, updateDoc, query, where, getDoc, getDocs } from 'firebase/firestore';
-import { getAuth, onAuthStateChanged, signInWithPopup, signOut, OAuthProvider } from 'firebase/auth';
-
-// --- Firebase Configuration ---
-const firebaseConfig = {
-    apiKey: "AIzaSyAcZy0oY6fmwJ4Lg9Ac-Bq__eMukMC_u0w",
-    authDomain: "syrix-team-schedule.firebaseapp.com",
-    projectId: "syrix-team-schedule",
-    storageBucket: "syrix-team-schedule.firebasestorage.app",
-    messagingSenderId: "571804588891",
-    appId: "1:571804588891:web:c3c17a4859b6b4f057187e",
-    measurementId: "G-VGXG0NCTGX"
-};
-
-const app = initializeApp(firebaseConfig);
-const db = getFirestore(app);
-const auth = getAuth(app);
-const discordWebhookUrl = "https://discord.com/api/webhooks/1427426922228351042/lqw36ZxOPEnC3qK45b3vnqZvbkaYhzIxqb-uS1tex6CGOvmLYs19OwKZvslOVABdpHnD";
-
-// --- GLOBAL CONSTANTS ---
-const ADMIN_UIDS = ["M9FzRywhRIdUveh5JKUfQgJtlIB3", "SiPLxB20VzVGBZL3rTM42FsgEy52", "pmXgTX5dxbVns0nnO54kl1BR07A3"];
-const ADMIN_ROLES = ["Manager"];
-const DAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
-const SHORT_DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
-const MAPS = ["Ascent", "Bind", "Breeze", "Fracture", "Haven", "Icebox", "Lotus", "Pearl", "Split", "Sunset", "Abyss", "Corrode"];
-const ROLES = ["Flex", "Duelist", "Initiator", "Controller", "Sentinel", "Coach"];
-const RANKS = ["Unranked", "Iron", "Bronze", "Silver", "Gold", "Platinum", "Diamond", "Ascendant", "Immortal", "Radiant"];
-const AGENT_NAMES = ["Jett", "Raze", "Reyna", "Yoru", "Phoenix", "Neon", "Iso", "Tejo", "Vyse", "Waylay", "Omen", "Astra", "Brimstone", "Viper", "Harbor", "Clove", "Sova", "Fade", "Skye", "Breach", "KAY/O", "Gekko", "Killjoy", "Cypher", "Sage", "Chamber", "Deadlock", "Miks", "Veto"];
-const ROLE_ABBREVIATIONS = { Flex: "FLX", Duelist: "DUEL", Initiator: "INIT", Controller: "CTRL", Sentinel: "SENT", Coach: "HC" };
-const TEAM_LOGO = "/syrix-logo.jpeg";
-
-const UTILITY_TYPES = [
-    { id: 'smoke', color: 'rgba(209, 213, 219, 0.3)', border: '#d1d5db', label: 'Smoke', shape: 'ring' },
-    { id: 'molly', color: 'rgba(239, 68, 68, 0.3)', border: '#ef4444', label: 'Molly', shape: 'ring' },
-    { id: 'flash', color: '#facc15', border: '#facc15', label: 'Flash', shape: 'star' },
-    { id: 'recon', color: '#3b82f6', border: '#3b82f6', label: 'Recon', shape: 'triangle' },
-    { id: 'stun', color: 'rgba(249, 115, 22, 0.3)', border: '#f97316', label: 'Stun', shape: 'square' },
-    { id: 'barrier', color: 'rgba(45, 212, 191, 0.3)', border: '#2dd4bf', label: 'Barrier', shape: 'rect' },
-    { id: 'trap', color: 'rgba(168, 85, 247, 0.5)', border: '#a855f7', label: 'Trap', shape: 'cross' },
-    { id: 'ult', color: 'rgba(16, 185, 129, 0.2)', border: '#10b981', label: 'Ult', shape: 'diamond' }
-];
-
-const timezones = ["UTC", "GMT", "Europe/London", "Europe/Paris", "Europe/Berlin", "America/New_York", "America/Chicago", "America/Denver", "America/Los_Angeles", "Asia/Tokyo", "Australia/Sydney"];
-
-const TeamLogo = ({ className = "", imageClassName = "" }) => (
-    <span className={`relative inline-flex shrink-0 overflow-hidden bg-black border border-white/10 ${className}`}>
-        <img src={TEAM_LOGO} alt="SYRIX logo" className={`h-full w-full object-cover ${imageClassName}`} />
-    </span>
-);
-
-// --- UTILITY FUNCTIONS ---
-function timeToMinutes(t) { if (!t || t === '24:00') return 1440; const [h, m] = t.split(":").map(Number); return h * 60 + m; }
-const safeDocId = (value, fallback = 'Unknown_User') => String(value || fallback)
-    .trim()
-    .replaceAll('/', '-')
-    .replaceAll('#', '-')
-    .replaceAll('?', '-')
-    .replaceAll('[', '-')
-    .replaceAll(']', '-')
-    .slice(0, 120) || fallback;
-
-const normalizeAvailabilitySlots = (data = {}) => {
-    if (Array.isArray(data.slots)) return data.slots;
-
-    if (data.days && typeof data.days === 'object') {
-        return Object.entries(data.days)
-            .filter(([, range]) => range?.start && range?.end)
-            .map(([day, range]) => ({
-                day,
-                start: range.start,
-                end: range.end,
-                role: range.role || 'Flex'
-            }));
-    }
-
-    return [];
-};
-
-const convertFromGMT = (day, time, timezone) => {
-    if (!day || !time) return { day: '', time: '' };
-    const jsDays = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
-    const targetIndex = jsDays.indexOf(day);
-    const today = new Date();
-    const currentDayIndex = today.getUTCDay();
-    const distance = targetIndex - currentDayIndex;
-    const gmtDate = new Date(today);
-    gmtDate.setUTCDate(today.getUTCDate() + distance);
-    const [hours, minutes] = time.split(':').map(Number);
-    gmtDate.setUTCHours(hours, minutes, 0, 0);
-    const formatter = new Intl.DateTimeFormat('en-US', { timeZone: timezone, weekday: 'long', hour: '2-digit', minute: '2-digit', hour12: false });
-    const parts = formatter.formatToParts(gmtDate);
-    const part = (type) => parts.find(p => p.type === type)?.value;
-    let localHours = part('hour');
-    if (localHours === '24') localHours = '00';
-    return { day: part('weekday'), time: `${localHours}:${part('minute')}` };
-};
-
-const getTimeZoneOffset = (date, timezone) => {
-    const formatter = new Intl.DateTimeFormat('en-US', {
-        timeZone: timezone,
-        year: 'numeric',
-        month: '2-digit',
-        day: '2-digit',
-        hour: '2-digit',
-        minute: '2-digit',
-        second: '2-digit',
-        hour12: false
-    });
-    const parts = formatter.formatToParts(date);
-    const value = (type) => Number(parts.find(p => p.type === type)?.value || 0);
-    const hour = value('hour') === 24 ? 0 : value('hour');
-    const asUTC = Date.UTC(value('year'), value('month') - 1, value('day'), hour, value('minute'), value('second'));
-    return asUTC - date.getTime();
-};
-
-const zonedTimeToDate = (day, time, timezone) => {
-    const jsDays = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
-    const targetIndex = jsDays.indexOf(day);
-    const now = new Date();
-    const todayInZone = new Intl.DateTimeFormat('en-US', { timeZone: timezone, weekday: 'long', year: 'numeric', month: '2-digit', day: '2-digit' }).formatToParts(now);
-    const value = (type) => todayInZone.find(p => p.type === type)?.value;
-    const currentIndex = jsDays.indexOf(value('weekday'));
-    const distance = targetIndex - currentIndex;
-    const baseUTC = Date.UTC(Number(value('year')), Number(value('month')) - 1, Number(value('day')) + distance, 12, 0, 0);
-    const [hours, minutes] = time.split(':').map(Number);
-    const localGuess = new Date(Date.UTC(
-        new Date(baseUTC).getUTCFullYear(),
-        new Date(baseUTC).getUTCMonth(),
-        new Date(baseUTC).getUTCDate(),
-        hours,
-        minutes,
-        0
-    ));
-    const firstPass = new Date(localGuess.getTime() - getTimeZoneOffset(localGuess, timezone));
-    return new Date(localGuess.getTime() - getTimeZoneOffset(firstPass, timezone));
-};
-
-const convertToGMT = (day, time, timezone = Intl.DateTimeFormat().resolvedOptions().timeZone) => {
-    const d = zonedTimeToDate(day, time, timezone);
-    const jsDays = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
-    return { day: jsDays[d.getUTCDay()], time: `${String(d.getUTCHours()).padStart(2, '0')}:${String(d.getUTCMinutes()).padStart(2, '0')}` };
-};
-
-const writeAuditLog = async (action, detail = '', actor = 'System') => {
-    try {
-        await addDoc(collection(db, 'audit_logs'), {
-            action,
-            detail,
-            actor,
-            createdAt: new Date().toISOString()
-        });
-    } catch (error) {
-        console.error('Audit log failed:', error);
-    }
-};
-
-// --- HELPER: SORT ROSTER ---
-const sortRosterByRole = (rosterList, lookupData = null) => {
-    const priority = { 'Manager': 0, 'Head Coach': 1, 'Coach': 2, 'Captain': 3, 'Main': 4, 'Sub': 5, 'Tryout': 6 };
-    return [...rosterList].sort((a, b) => {
-        const roleA = (lookupData ? lookupData[a]?.role : a.role) || 'Tryout';
-        const roleB = (lookupData ? lookupData[b]?.role : b.role) || 'Tryout';
-        return (priority[roleA] ?? 99) - (priority[roleB] ?? 99);
-    });
-};
-
-const GlobalStyles = () => (
-    <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap');
-        
-        /* Root Reset - FIXED: Removed fixed height to allow scrolling */
-        html, body, #root { 
-            width: 100%; 
-            margin: 0; 
-            padding: 0; 
-            overflow-x: hidden; /* Prevents side-to-side scrolling */
-            /* Removed 'height: 100%' so the page can grow and scroll */
-        }
-
-        /* Shared & Hub Styles */
-        .glass-panel { background: rgba(12, 14, 18, 0.86); backdrop-filter: blur(14px); border: 1px solid rgba(255,255,255,0.10); box-shadow: 0 14px 40px rgba(0, 0, 0, 0.36); }
-        .card-shine:hover { border-color: rgba(239, 68, 68, 0.34); background: rgba(17, 20, 26, 0.94); box-shadow: 0 18px 44px rgba(0,0,0,0.4); }
-        .section-kicker { color: #ef4444; font-size: 0.72rem; font-weight: 900; letter-spacing: 0.24em; text-transform: uppercase; }
-        .section-title { color: #fff; font-size: clamp(1.9rem, 4.2vw, 3.25rem); line-height: 0.95; font-weight: 900; letter-spacing: 0; font-style: italic; text-transform: uppercase; }
-        .surface-band { background: rgba(9, 11, 15, 0.74); border-block: 1px solid rgba(255,255,255,0.06); }
-        @keyframes slideIn { from { transform: translateX(100%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
-        .animate-slide-in { animation: slideIn 0.3s cubic-bezier(0.2, 0.8, 0.2, 1); }
-        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
-        .animate-fade-in { animation: fadeIn 0.4s ease-out forwards; }
-        .custom-scrollbar::-webkit-scrollbar { width: 6px; height: 6px; }
-        .custom-scrollbar::-webkit-scrollbar-track { background: rgba(0,0,0,0.2); border-radius: 3px; }
-        .custom-scrollbar::-webkit-scrollbar-thumb { background: #333; border-radius: 3px; }
-        .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #ef4444; }
-        .mask-fade { -webkit-mask-image: linear-gradient(to right, black 90%, transparent 100%); mask-image: linear-gradient(to right, black 90%, transparent 100%); }
-
-        /* Landing Page Specific Styles */
-        :root { --primary-red: #ef4444; --dark-bg: #050608; --card-bg: #111318; }
-        .accent-text { color: var(--primary-red); }
-        .accent-bg { background-color: var(--primary-red); transition: background-color 0.3s; }
-        .accent-bg:hover { background-color: #e02c2c; }
-        
-        .hero-section {
-            min-height: 100vh; /* Ensures it covers at least the full screen */
-            width: 100%;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            position: relative;
-            /* background-attachment removed from here to prevent scroll glitches on some mobile browsers */
-        }
-        
-        /* Move background attachment here for desktop only */
-        @media only screen and (min-width: 769px) { 
-            .hero-section { background-attachment: fixed; } 
-        }
-
-        @keyframes pulse-red { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
-        .live-indicator { animation: pulse-red 2s cubic-bezier(0.4, 0, 0.6, 1) infinite; }
-        .player-card { min-height: 350px; }
-        .card-inner { position: relative; width: 100%; height: 100%; }
-        .card-front { position: relative; width: 100%; height: 100%; border-radius: 0.75rem; }
-        .card-back { display: none; }
-        /* Scroll Mouse Animation */
-        .scroll-mouse {
-            width: 26px;
-            height: 42px;
-            border: 2px solid rgba(255, 255, 255, 0.5);
-            border-radius: 20px;
-            position: relative;
-        }
-        .scroll-wheel {
-            width: 2px;
-            height: 6px;
-            background: #ef4444;
-            border-radius: 2px;
-            position: absolute;
-            top: 8px;
-            left: 50%;
-            transform: translateX(-50%);
-            animation: scroll-bounce 2s infinite;
-        }
-        @keyframes scroll-bounce {
-            0% { transform: translate(-50%, 0); opacity: 1; }
-            50% { transform: translate(-50%, 8px); opacity: 0; }
-            100% { transform: translate(-50%, 0); opacity: 1; }
-        }    `
-    }</style>
-);
-
-// --- SHARED COMPONENTS ---
-const Background = () => (
-    <div className="fixed inset-0 w-full h-full z-0 pointer-events-none bg-[#050608]">
-        <div className="absolute inset-0 opacity-[0.08] bg-[linear-gradient(to_right,#ffffff_1px,transparent_1px),linear-gradient(to_bottom,#ffffff_1px,transparent_1px)] bg-[size:4rem_4rem]"></div>
-        <div className="absolute inset-0 bg-[linear-gradient(to_bottom,rgba(5,6,8,0.35),#050608_82%)]"></div>
-    </div>
-);
-
-// --- CONTEXT ---
-const ToastContext = createContext();
-const useToast = () => useContext(ToastContext);
-
-const ToastProvider = ({ children }) => {
-    const [toasts, setToasts] = useState([]);
-    const addToast = (message, type = 'success') => {
-        const id = Date.now();
-        setToasts(prev => [...prev, { id, message, type }]);
-        setTimeout(() => setToasts(prev => prev.filter(t => t.id !== id)), 4000);
-    };
-    return (
-        <ToastContext.Provider value={addToast}>
-            {children}
-            <div className="fixed bottom-6 right-6 z-[200] flex flex-col gap-3 pointer-events-none">
-                {toasts.map(t => (
-                    <div key={t.id} className={`pointer-events-auto min-w-[240px] backdrop-blur-xl border-l-4 p-4 rounded-r-lg shadow-2xl animate-slide-in flex items-center gap-3 ${t.type === 'success' ? 'bg-green-900/80 border-green-500 text-white' : 'bg-red-900/80 border-red-500 text-white'}`}>
-                        <div className={`w-6 h-6 rounded-full flex items-center justify-center font-bold text-xs ${t.type === 'success' ? 'bg-green-500 text-black' : 'bg-red-500 text-white'}`}>{t.type === 'success' ? '✓' : '!'}</div>
-                        <span className="font-bold text-sm">{t.message}</span>
-                    </div>
-                ))}
-            </div>
-        </ToastContext.Provider>
-    );
-};
-
-// --- DATA PROVIDER HOOK ---
-const useValorantData = () => {
-    const [agentData, setAgentData] = useState({});
-    const [mapImages, setMapImages] = useState({});
-
-    useEffect(() => {
-        const fetchAssets = async () => {
-            try {
-                // 1. Fetch Agents (Unchanged)
-                const agentRes = await fetch('https://valorant-api.com/v1/agents?isPlayableCharacter=true');
-                const agentJson = await agentRes.json();
-                const aMap = {};
-                if (agentJson.data) agentJson.data.forEach(agent => {
-                    aMap[agent.displayName] = {
-                        icon: agent.displayIcon,
-                        abilities: agent.abilities.map(a => ({ name: a.displayName, icon: a.displayIcon, slot: a.slot })).filter(a => a.slot !== "Passive" && a.icon)
-                    };
-                });
-                setAgentData(aMap);
-
-                // 2. Fetch Maps with FILTERING
-                const mapRes = await fetch('https://valorant-api.com/v1/maps');
-                const mapJson = await mapRes.json();
-                const mMap = {};
-
-                if(mapJson.data) {
-                    mapJson.data.forEach(map => {
-                        // Filter out non-playable maps and duplicates
-                        if (map.mainLogAssetGuid !== null && map.assetPath.includes('Maps/')) {
-
-                            // LOGIC: Use stylizedIcon if available (it's the new 2025/2026 tactical look)
-                            // If not, fallback to displayIcon
-                            mMap[map.displayName] = map.stylizedIcon || map.displayIcon;
-                        }
-                    });
-                }
-                setMapImages(mMap);
-            } catch (e) { console.error("Failed to fetch Valorant assets", e); }
-        };
-        fetchAssets();
-    }, []);
-
-    return { agentData, mapImages };
-};
-// --- REUSABLE COMPONENTS ---
-const Modal = ({ isOpen, onClose, onConfirm, title, children }) => {
-    if (!isOpen) return null;
-    return (
-        <div className="fixed inset-0 bg-black/95 z-[150] flex justify-center items-center backdrop-blur-sm p-4 overflow-y-auto">
-            <div className="bg-neutral-900 rounded-xl shadow-2xl shadow-red-900/20 p-6 w-full max-w-md border border-red-900/40 animate-fade-in relative">
-                <h3 className="text-2xl font-black text-white mb-4 border-b pb-2 border-red-900/50 uppercase tracking-wider italic">{title}</h3>
-                <div className="text-neutral-300 mb-8">{children}</div>
-                <div className="flex justify-end gap-4">
-                    <button onClick={onClose} className="bg-black/40 hover:bg-neutral-900 border border-neutral-800 text-neutral-400 py-2 px-4 rounded-xl">Cancel</button>
-                    {onConfirm && <button onClick={onConfirm} className="bg-red-700 hover:bg-red-600 text-white font-bold py-2 px-6 rounded-xl">Confirm</button>}
-                </div>
-            </div>
-        </div>
-    );
-};
+import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
+import { collection, onSnapshot, doc, setDoc, deleteDoc, addDoc, updateDoc, query, where, getDoc, getDocs } from 'firebase/firestore';
+import { onAuthStateChanged, signInWithPopup, signOut, OAuthProvider } from 'firebase/auth';
+import { auth, db, discordWebhookUrl } from './lib/firebase';
+import { ADMIN_ACCESS_ROLES, ADMIN_ROLES, ADMIN_UIDS, AGENT_NAMES, DAYS, MAPS, RANKS, ROLE_ABBREVIATIONS, ROLES, SHORT_DAYS, UTILITY_TYPES, timezones } from './lib/constants';
+import { convertFromGMT, convertToGMT, normalizeAvailabilitySlots, safeDocId, sortRosterByRole, timeToMinutes, writeAuditLog } from './lib/utils';
+import { Background, ButtonPrimary, ButtonSecondary, Card, GlobalStyles, Input, Modal, Select, TeamLogo } from './components/shared';
+import { ToastProvider } from './components/ToastProvider';
+import { AdminPanel } from './components/hub/AdminPanel';
+import { useValorantData } from './hooks/useValorantData';
+import { useToast } from './hooks/useToast';
 
 // ==========================================
 // LANDING PAGE COMPONENT
@@ -1268,196 +934,9 @@ const LandingPage = ({ onEnterHub }) => {
 // SYRIX HUB / DASHBOARD (REACT APP INPUT)
 // ==========================================
 
-// ... (Helper Components for Hub)
-const Input = ({ className = '', ...props }) => (
-    <input {...props} className={`w-full bg-black/40 border border-neutral-800 rounded-xl p-3 text-white text-sm outline-none focus:border-red-600 focus:ring-1 focus:ring-red-600 transition-all placeholder-neutral-600 shadow-inner hover:border-neutral-700 ${className}`} />
-);
-const Select = ({ className = '', children, ...props }) => (
-    <select {...props} className={`w-full bg-black/40 border border-neutral-800 rounded-xl p-3 text-white text-sm outline-none focus:border-red-600 focus:ring-1 focus:ring-red-600 transition-all shadow-inner hover:border-neutral-700 ${className}`}>
-        {children}
-    </select>
-);
-const ButtonPrimary = ({ children, onClick, disabled, className = "" }) => (
-    <button onClick={onClick} disabled={disabled} className={`bg-gradient-to-r from-red-800 to-red-600 hover:from-red-700 hover:to-red-500 text-white font-black uppercase tracking-widest py-3 px-6 rounded-xl shadow-lg shadow-red-900/20 transition-all transform active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed ${className}`}>
-        {children}
-    </button>
-);
-const ButtonSecondary = ({ children, onClick, disabled, className = "" }) => (
-    <button onClick={onClick} disabled={disabled} className={`bg-black/40 hover:bg-neutral-900 border border-neutral-800 hover:border-red-900/50 text-neutral-400 hover:text-white font-bold uppercase tracking-wider py-2 px-4 rounded-xl transition-all disabled:opacity-50 disabled:cursor-not-allowed ${className}`}>
-        {children}
-    </button>
-);
-const Card = ({ children, className = "" }) => (
-    <div className={`glass-panel rounded-xl p-6 relative overflow-hidden group card-shine transition-all duration-300 ${className}`}>
-        {children}
-    </div>
-);
-
 // 1. These must be OUTSIDE and ABOVE the AdminPanel function
 const VictoryStamp = () => <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-50 border-8 border-green-500 text-green-500 font-black text-5xl md:text-7xl p-4 uppercase tracking-tighter -rotate-12 pointer-events-none mix-blend-screen shadow-[0_0_20px_rgba(34,197,94,0.5)] animate-fade-in">VICTORY</div>;
 const DefeatStamp = () => <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-50 border-8 border-red-600 text-red-600 font-black text-5xl md:text-7xl p-4 uppercase tracking-tighter rotate-12 pointer-events-none mix-blend-screen shadow-[0_0_20px_rgba(220,38,38,0.5)] animate-fade-in">DEFEAT</div>;
-
-const AdminPanel = () => {
-    const [form, setForm] = useState({
-        type: 'Scrim',
-        opponent: '',
-        map: MAPS[0],
-        date: new Date().toISOString().split('T')[0],
-        time: '20:00',
-        timezone: 'GMT'
-    });
-    const [applications, setApplications] = useState([]);
-    const [saving, setSaving] = useState(false);
-    const addToast = useToast();
-
-    useEffect(() => {
-        const unsub = onSnapshot(collection(db, 'applications'), (snap) => {
-            const rows = [];
-            snap.forEach(d => rows.push({ id: d.id, ...d.data() }));
-            setApplications(rows.sort((a, b) => new Date(b.submittedAt || 0) - new Date(a.submittedAt || 0)));
-        });
-        return () => unsub();
-    }, []);
-
-    const submit = async () => {
-        if (!form.opponent.trim() || !form.date || !form.time) {
-            addToast('Opponent/topic, date, and time are required', 'error');
-            return;
-        }
-
-        setSaving(true);
-        try {
-            await addDoc(collection(db, 'events'), {
-                ...form,
-                opponent: form.opponent.trim(),
-                createdAt: new Date().toISOString()
-            });
-            setForm(prev => ({ ...prev, opponent: '' }));
-            addToast('Event scheduled');
-        } catch (error) {
-            console.error('Schedule event failed:', error);
-            addToast('Unable to schedule event', 'error');
-        } finally {
-            setSaving(false);
-        }
-    };
-
-    const approveApplication = async (application) => {
-        const memberName = safeDocId(application.user || application.ign || application.displayName);
-        try {
-            await setDoc(doc(db, 'roster', memberName), {
-                uid: application.uid || '',
-                role: 'Tryout',
-                rank: application.rank || 'Unranked',
-                ingameRole: application.role || 'Flex',
-                gameId: application.ign || application.user || '',
-                notes: application.why || application.exp || '',
-                joinedAt: new Date().toISOString()
-            }, { merge: true });
-            await deleteDoc(doc(db, 'applications', application.id));
-            addToast(`${memberName} approved`);
-        } catch (error) {
-            console.error('Approve application failed:', error);
-            addToast('Unable to approve application', 'error');
-        }
-    };
-
-    const rejectApplication = async (id) => {
-        try {
-            await deleteDoc(doc(db, 'applications', id));
-            addToast('Application removed');
-        } catch (error) {
-            console.error('Reject application failed:', error);
-            addToast('Unable to remove application', 'error');
-        }
-    };
-
-    return (
-        <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
-            <Card>
-                <h3 className="text-xl font-black text-white uppercase mb-4">Schedule Event</h3>
-                <div className="space-y-4">
-                    <div>
-                        <label className="text-xs font-bold text-red-500 block mb-1">EVENT TYPE</label>
-                        <Select value={form.type} onChange={e => setForm({ ...form, type: e.target.value })}>
-                            <option value="Scrim">Scrim</option>
-                            <option value="Official">Official</option>
-                            <option value="Practice">Practice</option>
-                            <option value="VOD Review">VOD Review</option>
-                            <option value="Meeting">Meeting</option>
-                        </Select>
-                    </div>
-                    <div>
-                        <label className="text-xs font-bold text-red-500 block mb-1">
-                            {form.type === 'VOD Review' ? 'TOPIC' : 'OPPONENT'}
-                        </label>
-                        <Input
-                            value={form.opponent}
-                            onChange={e => setForm({ ...form, opponent: e.target.value })}
-                            placeholder={form.type === 'VOD Review' ? 'e.g. Reviewing Ascent Scrim' : 'e.g. Team Liquid'}
-                        />
-                    </div>
-
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <div>
-                            <label className="text-xs font-bold text-red-500 block mb-1">MAP</label>
-                            <Select value={form.map} onChange={e => setForm({ ...form, map: e.target.value })}>
-                                <option value="General">General / None</option>
-                                {MAPS.map(m => <option key={m}>{m}</option>)}
-                            </Select>
-                        </div>
-                        <div>
-                            <label className="text-xs font-bold text-red-500 block mb-1">TIMEZONE</label>
-                            <Select value={form.timezone} onChange={e => setForm({ ...form, timezone: e.target.value })}>
-                                {timezones.map(t => <option key={t}>{t}</option>)}
-                            </Select>
-                        </div>
-                    </div>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <div>
-                            <label className="text-xs font-bold text-red-500 block mb-1">DATE</label>
-                            <Input type="date" value={form.date} onChange={e => setForm({ ...form, date: e.target.value })} className="[color-scheme:dark]" />
-                        </div>
-                        <div>
-                            <label className="text-xs font-bold text-red-500 block mb-1">TIME</label>
-                            <Input type="time" value={form.time} onChange={e => setForm({ ...form, time: e.target.value })} className="[color-scheme:dark]" />
-                        </div>
-                    </div>
-                    <ButtonPrimary onClick={submit} disabled={saving} className="w-full py-3">
-                        {saving ? 'SCHEDULING...' : 'SCHEDULE EVENT'}
-                    </ButtonPrimary>
-                </div>
-            </Card>
-
-            <Card>
-                <div className="flex items-center justify-between mb-4">
-                    <h3 className="text-xl font-black text-white uppercase">Applications</h3>
-                    <span className="text-[10px] font-black text-red-400 bg-red-950/30 border border-red-900/40 px-2 py-1 rounded-md">{applications.length} PENDING</span>
-                </div>
-                <div className="space-y-3 max-h-[520px] overflow-y-auto custom-scrollbar pr-1">
-                    {applications.length ? applications.map(application => (
-                        <div key={application.id} className="bg-black/40 border border-neutral-800 rounded-xl p-4 space-y-3">
-                            <div className="flex justify-between gap-3">
-                                <div>
-                                    <div className="font-black text-white">{application.user || application.ign || 'Unknown Player'}</div>
-                                    <div className="text-xs text-neutral-500">{application.rank || 'Unranked'} • {application.role || 'Flex'}</div>
-                                </div>
-                                <div className="text-[10px] text-neutral-600 font-mono">{application.submittedAt ? new Date(application.submittedAt).toLocaleDateString() : 'No date'}</div>
-                            </div>
-                            {(application.why || application.exp) && <p className="text-sm text-neutral-400 leading-relaxed line-clamp-3">{application.why || application.exp}</p>}
-                            <div className="flex gap-2">
-                                <ButtonPrimary onClick={() => approveApplication(application)} className="flex-1 text-xs py-2">Approve</ButtonPrimary>
-                                <ButtonSecondary onClick={() => rejectApplication(application.id)} className="text-xs py-2">Reject</ButtonSecondary>
-                            </div>
-                        </div>
-                    )) : (
-                        <div className="p-8 text-center text-sm text-neutral-500 border border-dashed border-neutral-800 rounded-xl">No pending applications.</div>
-                    )}
-                </div>
-            </Card>
-        </div>
-    );
-};
 
 function AvailabilityHeatmap({ availabilities, members }) {
     const bucketSize = 60; const numBuckets = (24 * 60) / bucketSize;
@@ -2718,7 +2197,7 @@ function LineupLibrary() {
     const [viewingLineup, setViewingLineup] = useState(null);
     const [tempCoords, setTempCoords] = useState(null);
     const [newLineup, setNewLineup] = useState({ title: '', url: '', description: '', agent: 'Sova', type: 'Recon' });
-    const { currentUser } = getAuth();
+    const currentUser = auth.currentUser;
     const addToast = useToast();
     const mapRef = useRef(null);
 
@@ -4486,6 +3965,7 @@ function SyrixDashboard({ onBack }) {
     const [modalContent, setModalContent] = useState({ title: '', children: null });
     const [isMember, setIsMember] = useState(false);
     const [currentUserRole, setCurrentUserRole] = useState('');
+    const [adminAccess, setAdminAccess] = useState(null);
     const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
     const addToast = useToast();
     const [allRosterNames, setAllRosterNames] = useState([]);
@@ -4494,6 +3974,21 @@ function SyrixDashboard({ onBack }) {
     useEffect(() => { return onAuthStateChanged(auth, user => { setCurrentUser(user); setAuthLoading(false); }); }, []);
     const signIn = async () => { try { await signInWithPopup(auth, new OAuthProvider('oidc.discord')); } catch (e) { console.error(e); } };
     const handleSignOut = async () => await signOut(auth);
+
+    useEffect(() => {
+        if (!currentUser) {
+            setAdminAccess(null);
+            return;
+        }
+        return onSnapshot(doc(db, 'admin_users', currentUser.uid), (snapshot) => {
+            if (snapshot.exists() && snapshot.data().active !== false) {
+                setAdminAccess({ id: snapshot.id, ...snapshot.data() });
+                setIsMember(true);
+            } else {
+                setAdminAccess(null);
+            }
+        });
+    }, [currentUser]);
 
     useEffect(() => {
         if (!currentUser) return;
@@ -4507,7 +4002,7 @@ function SyrixDashboard({ onBack }) {
                 setCurrentUserRole(profile.role || '');
                 setIsMember(true);
             } else {
-                setIsMember(ADMIN_UIDS.includes(currentUser.uid));
+                setIsMember(ADMIN_UIDS.includes(currentUser.uid) || (adminAccess && ADMIN_ACCESS_ROLES.includes(adminAccess.role)));
                 setRosterName(currentUser.displayName);
                 setCurrentUserRole('');
             }
@@ -4551,7 +4046,7 @@ function SyrixDashboard({ onBack }) {
         });
 
         return () => { unsub1(); unsub2(); unsub3(); unsub4(); unsub5(); };
-    }, [currentUser]);
+    }, [currentUser, adminAccess]);
 
     // 3. UPDATE dynamicMembers TO USE THE ROSTER LIST
     // Replace the old dynamicMembers line with this:
@@ -4660,13 +4155,16 @@ function SyrixDashboard({ onBack }) {
         </div>
     );
 
-    const isManager = ADMIN_ROLES.includes(currentUserRole);
-    const isAdmin = currentUser && (ADMIN_UIDS.includes(currentUser.uid) || isManager);
-    const accessLabel = ADMIN_UIDS.includes(currentUser.uid) ? 'Admin' : isManager ? 'Manager' : 'Member';
+    const isRosterManager = ADMIN_ROLES.includes(currentUserRole);
+    const dbAdminRole = adminAccess?.active === false ? '' : adminAccess?.role;
+    const isDbAdmin = ADMIN_ACCESS_ROLES.includes(dbAdminRole);
+    const isAdmin = currentUser && (ADMIN_UIDS.includes(currentUser.uid) || isRosterManager || isDbAdmin);
+    const accessLabel = ADMIN_UIDS.includes(currentUser.uid) ? 'Owner' : dbAdminRole || (isRosterManager ? 'Manager' : 'Member');
     const navGroups = [
-        { label: 'Command', items: [{ id: 'dashboard', label: 'Dashboard' }, { id: 'calendar', label: 'Calendar' }, { id: 'notifications', label: 'Alerts' }, { id: 'announcements', label: 'Comms' }, { id: 'availability', label: 'Availability' }, { id: 'matches', label: 'Matches' }, { id: 'roster', label: 'Roster' }] },
-        { label: 'Practice', items: [{ id: 'practice', label: 'Practice' }, { id: 'playbook', label: 'Playbook' }, { id: 'comps', label: 'Comps' }, { id: 'strats', label: 'Stratbook' }, { id: 'lineups', label: 'Lineups' }, { id: 'mapveto', label: 'Map Veto' }] },
-        { label: 'Intel', items: [{ id: 'prep', label: 'Match Prep' }, { id: 'tasks', label: 'Tasks' }] },
+        { label: 'Command', items: [{ id: 'dashboard', label: 'Dashboard' }, { id: 'calendar', label: 'Calendar' }, { id: 'notifications', label: 'Notifications' }, { id: 'announcements', label: 'Announcements' }, { id: 'tasks', label: 'Tasks' }] },
+        { label: 'Team', items: [{ id: 'roster', label: 'Roster' }, { id: 'availability', label: 'Availability' }, { id: 'matches', label: 'Matches' }] },
+        { label: 'Valorant', items: [{ id: 'practice', label: 'Practice' }, { id: 'strats', label: 'Stratbook' }, { id: 'comps', label: 'Comps' }, { id: 'prep', label: 'Match Prep' }, { id: 'mapveto', label: 'Map Veto' }] },
+        { label: 'Library', items: [{ id: 'lineups', label: 'Lineups' }, { id: 'playbook', label: 'Playbook' }] },
         ...(isAdmin ? [{ label: 'Admin', items: [{ id: 'content', label: 'Content' }, { id: 'partners', label: 'Partners' }, { id: 'audit', label: 'Audit Log' }, { id: 'admin', label: 'Admin Panel' }] }] : [])
     ];
     const flatNav = navGroups.flatMap(group => group.items);
