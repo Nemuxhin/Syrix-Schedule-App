@@ -3746,17 +3746,17 @@ function MapVeto() {
     const MapTile = ({ map }) => {
         const status = vetoState[map] || 'neutral';
         return (
-            <div className={`rounded-xl border-2 overflow-hidden ${statusClasses(status)}`}>
-                <button onClick={() => toggleMap(map)} className="aspect-video w-full flex items-center justify-center relative group">
-                    <span className="font-black uppercase tracking-wide">{map}</span>
-                    <div className="absolute bottom-2 text-[10px] font-black tracking-widest">{status.toUpperCase()}</div>
+            <div className={`rounded-lg border overflow-hidden ${statusClasses(status)}`}>
+                <button onClick={() => toggleMap(map)} className="aspect-[1.55] w-full flex items-center justify-center relative group">
+                    <span className="font-black uppercase tracking-wide text-sm">{map}</span>
+                    <div className="absolute bottom-2 text-[9px] font-black tracking-widest">{status.toUpperCase()}</div>
                 </button>
                 <div className="grid grid-cols-4 border-t border-white/10">
                     {statusOrder.map(nextStatus => (
                         <button
                             key={nextStatus}
                             onClick={() => setMapStatus(map, nextStatus)}
-                            className={`py-2 text-[9px] font-black uppercase tracking-widest border-r border-white/5 last:border-r-0 ${status === nextStatus ? 'bg-white text-black' : 'bg-black/30 text-neutral-500 hover:text-white hover:bg-white/10'}`}
+                            className={`h-8 text-[8px] font-black uppercase tracking-widest border-r border-white/5 last:border-r-0 ${status === nextStatus ? 'bg-white text-black' : 'bg-black/30 text-neutral-500 hover:text-white hover:bg-white/10'}`}
                         >
                             {nextStatus === 'neutral' ? 'Live' : nextStatus}
                         </button>
@@ -3767,11 +3767,11 @@ function MapVeto() {
     };
 
     return (
-        <Card className="h-full">
-            <div className="flex flex-col lg:flex-row lg:items-end justify-between gap-4 mb-6">
+        <Card className="min-h-full !p-5 md:!p-6">
+            <div className="flex flex-col lg:flex-row lg:items-end justify-between gap-4 mb-5">
                 <div>
                     <div className="text-[10px] uppercase tracking-[0.28em] text-red-400 font-black mb-2">Map Pool</div>
-                    <h3 className="text-3xl font-black text-white uppercase italic leading-none">Map Veto</h3>
+                    <h3 className="text-2xl md:text-3xl font-black text-white uppercase italic leading-none">Map Veto</h3>
                     <p className="mt-3 text-sm text-neutral-400 max-w-2xl">Mark maps as live, ban, pick, or inactive so the team can separate current rotation maps from out-of-pool prep.</p>
                 </div>
                 <div className="flex flex-wrap gap-2">
@@ -3781,24 +3781,24 @@ function MapVeto() {
                 </div>
             </div>
 
-            <div className="space-y-8">
+            <div className="space-y-6">
                 <section>
-                    <div className="flex items-center justify-between mb-3">
+                    <div className="flex items-center justify-between gap-3 mb-3">
                         <h4 className="text-sm font-black text-white uppercase tracking-widest">Active Rotation</h4>
                         <span className="text-[10px] text-neutral-500 uppercase tracking-widest">Click a map to cycle status</span>
                     </div>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 2xl:grid-cols-5 gap-4">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-7 gap-3">
                         {activeMaps.map(map => <MapTile key={map} map={map} />)}
                     </div>
                 </section>
 
                 <section>
-                    <div className="flex items-center justify-between mb-3">
+                    <div className="flex items-center justify-between gap-3 mb-3">
                         <h4 className="text-sm font-black text-neutral-400 uppercase tracking-widest">Inactive Maps</h4>
                         <span className="text-[10px] text-neutral-600 uppercase tracking-widest">Kept visible for rotation planning</span>
                     </div>
                     {inactiveMaps.length ? (
-                        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 2xl:grid-cols-5 gap-4">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-5 gap-3">
                             {inactiveMaps.map(map => <MapTile key={map} map={map} />)}
                         </div>
                     ) : (
