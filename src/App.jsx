@@ -1757,6 +1757,8 @@ function StratBook() {
     const [stratName, setStratName] = useState('');
     const [loadingSave, setLoadingSave] = useState(false);
     const [paletteDrag, setPaletteDrag] = useState(null);
+    const [pendingTextPoint, setPendingTextPoint] = useState(null);
+    const [textDraft, setTextDraft] = useState('');
 
     const tools = [
         { id: 'select', label: 'Select', hint: 'Move and edit placed items' },
@@ -1783,9 +1785,9 @@ function StratBook() {
 
     const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
     const norm = (value) => String(value || '').toLowerCase().replace(/\s+/g, ' ').trim();
-    const TEXT_MIN = 0.35;
-    const TEXT_DEFAULT = 0.55;
-    const TEXT_MAX = 1.25;
+    const TEXT_MIN = 0.2;
+    const TEXT_DEFAULT = 0.32;
+    const TEXT_MAX = 0.85;
 
     const getAgentData = (name) => {
         if (!agentData) return null;
@@ -2143,9 +2145,9 @@ function StratBook() {
             item = { id: uid(), type: 'area', name: tool === 'smoke' ? 'Smoke' : 'Molly', kind: tool, x: point.x, y: point.y, radius: style.r, fill: style.fill, stroke: style.stroke, side };
         }
         if (tool === 'text') {
-            const label = window.prompt('Label text');
-            if (!label) return;
-            item = { id: uid(), type: 'text', text: label, x: point.x, y: point.y, color, size: TEXT_DEFAULT, rotation: 0, side };
+            setPendingTextPoint(point);
+            setTextDraft('');
+            return;
         }
         if (tool === 'spike') item = { id: uid(), type: 'spike', x: point.x, y: point.y, color: '#facc15', size: 1, side };
         if (tool === 'ping') item = { id: uid(), type: 'ping', x: point.x, y: point.y, color, size: 1, side };
@@ -2154,6 +2156,20 @@ function StratBook() {
         commitObjects([...objects, item]);
         setSelectedId(item.id);
         if (!['agent', 'ability'].includes(tool)) setTool('select');
+    };
+
+    const addTextObject = () => {
+        if (!pendingTextPoint || !textDraft.trim()) {
+            setPendingTextPoint(null);
+            setTextDraft('');
+            return;
+        }
+        const item = { id: uid(), type: 'text', text: textDraft.trim(), x: pendingTextPoint.x, y: pendingTextPoint.y, color, size: TEXT_DEFAULT, rotation: 0, side };
+        commitObjects([...objects, item]);
+        setSelectedId(item.id);
+        setPendingTextPoint(null);
+        setTextDraft('');
+        setTool('select');
     };
 
     const handleBoardPointerDown = (event) => {
@@ -2393,9 +2409,9 @@ function StratBook() {
         if (obj.type === 'text') {
             const textSize = clamp(obj.size || TEXT_DEFAULT, TEXT_MIN, TEXT_MAX);
             return (
-                <foreignObject key={obj.id} x={`${obj.x}%`} y={`${obj.y}%`} width="1%" height="1%" className="overflow-visible">
+                <foreignObject key={obj.id} x={`${obj.x}%`} y={`${obj.y}%`} width="18%" height="16%" className="overflow-visible">
                     <div
-                        className={`inline-flex items-center justify-center rounded-md bg-black/78 border border-white/20 px-1.5 py-0.5 text-[7px] font-black uppercase tracking-wide whitespace-nowrap shadow-[0_3px_14px_rgba(0,0,0,0.8)] select-none cursor-grab ${isSelected ? 'outline outline-1 outline-green-400 outline-offset-1' : ''}`}
+                        className={`inline-block max-w-[150px] rounded bg-black/75 border border-white/20 px-1 py-0.5 text-[5px] font-bold leading-tight tracking-normal whitespace-pre-wrap shadow-[0_3px_14px_rgba(0,0,0,0.8)] select-none cursor-grab ${isSelected ? 'outline outline-1 outline-green-400 outline-offset-1' : ''}`}
                         style={{ color: obj.color, transform: `translate(-50%, -50%) rotate(${obj.rotation || 0}deg) scale(${textSize})`, transformOrigin: 'center' }}
                         onPointerDown={(e) => startDragObject(e, obj)}
                     >
@@ -2623,7 +2639,7 @@ function StratBook() {
                             <div className="text-sm font-bold text-white truncate">{selectedObject.name || selectedObject.text || selectedObject.type}</div>
                             {'size' in selectedObject && <div><label className="text-[10px] text-neutral-500 uppercase font-bold">Size</label><input type="range" min={selectedObject.type === 'text' ? TEXT_MIN : 0.5} max={selectedObject.type === 'text' ? TEXT_MAX : 2.5} step="0.05" value={selectedObject.type === 'text' ? clamp(selectedObject.size || TEXT_DEFAULT, TEXT_MIN, TEXT_MAX) : selectedObject.size || 1} onChange={e => updateSelected({ size: Number(e.target.value) })} className="w-full accent-red-600" /></div>}
                             {'rotation' in selectedObject && <div><label className="text-[10px] text-neutral-500 uppercase font-bold">Rotation</label><input type="range" min="0" max="360" value={selectedObject.rotation || 0} onChange={e => updateSelected({ rotation: Number(e.target.value) })} className="w-full accent-red-600" /></div>}
-                            {selectedObject.type === 'text' && <Input value={selectedObject.text} onChange={e => updateSelected({ text: e.target.value })} />}
+                            {selectedObject.type === 'text' && <textarea value={selectedObject.text} onChange={e => updateSelected({ text: e.target.value })} className="w-full min-h-24 bg-black/40 border border-neutral-800 rounded-xl p-3 text-white text-xs outline-none focus:border-red-600 focus:ring-1 focus:ring-red-600 transition-all placeholder-neutral-600 resize-y" />}
                         </div>
                     </div>
                 )}
@@ -2653,6 +2669,18 @@ function StratBook() {
                     </div>
                 </div>
             </aside>
+            <Modal isOpen={Boolean(pendingTextPoint)} onClose={() => { setPendingTextPoint(null); setTextDraft(''); }} onConfirm={addTextObject} title="Add Text">
+                <div className="space-y-3">
+                    <textarea
+                        autoFocus
+                        value={textDraft}
+                        onChange={e => setTextDraft(e.target.value)}
+                        className="w-full min-h-40 bg-black/50 border border-neutral-800 rounded-xl p-4 text-white text-sm outline-none focus:border-red-600 focus:ring-1 focus:ring-red-600 transition-all placeholder-neutral-600 resize-y"
+                        placeholder="Write a callout, note, or paragraph..."
+                    />
+                    <p className="text-xs text-neutral-500">Line breaks are preserved on the planner.</p>
+                </div>
+            </Modal>
         </div>
     );
 }
@@ -4140,6 +4168,7 @@ function SyrixDashboard({ onBack }) {
     const [modalContent, setModalContent] = useState({ title: '', children: null });
     const [isMember, setIsMember] = useState(false);
     const [currentUserRole, setCurrentUserRole] = useState('');
+    const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
     const addToast = useToast();
     const [allRosterNames, setAllRosterNames] = useState([]);
     const [openTaskCount, setOpenTaskCount] = useState(0);
@@ -4350,13 +4379,14 @@ function SyrixDashboard({ onBack }) {
         if (id === 'tasks') return openTaskCount ? String(openTaskCount) : '';
         return '';
     };
-    const NavItem = ({ item, compact = false }) => (
+    const NavItem = ({ item, compact = false, collapsed = false }) => (
         <button
             onClick={() => setActiveTab(item.id)}
-            className={`${compact ? 'px-3 py-2 text-[10px]' : 'w-full px-3 py-2.5 text-xs'} text-left font-black uppercase tracking-[0.16em] transition-all border flex items-center justify-between gap-3 ${activeTab === item.id ? 'bg-red-600 text-white border-red-500' : 'bg-transparent text-neutral-500 border-transparent hover:text-white hover:bg-white/5 hover:border-white/10'}`}
+            title={item.label}
+            className={`${compact ? 'px-3 py-2 text-[10px]' : collapsed ? 'w-full px-2 py-2.5 text-[10px] justify-center' : 'w-full px-3 py-2.5 text-xs'} text-left font-black uppercase tracking-[0.16em] transition-all border flex items-center ${collapsed ? 'justify-center' : 'justify-between'} gap-3 ${activeTab === item.id ? 'bg-red-600 text-white border-red-500' : 'bg-transparent text-neutral-500 border-transparent hover:text-white hover:bg-white/5 hover:border-white/10'}`}
         >
-            <span>{item.label}</span>
-            {navBadge(item.id) && <span className={`text-[9px] px-1.5 py-0.5 border ${activeTab === item.id ? 'border-white/30 bg-black/20 text-white' : 'border-white/10 bg-white/5 text-neutral-400'}`}>{navBadge(item.id)}</span>}
+            <span>{collapsed ? item.label.slice(0, 2) : item.label}</span>
+            {!collapsed && navBadge(item.id) && <span className={`text-[9px] px-1.5 py-0.5 border ${activeTab === item.id ? 'border-white/30 bg-black/20 text-white' : 'border-white/10 bg-white/5 text-neutral-400'}`}>{navBadge(item.id)}</span>}
         </button>
     );
 
@@ -4364,13 +4394,16 @@ function SyrixDashboard({ onBack }) {
         <div className="fixed inset-0 h-full w-full text-neutral-200 font-sans selection:bg-red-500/30 flex overflow-hidden bg-[#050608]">
             <Background />
 
-            <aside className="relative z-40 hidden lg:flex w-72 flex-none flex-col border-r border-white/10 bg-[#080a0f]/92 backdrop-blur-xl">
-                <div className="p-5 border-b border-white/10">
-                    <button onClick={onBack} className="flex items-center gap-3 text-white hover:text-red-400 transition">
+            <aside className={`relative z-40 hidden lg:flex ${sidebarCollapsed ? 'w-20' : 'w-72'} flex-none flex-col border-r border-white/10 bg-[#080a0f]/92 backdrop-blur-xl transition-[width] duration-200`}>
+                <div className={`${sidebarCollapsed ? 'p-3' : 'p-5'} border-b border-white/10`}>
+                    <button onClick={onBack} className={`flex items-center ${sidebarCollapsed ? 'justify-center' : 'gap-3'} text-white hover:text-red-400 transition w-full`}>
                         <span className="h-10 w-10 bg-red-600 text-white flex items-center justify-center font-black italic text-2xl">S</span>
-                        <span className="text-2xl font-black tracking-tight italic">SYRIX</span>
+                        {!sidebarCollapsed && <span className="text-2xl font-black tracking-tight italic">SYRIX</span>}
                     </button>
-                    <div className="mt-5 grid grid-cols-2 gap-2">
+                    <button onClick={() => setSidebarCollapsed(value => !value)} className="mt-3 w-full bg-white/5 hover:bg-white/10 border border-white/10 text-neutral-400 hover:text-white py-2 text-[10px] font-black uppercase tracking-widest">
+                        {sidebarCollapsed ? 'Open' : 'Collapse'}
+                    </button>
+                    {!sidebarCollapsed && <div className="mt-5 grid grid-cols-2 gap-2">
                         <div className="bg-black/35 border border-white/10 p-3">
                             <div className="text-[9px] uppercase tracking-widest text-neutral-500 font-black">Access</div>
                             <div className="mt-1 text-sm font-black text-white">{accessLabel}</div>
@@ -4379,21 +4412,21 @@ function SyrixDashboard({ onBack }) {
                             <div className="text-[9px] uppercase tracking-widest text-neutral-500 font-black">Members</div>
                             <div className="mt-1 text-sm font-black text-white">{dynamicMembers.length}</div>
                         </div>
-                    </div>
+                    </div>}
                 </div>
 
-                <nav className="flex-1 overflow-y-auto p-4 space-y-6 custom-scrollbar">
+                <nav className={`flex-1 overflow-y-auto ${sidebarCollapsed ? 'p-2 space-y-3' : 'p-4 space-y-6'} custom-scrollbar`}>
                     {navGroups.map(group => (
                         <div key={group.label}>
-                            <div className="px-3 mb-2 text-[10px] uppercase tracking-[0.24em] text-neutral-600 font-black">{group.label}</div>
+                            {!sidebarCollapsed && <div className="px-3 mb-2 text-[10px] uppercase tracking-[0.24em] text-neutral-600 font-black">{group.label}</div>}
                             <div className="space-y-1">
-                                {group.items.map(item => <NavItem key={item.id} item={item} />)}
+                                {group.items.map(item => <NavItem key={item.id} item={item} collapsed={sidebarCollapsed} />)}
                             </div>
                         </div>
                     ))}
                 </nav>
 
-                <div className="p-4 border-t border-white/10">
+                {!sidebarCollapsed ? <div className="p-4 border-t border-white/10">
                     <div className="mb-3 bg-red-950/20 border border-red-900/35 p-3">
                         <div className="text-[9px] uppercase tracking-[0.22em] text-red-400 font-black">Next Operation</div>
                         <div className="mt-2 text-xs font-black text-white uppercase leading-snug">{nextEvent ? `${nextEvent.type || 'Event'} vs ${nextEvent.opponent || 'TBD'}` : 'No event scheduled'}</div>
@@ -4407,7 +4440,7 @@ function SyrixDashboard({ onBack }) {
                             <button onClick={handleSignOut} className="bg-red-600 hover:bg-red-500 text-white font-black uppercase tracking-widest text-[10px] px-3">Out</button>
                         </div>
                     </div>
-                </div>
+                </div> : <div className="p-2 border-t border-white/10"><button onClick={handleSignOut} className="w-full bg-red-600 hover:bg-red-500 text-white font-black uppercase tracking-widest text-[10px] py-2">Out</button></div>}
             </aside>
 
             <div className="relative z-10 flex-1 min-w-0 flex flex-col">
