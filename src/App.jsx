@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useRef, createContext, useContext } from 'react';
+import React, { useState, useEffect, useMemo, useRef, useCallback, createContext, useContext } from 'react';
 import { initializeApp } from 'firebase/app';
 import { getFirestore, collection, onSnapshot, doc, setDoc, deleteDoc, addDoc, updateDoc, query, where, getDoc, getDocs } from 'firebase/firestore';
 import { getAuth, onAuthStateChanged, signInWithPopup, signOut, OAuthProvider } from 'firebase/auth';
@@ -1794,14 +1794,14 @@ function StratBook() {
     };
 
     const selectedAgentData = getAgentData(selectedAgent);
-    const availableAbilities = selectedAgentData?.abilities || [];
+    const availableAbilities = useMemo(() => selectedAgentData?.abilities || [], [selectedAgentData]);
 
     useEffect(() => {
         if (!selectedAbility && availableAbilities.length) setSelectedAbility(availableAbilities[0]);
         if (selectedAbility && availableAbilities.length && !availableAbilities.some(a => a.name === selectedAbility.name)) {
             setSelectedAbility(availableAbilities[0]);
         }
-    }, [selectedAgent, availableAbilities.length]);
+    }, [availableAbilities, selectedAbility]);
 
     useEffect(() => {
         const unsub = onSnapshot(
@@ -1819,55 +1819,30 @@ function StratBook() {
         return () => unsub();
     }, [selectedMap]);
 
-    useEffect(() => {
-        const handleKeyDown = (event) => {
-            if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'z') {
-                event.preventDefault();
-                undo();
-            }
-            if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'y') {
-                event.preventDefault();
-                redo();
-            }
-            if ((event.key === 'Delete' || event.key === 'Backspace') && selectedId) {
-                const tag = document.activeElement?.tagName?.toLowerCase();
-                if (tag !== 'input' && tag !== 'textarea' && tag !== 'select') deleteSelected();
-            }
-            if (event.key === 'Escape') {
-                setSelectedId(null);
-                setDraft(null);
-                setDragging(null);
-                setTool('select');
-            }
-        };
-        window.addEventListener('keydown', handleKeyDown);
-        return () => window.removeEventListener('keydown', handleKeyDown);
-    }, [history, historyStep, selectedId, objects]);
-
-    const commitObjects = (nextObjects) => {
+    const commitObjects = useCallback((nextObjects) => {
         const clean = nextObjects.map(obj => ({ ...obj }));
         const nextHistory = history.slice(0, historyStep + 1);
         nextHistory.push(clean);
         setHistory(nextHistory);
         setHistoryStep(nextHistory.length - 1);
         setObjects(clean);
-    };
+    }, [history, historyStep]);
 
-    const undo = () => {
+    const undo = useCallback(() => {
         if (historyStep <= 0) return;
         const nextStep = historyStep - 1;
         setHistoryStep(nextStep);
         setObjects(history[nextStep]);
         setSelectedId(null);
-    };
+    }, [history, historyStep]);
 
-    const redo = () => {
+    const redo = useCallback(() => {
         if (historyStep >= history.length - 1) return;
         const nextStep = historyStep + 1;
         setHistoryStep(nextStep);
         setObjects(history[nextStep]);
         setSelectedId(null);
-    };
+    }, [history, historyStep]);
 
     const getBoardPoint = (event) => {
         const rect = boardRef.current?.getBoundingClientRect();
@@ -2274,11 +2249,36 @@ function StratBook() {
         commitObjects(next);
     };
 
-    const deleteSelected = () => {
+    const deleteSelected = useCallback(() => {
         if (!selectedId) return;
         commitObjects(objects.filter(obj => obj.id !== selectedId));
         setSelectedId(null);
-    };
+    }, [commitObjects, objects, selectedId]);
+
+    useEffect(() => {
+        const handleKeyDown = (event) => {
+            if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'z') {
+                event.preventDefault();
+                undo();
+            }
+            if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'y') {
+                event.preventDefault();
+                redo();
+            }
+            if ((event.key === 'Delete' || event.key === 'Backspace') && selectedId) {
+                const tag = document.activeElement?.tagName?.toLowerCase();
+                if (tag !== 'input' && tag !== 'textarea' && tag !== 'select') deleteSelected();
+            }
+            if (event.key === 'Escape') {
+                setSelectedId(null);
+                setDraft(null);
+                setDragging(null);
+                setTool('select');
+            }
+        };
+        window.addEventListener('keydown', handleKeyDown);
+        return () => window.removeEventListener('keydown', handleKeyDown);
+    }, [deleteSelected, redo, selectedId, undo]);
 
     const duplicateSelected = () => {
         if (!selectedObject) return;
@@ -4027,12 +4027,34 @@ function SyrixDashboard({ onBack }) {
     const nextEvent = events[0];
     const todayName = new Date().toLocaleDateString('en-US', { weekday: 'long', timeZone: userTimezone });
     const availableToday = dynamicMembers.filter(member => (displayAvail[member] || []).some(slot => slot.day === todayName)).length;
+    const pageMeta = {
+        dashboard: 'Overview, next operation, quick actions, and team status.',
+        availability: 'Edit your weekly availability and inspect the team schedule.',
+        matches: 'Record match results, reports, VODs, and performance context.',
+        roster: 'Manage member profiles, roles, ranks, and roster notes.',
+        playbook: 'Write map-specific protocols for attack and defense.',
+        comps: 'Build and save team compositions by map.',
+        strats: 'Plan rounds visually with agents, utility, paths, and saved strats.',
+        lineups: 'Store lineup media and map pins for fast review.',
+        mapveto: 'Track pick, ban, and comfort status for the active map pool.',
+        warroom: 'Keep scouting notes and opponent tendencies organized.',
+        content: 'Manage public site news, merch, achievements, and media.',
+        partners: 'Track partner contacts and sponsorship notes.',
+        admin: 'Review applications and schedule operations.'
+    };
+    const navBadge = (id) => {
+        if (id === 'availability') return availableToday ? String(availableToday) : '';
+        if (id === 'matches') return events.length ? String(events.length) : '';
+        if (id === 'roster') return dynamicMembers.length ? String(dynamicMembers.length) : '';
+        return '';
+    };
     const NavItem = ({ item, compact = false }) => (
         <button
             onClick={() => setActiveTab(item.id)}
-            className={`${compact ? 'px-3 py-2 text-[10px]' : 'w-full px-3 py-2.5 text-xs'} text-left font-black uppercase tracking-[0.16em] transition-all border ${activeTab === item.id ? 'bg-red-600 text-white border-red-500' : 'bg-transparent text-neutral-500 border-transparent hover:text-white hover:bg-white/5 hover:border-white/10'}`}
+            className={`${compact ? 'px-3 py-2 text-[10px]' : 'w-full px-3 py-2.5 text-xs'} text-left font-black uppercase tracking-[0.16em] transition-all border flex items-center justify-between gap-3 ${activeTab === item.id ? 'bg-red-600 text-white border-red-500' : 'bg-transparent text-neutral-500 border-transparent hover:text-white hover:bg-white/5 hover:border-white/10'}`}
         >
-            {item.label}
+            <span>{item.label}</span>
+            {navBadge(item.id) && <span className={`text-[9px] px-1.5 py-0.5 border ${activeTab === item.id ? 'border-white/30 bg-black/20 text-white' : 'border-white/10 bg-white/5 text-neutral-400'}`}>{navBadge(item.id)}</span>}
         </button>
     );
 
@@ -4070,6 +4092,11 @@ function SyrixDashboard({ onBack }) {
                 </nav>
 
                 <div className="p-4 border-t border-white/10">
+                    <div className="mb-3 bg-red-950/20 border border-red-900/35 p-3">
+                        <div className="text-[9px] uppercase tracking-[0.22em] text-red-400 font-black">Next Operation</div>
+                        <div className="mt-2 text-xs font-black text-white uppercase leading-snug">{nextEvent ? `${nextEvent.type || 'Event'} vs ${nextEvent.opponent || 'TBD'}` : 'No event scheduled'}</div>
+                        <div className="mt-1 text-[10px] text-neutral-500">{nextEvent ? `${nextEvent.date || 'Date TBD'} @ ${nextEvent.time || 'Time TBD'}` : 'Create one from Dashboard or Admin.'}</div>
+                    </div>
                     <div className="bg-black/40 border border-white/10 p-4">
                         <div className="text-sm font-black text-white truncate">{rosterName || currentUser.displayName || 'Guest'}</div>
                         <div className="mt-1 text-[10px] uppercase tracking-widest text-neutral-500">Signed in</div>
@@ -4091,6 +4118,7 @@ function SyrixDashboard({ onBack }) {
                         <div>
                             <div className="text-[10px] uppercase tracking-[0.24em] text-red-400 font-black">Command Center</div>
                             <h1 className="text-xl md:text-2xl font-black text-white uppercase tracking-tight">{activeLabel}</h1>
+                            <p className="hidden sm:block mt-0.5 text-xs text-neutral-500 max-w-xl">{pageMeta[activeTab]}</p>
                         </div>
                     </div>
                     <div className="flex items-center gap-4">
