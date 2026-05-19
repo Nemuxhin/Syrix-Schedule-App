@@ -2146,6 +2146,7 @@ function StratLibrary() {
     const [side, setSide] = useState('Attack');
     const [appStrats, setAppStrats] = useState([]);
     const [externalStrats, setExternalStrats] = useState([]);
+    const [fullscreenStrat, setFullscreenStrat] = useState(null);
     const [uploadForm, setUploadForm] = useState({ title: '', notes: '', imageUrl: '' });
     const [uploading, setUploading] = useState(false);
 
@@ -2183,6 +2184,19 @@ function StratLibrary() {
 
     const filteredAppStrats = appStrats.filter(strat => (strat.side || 'Attack') === side);
     const filteredExternalStrats = externalStrats.filter(strat => (strat.side || 'Attack') === side);
+
+    useEffect(() => {
+        if (!fullscreenStrat) return undefined;
+        const handleKeyDown = (event) => {
+            if (event.key === 'Escape') setFullscreenStrat(null);
+        };
+        document.body.style.overflow = 'hidden';
+        window.addEventListener('keydown', handleKeyDown);
+        return () => {
+            document.body.style.overflow = '';
+            window.removeEventListener('keydown', handleKeyDown);
+        };
+    }, [fullscreenStrat]);
 
     const handleImageFile = (event) => {
         const file = event.target.files?.[0];
@@ -2259,6 +2273,49 @@ function StratLibrary() {
 
     return (
         <div className="animate-fade-in space-y-6">
+            {fullscreenStrat && (
+                <div className="fixed inset-0 z-[120] bg-black/95 backdrop-blur-xl flex flex-col">
+                    <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 border-b border-white/10 bg-neutral-950/80 px-4 md:px-6 py-4">
+                        <div className="min-w-0">
+                            <div className="text-[10px] uppercase tracking-[0.28em] text-red-400 font-black">{fullscreenStrat.map} / {fullscreenStrat.side || side}</div>
+                            <h3 className="mt-1 text-xl md:text-2xl font-black uppercase italic text-white truncate">{fullscreenStrat.title}</h3>
+                        </div>
+                        <div className="flex flex-wrap items-center gap-2">
+                            {String(fullscreenStrat.imageUrl || '').startsWith('http') && (
+                                <a href={fullscreenStrat.imageUrl} target="_blank" rel="noreferrer" className="rounded-lg border border-white/10 bg-white/5 px-4 py-3 text-[10px] font-black uppercase tracking-widest text-white hover:bg-white hover:text-black">
+                                    Open Source
+                                </a>
+                            )}
+                            <button onClick={() => setFullscreenStrat(null)} className="rounded-lg border border-red-500/50 bg-red-600 px-4 py-3 text-[10px] font-black uppercase tracking-widest text-white hover:bg-red-500">
+                                Minimize
+                            </button>
+                        </div>
+                    </div>
+                    <div className="min-h-0 flex-1 grid grid-cols-1 xl:grid-cols-[1fr_22rem]">
+                        <div className="min-h-0 flex items-center justify-center bg-black p-3 md:p-6">
+                            <img src={fullscreenStrat.imageUrl} alt={fullscreenStrat.title} className="max-h-full max-w-full object-contain rounded-lg border border-white/10 shadow-2xl" />
+                        </div>
+                        <aside className="border-t xl:border-t-0 xl:border-l border-white/10 bg-neutral-950 p-5 overflow-y-auto">
+                            <div className="text-[10px] uppercase tracking-[0.24em] text-neutral-500 font-black">Plan Notes</div>
+                            {fullscreenStrat.notes ? (
+                                <p className="mt-4 whitespace-pre-wrap text-sm leading-6 text-neutral-300">{fullscreenStrat.notes}</p>
+                            ) : (
+                                <p className="mt-4 text-sm text-neutral-500">No notes saved for this plan.</p>
+                            )}
+                            <div className="mt-6 grid grid-cols-2 gap-3">
+                                <div className="rounded-xl border border-white/10 bg-black/40 p-3">
+                                    <div className="text-[10px] uppercase tracking-widest text-neutral-500 font-black">Source</div>
+                                    <div className="mt-1 text-sm font-black text-white">{fullscreenStrat.source || 'External'}</div>
+                                </div>
+                                <div className="rounded-xl border border-white/10 bg-black/40 p-3">
+                                    <div className="text-[10px] uppercase tracking-widest text-neutral-500 font-black">Saved</div>
+                                    <div className="mt-1 text-sm font-black text-white">{fullscreenStrat.createdAt ? new Date(fullscreenStrat.createdAt).toLocaleDateString() : 'No date'}</div>
+                                </div>
+                            </div>
+                        </aside>
+                    </div>
+                </div>
+            )}
             <Card>
                 <div className="flex flex-col xl:flex-row xl:items-end xl:justify-between gap-5 mb-6">
                     <div>
@@ -2339,9 +2396,13 @@ function StratLibrary() {
                             <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
                                 {filteredExternalStrats.length ? filteredExternalStrats.map(strat => (
                                     <div key={strat.id} className="rounded-xl border border-white/10 bg-black/45 overflow-hidden">
-                                        <div className="aspect-video bg-neutral-950">
+                                        <button onClick={() => setFullscreenStrat(strat)} className="group relative block aspect-video w-full bg-neutral-950 text-left">
                                             <img src={strat.imageUrl} alt={strat.title} className="h-full w-full object-contain" />
-                                        </div>
+                                            <span className="absolute inset-x-0 bottom-0 flex items-center justify-between gap-3 bg-gradient-to-t from-black/85 to-transparent p-3 opacity-0 transition-opacity group-hover:opacity-100">
+                                                <span className="text-[10px] font-black uppercase tracking-widest text-white">View Fullscreen</span>
+                                                <span className="rounded-md border border-white/15 bg-white px-2 py-1 text-[10px] font-black uppercase tracking-widest text-black">Open</span>
+                                            </span>
+                                        </button>
                                         <div className="p-4">
                                             <div className="flex items-start justify-between gap-3">
                                                 <div className="min-w-0">
@@ -2351,7 +2412,10 @@ function StratLibrary() {
                                                 <button onClick={() => deleteUploadedStrat(strat.id)} className="text-neutral-600 hover:text-red-500 text-xl leading-none">×</button>
                                             </div>
                                             {strat.notes && <p className="mt-3 text-sm text-neutral-400 whitespace-pre-wrap">{strat.notes}</p>}
-                                            {String(strat.imageUrl || '').startsWith('http') && <a href={strat.imageUrl} target="_blank" rel="noreferrer" className="mt-3 inline-flex text-[10px] font-black uppercase tracking-widest text-red-400 hover:text-white">Open Image</a>}
+                                            <div className="mt-3 flex flex-wrap gap-3">
+                                                <button onClick={() => setFullscreenStrat(strat)} className="text-[10px] font-black uppercase tracking-widest text-red-400 hover:text-white">Fullscreen</button>
+                                                {String(strat.imageUrl || '').startsWith('http') && <a href={strat.imageUrl} target="_blank" rel="noreferrer" className="text-[10px] font-black uppercase tracking-widest text-neutral-500 hover:text-white">Open Image</a>}
+                                            </div>
                                         </div>
                                     </div>
                                 )) : <div className="lg:col-span-2 p-8 text-center text-sm text-neutral-500 border border-dashed border-neutral-800 rounded-xl">No uploaded external plans for {selectedMap} {side}.</div>}
