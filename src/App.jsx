@@ -162,7 +162,7 @@ const GlobalStyles = () => (
         .glass-panel { background: rgba(12, 14, 18, 0.86); backdrop-filter: blur(14px); border: 1px solid rgba(255,255,255,0.10); box-shadow: 0 14px 40px rgba(0, 0, 0, 0.36); }
         .card-shine:hover { border-color: rgba(239, 68, 68, 0.34); background: rgba(17, 20, 26, 0.94); box-shadow: 0 18px 44px rgba(0,0,0,0.4); }
         .section-kicker { color: #ef4444; font-size: 0.72rem; font-weight: 900; letter-spacing: 0.24em; text-transform: uppercase; }
-        .section-title { color: #fff; font-size: clamp(2rem, 5vw, 3.8rem); line-height: 0.95; font-weight: 900; letter-spacing: 0; font-style: italic; text-transform: uppercase; }
+        .section-title { color: #fff; font-size: clamp(1.9rem, 4.2vw, 3.25rem); line-height: 0.95; font-weight: 900; letter-spacing: 0; font-style: italic; text-transform: uppercase; }
         .surface-band { background: rgba(9, 11, 15, 0.74); border-block: 1px solid rgba(255,255,255,0.06); }
         @keyframes slideIn { from { transform: translateX(100%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
         .animate-slide-in { animation: slideIn 0.3s cubic-bezier(0.2, 0.8, 0.2, 1); }
@@ -502,7 +502,7 @@ const LandingPage = ({ onEnterHub }) => {
     };
 
     const SectionHeading = ({ kicker, title, copy, align = 'left' }) => (
-        <div className={`mb-10 ${align === 'center' ? 'text-center mx-auto max-w-3xl' : 'max-w-4xl'}`} data-aos="fade-up">
+        <div className={`mb-7 ${align === 'center' ? 'text-center mx-auto max-w-3xl' : 'max-w-4xl'}`} data-aos="fade-up">
             <div className="section-kicker mb-3">{kicker}</div>
             <h3 className="section-title">{title}</h3>
             {copy && <p className="mt-4 text-sm md:text-base text-neutral-400 leading-relaxed">{copy}</p>}
@@ -560,21 +560,21 @@ const LandingPage = ({ onEnterHub }) => {
             </div>
 
             <main className="flex-1 relative z-10 flex flex-col items-center w-full">
-                <section id="home" className="w-full min-h-[94vh] flex items-end justify-center relative overflow-hidden bg-black pt-28 pb-10">
+                <section id="home" className="w-full min-h-[78vh] flex items-center justify-center relative overflow-hidden bg-black pt-24 pb-8">
                     <div className="absolute inset-0 w-full h-full z-0 pointer-events-none overflow-hidden">
                         <iframe className="absolute top-1/2 left-1/2 w-full h-full min-w-[177vh] min-h-[56.25vw] -translate-x-1/2 -translate-y-1/2 scale-[2.15] opacity-35 mix-blend-luminosity" src="https://www.youtube.com/embed/y9zweO_hU1U?autoplay=1&mute=1&controls=0&loop=1&playlist=y9zweO_hU1U&showinfo=0&rel=0&iv_load_policy=3&modestbranding=1&playsinline=1&enablejsapi=1&origin=http://localhost:3000" title="Hero Background" frameBorder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowFullScreen></iframe>
                         <div className="absolute inset-0 bg-[linear-gradient(90deg,#050608_0%,rgba(5,6,8,0.84)_38%,rgba(5,6,8,0.35)_100%)]"></div>
                         <div className="absolute inset-0 bg-gradient-to-t from-[#050608] via-transparent to-[#050608]/90"></div>
                     </div>
 
-                    <div className="relative z-10 max-w-[1480px] w-full mx-auto px-5 md:px-8 grid grid-cols-1 lg:grid-cols-[1.05fr_0.95fr] gap-8 items-end">
-                        <div className="pb-6" data-aos="fade-up">
+                    <div className="relative z-10 max-w-[1480px] w-full mx-auto px-5 md:px-8 grid grid-cols-1 lg:grid-cols-[1.12fr_0.88fr] gap-6 items-center">
+                        <div data-aos="fade-up">
                             <div className="inline-flex items-center gap-3 border border-white/15 bg-white/5 backdrop-blur-md px-3 py-1.5 mb-6">
                                 <span className="w-2 h-2 bg-red-600 animate-pulse"></span>
                                 <span className="text-[10px] font-black uppercase tracking-[0.28em] text-neutral-300">Official Valorant Team Portal</span>
                             </div>
-                            <h1 className="text-[18vw] sm:text-[7.8rem] lg:text-[9.5rem] font-black leading-[0.78] tracking-tight italic text-white">SYRIX</h1>
-                            <p className="text-neutral-300 text-base md:text-xl font-medium mt-7 mb-8 max-w-2xl leading-relaxed">
+                            <h1 className="text-[18vw] sm:text-[7.4rem] lg:text-[9rem] font-black leading-[0.78] tracking-tight italic text-white">SYRIX</h1>
+                            <p className="text-neutral-300 text-base md:text-lg font-medium mt-5 mb-6 max-w-2xl leading-relaxed">
                                 Matchday, roster, media, shop, community, and private team operations in one premium esports experience.
                             </p>
                             <div className="flex flex-col sm:flex-row gap-3 w-full sm:w-auto">
@@ -585,8 +585,8 @@ const LandingPage = ({ onEnterHub }) => {
                             </div>
                         </div>
 
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4" data-aos="fade-left">
-                            <div className="bg-[#0d1016]/90 border border-white/10 p-5 min-h-56 flex flex-col justify-between">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 lg:pt-20" data-aos="fade-left">
+                            <div className="bg-[#0d1016]/92 border border-white/10 p-5 min-h-52 flex flex-col justify-between">
                                 <div>
                                     <div className="text-[10px] uppercase tracking-[0.24em] text-red-400 font-black mb-3">Next Fixture</div>
                                     <div className="text-3xl font-black italic uppercase leading-none">SYRIX <span className="text-red-500">vs</span><br />{nextMatch?.opponent || 'TBD'}</div>
@@ -600,13 +600,13 @@ const LandingPage = ({ onEnterHub }) => {
                                     <a href="#schedule" className="text-xs font-black uppercase text-red-400 hover:text-white">Schedule</a>
                                 </div>
                             </div>
-                            <div className="bg-white text-black p-5 min-h-56 flex flex-col justify-between">
+                            <div className="bg-[#151922] text-white border border-white/10 p-5 min-h-52 flex flex-col justify-between">
                                 <div>
-                                    <div className="text-[10px] uppercase tracking-[0.24em] text-red-700 font-black mb-3">Featured</div>
+                                    <div className="text-[10px] uppercase tracking-[0.24em] text-red-400 font-black mb-3">Featured</div>
                                     <div className="text-2xl font-black uppercase leading-tight">{fallbackNews.title}</div>
-                                    <p className="mt-3 text-sm text-neutral-700 line-clamp-3">{fallbackNews.body}</p>
+                                    <p className="mt-3 text-sm text-neutral-400 line-clamp-3">{fallbackNews.body}</p>
                                 </div>
-                                <a href="#news" className="text-xs font-black uppercase text-black hover:text-red-700">Latest News</a>
+                                <a href="#news" className="text-xs font-black uppercase text-red-400 hover:text-white">Latest News</a>
                             </div>
                         </div>
                     </div>
@@ -628,7 +628,7 @@ const LandingPage = ({ onEnterHub }) => {
                     <style>{`@keyframes marquee { 0% { transform: translateX(0); } 100% { transform: translateX(-50%); } } .animate-marquee { animation: marquee 20s linear infinite; }`}</style>
                 </section>
 
-                <section className="w-full py-10 bg-[#080a0f] border-b border-white/10 flex justify-center relative z-20">
+                <section className="w-full py-7 bg-[#080a0f] border-b border-white/10 flex justify-center relative z-20">
                     <div className="max-w-[1480px] w-full px-5 md:px-8 grid grid-cols-2 lg:grid-cols-4 gap-6">
                         <StatBlock label="Season WR" value={`${teamStats.winRate}%`} sub="Recorded matches" />
                         <StatBlock label="Current Record" value={`${teamStats.wins}W ${teamStats.losses}L`} sub="Completed events" />
@@ -643,45 +643,45 @@ const LandingPage = ({ onEnterHub }) => {
                     </div>
                 </section>
 
-                <section id="schedule" className="w-full py-20 bg-[#f2f2f2] text-black relative flex justify-center">
+                <section id="schedule" className="w-full py-14 bg-[#050608] text-white relative flex justify-center border-y border-white/10">
                     <div className="max-w-[1480px] w-full px-5 md:px-8">
-                        <div className="flex flex-col lg:flex-row lg:items-end justify-between gap-8 mb-10">
+                        <div className="flex flex-col lg:flex-row lg:items-end justify-between gap-5 mb-7">
                             <div>
-                                <div className="text-[11px] uppercase tracking-[0.28em] text-red-700 font-black mb-3">Match Center</div>
+                                <div className="text-[11px] uppercase tracking-[0.28em] text-red-400 font-black mb-3">Match Center</div>
                                 <h3 className="text-5xl md:text-7xl font-black italic uppercase leading-none">Upcoming Matches</h3>
                             </div>
-                            <button onClick={onEnterHub} className="self-start lg:self-auto bg-black text-white px-6 py-3 text-xs font-black uppercase tracking-widest hover:bg-red-700 transition-colors">Manage Schedule</button>
+                            <button onClick={onEnterHub} className="self-start lg:self-auto bg-white text-black px-6 py-3 text-xs font-black uppercase tracking-widest hover:bg-red-600 hover:text-white transition-colors">Manage Schedule</button>
                         </div>
                         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
                             {matchPreview.length > 0 ? matchPreview.map((match, i) => (
-                                <div key={match.id || i} className="bg-white border border-black/10 p-5 min-h-56 flex flex-col justify-between group hover:border-red-700 transition-colors" data-aos="fade-up" data-aos-delay={i * 80}>
+                                <div key={match.id || i} className="bg-[#0d1016] border border-white/10 p-5 min-h-52 flex flex-col justify-between group hover:border-red-500/60 transition-colors" data-aos="fade-up" data-aos-delay={i * 80}>
                                     <div>
                                         <div className="flex items-center justify-between mb-8">
-                                            <span className="text-[10px] font-black uppercase tracking-[0.24em] text-red-700">{match.type || 'Match'}</span>
-                                            <span className="text-xs font-mono text-neutral-500">{String(i + 1).padStart(2, '0')}</span>
+                                            <span className="text-[10px] font-black uppercase tracking-[0.24em] text-red-400">{match.type || 'Match'}</span>
+                                            <span className="text-xs font-mono text-neutral-600">{String(i + 1).padStart(2, '0')}</span>
                                         </div>
-                                        <div className="text-3xl font-black italic uppercase leading-none">SYRIX <span className="text-red-700">vs</span><br />{match.opponent || 'TBD'}</div>
+                                        <div className="text-3xl font-black italic uppercase leading-none">SYRIX <span className="text-red-500">vs</span><br />{match.opponent || 'TBD'}</div>
                                         <div className="mt-4 text-xs uppercase tracking-widest text-neutral-500">{match.map || 'Map TBD'}</div>
                                     </div>
-                                    <div className="border-t border-black/10 pt-4 flex justify-between items-end">
+                                    <div className="border-t border-white/10 pt-4 flex justify-between items-end">
                                         <div>
                                             <div className="font-black uppercase">{formatEventDate(match.date)}</div>
                                             <div className="text-xs font-mono text-neutral-500">{match.time || 'TBD'} {match.timezone || ''}</div>
                                         </div>
-                                        <span className="text-red-700 font-black group-hover:translate-x-1 transition-transform">→</span>
+                                        <span className="text-red-400 font-black group-hover:translate-x-1 transition-transform">→</span>
                                     </div>
                                 </div>
                             )) : (
-                                <div className="lg:col-span-3 bg-white border border-black/10 p-10 text-center text-neutral-500">No upcoming operations scheduled.</div>
+                                <div className="lg:col-span-3 bg-[#0d1016] border border-white/10 p-8 text-center text-neutral-500">No upcoming operations scheduled.</div>
                             )}
                         </div>
                     </div>
                 </section>
 
-                <section id="roster" className="w-full py-24 relative flex flex-col items-center">
+                <section id="roster" className="w-full py-16 relative flex flex-col items-center">
                     <div className="max-w-[1480px] w-full px-5 md:px-8">
                         <SectionHeading kicker="The Squad" title="Active Roster" copy="Large portraits, clear role tags, and readable player detail make the roster feel like a real team presentation instead of a database list." />
-                        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-5 mb-20">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-5 mb-12">
                             {activePlayers.length > 0 ? activePlayers.map((p, i) => (
                                 <PlayerCard key={p.id} player={p} delay={i * 50} />
                             )) : (
@@ -699,7 +699,7 @@ const LandingPage = ({ onEnterHub }) => {
                     </div>
                 </section>
 
-                <section className="w-full py-10 border-y border-white/5 bg-[#080a0f] flex justify-center relative overflow-hidden">
+                <section className="w-full py-7 border-y border-white/5 bg-[#080a0f] flex justify-center relative overflow-hidden">
                     <div className="max-w-[1480px] w-full px-5 md:px-8 grid grid-cols-2 md:grid-cols-4 gap-6 text-left">
                         {achievements.length > 0 ? achievements.map((item, index) => (
                             <div key={item.id} className="group border-l border-white/10 pl-4" data-aos="fade-up" data-aos-delay={index * 100}>
@@ -711,11 +711,11 @@ const LandingPage = ({ onEnterHub }) => {
                     </div>
                 </section>
 
-                <section id="vods" className="w-full py-24 relative flex justify-center">
+                <section id="vods" className="w-full py-16 relative flex justify-center">
                     <div className="max-w-[1480px] w-full px-5 md:px-8">
                         <SectionHeading kicker="Media" title="Highlights, VODs, Intel" copy="Org sites stay sticky by giving visitors something to watch. This puts recent video content beside a larger featured media slot." />
                         <div className="grid grid-cols-1 lg:grid-cols-[1.3fr_0.7fr] gap-5">
-                            <a href={heroVideo?.url || '#news'} target={heroVideo?.url ? "_blank" : "_self"} rel="noopener noreferrer" className="group bg-[#0d1016] border border-white/10 overflow-hidden min-h-[26rem]" data-aos="fade-up">
+                            <a href={heroVideo?.url || '#news'} target={heroVideo?.url ? "_blank" : "_self"} rel="noopener noreferrer" className="group bg-[#0d1016] border border-white/10 overflow-hidden min-h-[20rem]" data-aos="fade-up">
                                 <div className="aspect-video bg-neutral-900 relative">
                                     {heroVideo?.url && <img src={`https://img.youtube.com/vi/${videoIdFromUrl(heroVideo.url)}/maxresdefault.jpg`} alt={heroVideo.title} className="absolute inset-0 w-full h-full object-cover opacity-70 group-hover:scale-[1.03] transition-transform duration-500" onError={(e) => { e.target.style.display = 'none' }} />}
                                     <div className="absolute inset-0 bg-gradient-to-t from-black/85 to-transparent"></div>
@@ -745,17 +745,17 @@ const LandingPage = ({ onEnterHub }) => {
                     </div>
                 </section>
 
-                <section id="news" className="w-full py-24 relative flex justify-center bg-[#080a0f]">
+                <section id="news" className="w-full py-16 relative flex justify-center bg-[#080a0f]">
                     <div className="max-w-[1480px] w-full px-5 md:px-8">
                         <SectionHeading kicker="Newsroom" title="Latest From Syrix" align="center" />
                         <div className="grid grid-cols-1 lg:grid-cols-[1.1fr_0.9fr] gap-5">
-                            <div className="bg-white text-black p-8 md:p-10 min-h-96 flex flex-col justify-between" data-aos="fade-right">
+                            <div className="bg-[#151922] text-white border border-white/10 p-7 md:p-8 min-h-72 flex flex-col justify-between" data-aos="fade-right">
                                 <div>
-                                    <span className="text-red-700 text-xs font-black uppercase tracking-widest mb-4 block">Featured • {fallbackNews.date}</span>
+                                    <span className="text-red-400 text-xs font-black uppercase tracking-widest mb-4 block">Featured • {fallbackNews.date}</span>
                                     <h4 className="text-4xl md:text-6xl font-black mb-5 uppercase italic leading-none">{fallbackNews.title}</h4>
-                                    <p className="text-neutral-700 mb-6 line-clamp-5 leading-relaxed">{fallbackNews.body}</p>
+                                    <p className="text-neutral-400 mb-6 line-clamp-5 leading-relaxed">{fallbackNews.body}</p>
                                 </div>
-                                {fallbackNews.url && <a href={fallbackNews.url} target="_blank" rel="noopener noreferrer" className="text-black font-black text-sm hover:text-red-700 transition-colors self-start uppercase tracking-widest">Read Full Report →</a>}
+                                {fallbackNews.url && <a href={fallbackNews.url} target="_blank" rel="noopener noreferrer" className="text-red-400 font-black text-sm hover:text-white transition-colors self-start uppercase tracking-widest">Read Full Report →</a>}
                             </div>
                             <div className="grid grid-cols-1 gap-4" data-aos="fade-left">
                                 {otherNews.length ? otherNews.map(item => (
@@ -773,9 +773,9 @@ const LandingPage = ({ onEnterHub }) => {
                     </div>
                 </section>
 
-                <section id="merch" className="w-full py-24 relative flex justify-center">
+                <section id="merch" className="w-full py-16 relative flex justify-center">
                     <div className="max-w-[1480px] w-full px-5 md:px-8">
-                        <div className="grid grid-cols-1 lg:grid-cols-[0.75fr_1.25fr] gap-8 items-start">
+                        <div className="grid grid-cols-1 lg:grid-cols-[0.75fr_1.25fr] gap-6 items-start">
                             <div className="lg:sticky lg:top-24">
                                 <SectionHeading kicker="Official Gear" title="Armory Drop" copy="Commerce is one of the biggest differences between a team page and an org page. This section now feels more like a real product rail." />
                                 <a href={featuredProducts[0]?.link || '#community'} target={featuredProducts[0]?.link ? "_blank" : "_self"} rel="noreferrer" className="inline-flex bg-white text-black px-6 py-3 text-xs font-black uppercase tracking-widest hover:bg-red-600 hover:text-white transition-colors">Shop Latest</a>
@@ -801,9 +801,9 @@ const LandingPage = ({ onEnterHub }) => {
                     </div>
                 </section>
 
-                <section id="partners" className="w-full py-14 relative flex justify-center border-y border-white/5 bg-[#080a0f]">
+                <section id="partners" className="w-full py-10 relative flex justify-center border-y border-white/5 bg-[#080a0f]">
                     <div className="max-w-[1480px] w-full px-5 md:px-8">
-                        <div className="grid grid-cols-1 md:grid-cols-[auto_1fr] items-center gap-8">
+                        <div className="grid grid-cols-1 md:grid-cols-[auto_1fr] items-center gap-6">
                             <p className="text-neutral-500 text-xs font-black uppercase tracking-[0.3em]">Partners</p>
                             <div className="flex flex-wrap gap-8 md:gap-16 opacity-60">
                                 {['RougeEnergy', 'Logitech', 'Discord', 'Valorant'].map((p) => <div key={p} className="text-2xl font-black text-white italic tracking-tight">{p}</div>)}
@@ -812,9 +812,9 @@ const LandingPage = ({ onEnterHub }) => {
                     </div>
                 </section>
 
-                <section id="community" className="w-full py-24 relative flex justify-center">
+                <section id="community" className="w-full py-16 relative flex justify-center">
                     <div className="max-w-[1480px] w-full px-5 md:px-8">
-                        <div className="bg-red-600 text-white p-8 md:p-14 grid grid-cols-1 lg:grid-cols-[1fr_auto] gap-8 items-center" data-aos="zoom-in">
+                        <div className="bg-red-600 text-white p-7 md:p-10 grid grid-cols-1 lg:grid-cols-[1fr_auto] gap-6 items-center" data-aos="zoom-in">
                             <div>
                                 <div className="text-[10px] font-black uppercase tracking-[0.28em] text-white/70 mb-4">Community</div>
                                 <h3 className="text-5xl md:text-7xl font-black italic uppercase leading-none">Join The Syndicate</h3>
