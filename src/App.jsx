@@ -1255,7 +1255,6 @@ function StratBook() {
     const [selectedId, setSelectedId] = useState(null);
     const [dragging, setDragging] = useState(null);
     const [draft, setDraft] = useState(null);
-    const [savedStrats, setSavedStrats] = useState([]);
     const [stratName, setStratName] = useState('');
     const [loadingSave, setLoadingSave] = useState(false);
     const [paletteDrag, setPaletteDrag] = useState(null);
@@ -1307,22 +1306,6 @@ function StratBook() {
             setSelectedAbility(availableAbilities[0]);
         }
     }, [availableAbilities, selectedAbility]);
-
-    useEffect(() => {
-        const unsub = onSnapshot(
-            query(collection(db, 'strats'), where('map', '==', selectedMap)),
-            (snap) => {
-                const data = [];
-                snap.forEach(docSnap => data.push({ id: docSnap.id, ...docSnap.data() }));
-                setSavedStrats(data.sort((a, b) => new Date(b.updatedAt || b.date || 0) - new Date(a.updatedAt || a.date || 0)));
-            },
-            (error) => {
-                console.error('Planner saves unavailable:', error);
-                setSavedStrats([]);
-            }
-        );
-        return () => unsub();
-    }, [selectedMap]);
 
     const commitObjects = useCallback((nextObjects) => {
         const clean = nextObjects.map(obj => ({ ...obj }));
@@ -1849,26 +1832,6 @@ function StratBook() {
         }
     };
 
-    const loadStrat = (strat) => {
-        const loaded = Array.isArray(strat.objects) ? strat.objects : [];
-        setObjects(loaded);
-        setHistory([loaded]);
-        setHistoryStep(0);
-        setSide(strat.side || 'Attack');
-        setSelectedId(null);
-        if (!loaded.length && strat.image) addToast('This older saved strat only has an image preview', 'error');
-    };
-
-    const deleteStrat = async (id) => {
-        try {
-            await deleteDoc(doc(db, 'strats', id));
-            addToast('Strategy deleted');
-        } catch (error) {
-            console.error('Delete strat failed:', error);
-            addToast('Unable to delete strategy', 'error');
-        }
-    };
-
     const exportJson = () => {
         const payload = JSON.stringify({ name: stratName || `${selectedMap}-${side}`, map: selectedMap, side, objects }, null, 2);
         const blob = new Blob([payload], { type: 'application/json' });
@@ -2156,21 +2119,8 @@ function StratBook() {
                         <ButtonSecondary onClick={exportJson} className="text-xs">Export</ButtonSecondary>
                     </div>
                 </div>
-
-                <div className="p-4">
-                    <div className="text-[10px] font-black text-red-500 uppercase mb-3">Saved On {selectedMap}</div>
-                    <div className="space-y-2 max-h-80 overflow-y-auto custom-scrollbar pr-1">
-                        {savedStrats.length ? savedStrats.map(strat => (
-                            <div key={strat.id} className="p-3 rounded-xl bg-white/5 border border-white/10 hover:border-red-500/40 transition-colors">
-                                <div className="font-bold text-white text-sm truncate">{strat.name || strat.title || 'Untitled strategy'}</div>
-                                <div className="text-[10px] text-neutral-500 uppercase mt-1">{strat.side || 'Attack'} / {strat.objects?.length || 0} items</div>
-                                <div className="grid grid-cols-2 gap-2 mt-3">
-                                    <ButtonSecondary onClick={() => loadStrat(strat)} className="text-[10px] py-1">Load</ButtonSecondary>
-                                    <ButtonSecondary onClick={() => deleteStrat(strat.id)} className="text-[10px] py-1">Delete</ButtonSecondary>
-                                </div>
-                            </div>
-                        )) : <div className="text-xs text-neutral-500 italic">No saved strategies for this map yet.</div>}
-                    </div>
+                <div className="p-4 text-xs text-neutral-500 leading-relaxed">
+                    Saved strategies now live in the Strat Library tab, where app-made plans and uploaded ValoPlant images are grouped by map and side.
                 </div>
             </aside>
             <Modal isOpen={Boolean(pendingTextPoint)} onClose={() => { setPendingTextPoint(null); setTextDraft(''); }} onConfirm={addTextObject} title="Add Text">
@@ -2185,6 +2135,231 @@ function StratBook() {
                     <p className="text-xs text-neutral-500">Line breaks are preserved on the planner.</p>
                 </div>
             </Modal>
+        </div>
+    );
+}
+
+function StratLibrary() {
+    const { mapImages } = useValorantData();
+    const addToast = useToast();
+    const [selectedMap, setSelectedMap] = useState(MAPS[0]);
+    const [side, setSide] = useState('Attack');
+    const [appStrats, setAppStrats] = useState([]);
+    const [externalStrats, setExternalStrats] = useState([]);
+    const [uploadForm, setUploadForm] = useState({ title: '', notes: '', imageUrl: '' });
+    const [uploading, setUploading] = useState(false);
+
+    useEffect(() => {
+        const unsub = onSnapshot(
+            query(collection(db, 'strats'), where('map', '==', selectedMap)),
+            (snap) => {
+                const rows = [];
+                snap.forEach(docSnap => rows.push({ id: docSnap.id, ...docSnap.data() }));
+                setAppStrats(rows.sort((a, b) => new Date(b.updatedAt || b.date || 0) - new Date(a.updatedAt || a.date || 0)));
+            },
+            (error) => {
+                console.error('Strat library app plans unavailable:', error);
+                setAppStrats([]);
+            }
+        );
+        return () => unsub();
+    }, [selectedMap]);
+
+    useEffect(() => {
+        const unsub = onSnapshot(
+            query(collection(db, 'external_strats'), where('map', '==', selectedMap)),
+            (snap) => {
+                const rows = [];
+                snap.forEach(docSnap => rows.push({ id: docSnap.id, ...docSnap.data() }));
+                setExternalStrats(rows.sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0)));
+            },
+            (error) => {
+                console.error('Uploaded strat images unavailable:', error);
+                setExternalStrats([]);
+            }
+        );
+        return () => unsub();
+    }, [selectedMap]);
+
+    const filteredAppStrats = appStrats.filter(strat => (strat.side || 'Attack') === side);
+    const filteredExternalStrats = externalStrats.filter(strat => (strat.side || 'Attack') === side);
+
+    const handleImageFile = (event) => {
+        const file = event.target.files?.[0];
+        if (!file) return;
+        if (!file.type.startsWith('image/')) return addToast('Please choose an image file', 'error');
+        if (file.size > 700 * 1024) return addToast('Image is too large. Use an image under 700KB or paste an image URL.', 'error');
+
+        const reader = new FileReader();
+        reader.onload = () => setUploadForm(prev => ({ ...prev, imageUrl: String(reader.result || '') }));
+        reader.onerror = () => addToast('Unable to read image file', 'error');
+        reader.readAsDataURL(file);
+    };
+
+    const saveUploadedStrat = async () => {
+        if (!uploadForm.title.trim()) return addToast('Strategy title is required', 'error');
+        if (!uploadForm.imageUrl.trim()) return addToast('Add an image URL or upload an image file', 'error');
+
+        setUploading(true);
+        try {
+            await addDoc(collection(db, 'external_strats'), {
+                title: uploadForm.title.trim(),
+                notes: uploadForm.notes.trim(),
+                imageUrl: uploadForm.imageUrl.trim(),
+                map: selectedMap,
+                side,
+                source: 'ValoPlant',
+                createdAt: new Date().toISOString()
+            });
+            setUploadForm({ title: '', notes: '', imageUrl: '' });
+            addToast('Uploaded strategy saved');
+        } catch (error) {
+            console.error('Upload strat save failed:', error);
+            addToast('Unable to save uploaded strategy', 'error');
+        } finally {
+            setUploading(false);
+        }
+    };
+
+    const deleteUploadedStrat = async (id) => {
+        try {
+            await deleteDoc(doc(db, 'external_strats', id));
+            addToast('Uploaded strategy removed');
+        } catch (error) {
+            console.error('Upload strat delete failed:', error);
+            addToast('Unable to delete uploaded strategy', 'error');
+        }
+    };
+
+    const deleteAppStrat = async (id) => {
+        try {
+            await deleteDoc(doc(db, 'strats', id));
+            addToast('Strategy deleted');
+        } catch (error) {
+            console.error('Delete strat failed:', error);
+            addToast('Unable to delete strategy', 'error');
+        }
+    };
+
+    const exportAppStrat = (strat) => {
+        const payload = JSON.stringify({
+            name: strat.name || strat.title || 'Untitled strategy',
+            map: strat.map,
+            side: strat.side,
+            objects: strat.objects || []
+        }, null, 2);
+        const blob = new Blob([payload], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = `${strat.map}-${strat.side}-${strat.name || 'strat'}`.toLowerCase().replace(/\s+/g, '-');
+        link.click();
+        URL.revokeObjectURL(url);
+    };
+
+    return (
+        <div className="animate-fade-in space-y-6">
+            <Card>
+                <div className="flex flex-col xl:flex-row xl:items-end xl:justify-between gap-5 mb-6">
+                    <div>
+                        <div className="text-[10px] uppercase tracking-[0.28em] text-red-400 font-black mb-3">Strategy Archive</div>
+                        <h2 className="text-3xl md:text-4xl font-black text-white uppercase italic leading-none">Strat Library</h2>
+                        <p className="mt-3 text-sm text-neutral-400 max-w-3xl">Browse app-made Stratbook plans or store ValoPlant/ValoPlanner image exports by map and side.</p>
+                    </div>
+                    <div className="grid grid-cols-1 md:grid-cols-[14rem_16rem] gap-3">
+                        <Select value={selectedMap} onChange={e => setSelectedMap(e.target.value)}>
+                            {MAPS.map(map => <option key={map}>{map}</option>)}
+                        </Select>
+                        <div className="grid grid-cols-2 gap-2">
+                            {['Attack', 'Defense'].map(value => (
+                                <button key={value} onClick={() => setSide(value)} className={`rounded-xl border px-4 py-3 text-xs font-black uppercase tracking-widest ${side === value ? 'bg-red-600 border-red-500 text-white' : 'bg-black/40 border-white/10 text-neutral-500 hover:text-white'}`}>{value}</button>
+                            ))}
+                        </div>
+                    </div>
+                </div>
+
+                <div className="grid grid-cols-1 xl:grid-cols-[0.74fr_1.26fr] gap-6">
+                    <div className="space-y-6">
+                        <div className="rounded-xl border border-white/10 bg-black/35 overflow-hidden">
+                            <div className="aspect-video bg-neutral-950 relative">
+                                {mapImages[selectedMap] ? <img src={mapImages[selectedMap]} alt={selectedMap} className="h-full w-full object-contain opacity-75" /> : <div className="absolute inset-0 flex items-center justify-center text-neutral-700 font-black uppercase">{selectedMap}</div>}
+                                <div className="absolute left-3 top-3 rounded-md border border-white/10 bg-black/70 px-3 py-2 text-xs font-black uppercase text-white">{selectedMap} / {side}</div>
+                            </div>
+                            <div className="grid grid-cols-2 divide-x divide-white/10 border-t border-white/10">
+                                <div className="p-4">
+                                    <div className="text-[10px] uppercase tracking-widest text-neutral-500 font-black">App Strats</div>
+                                    <div className="mt-1 text-3xl font-black text-white">{filteredAppStrats.length}</div>
+                                </div>
+                                <div className="p-4">
+                                    <div className="text-[10px] uppercase tracking-widest text-neutral-500 font-black">Uploads</div>
+                                    <div className="mt-1 text-3xl font-black text-white">{filteredExternalStrats.length}</div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div className="rounded-xl border border-white/10 bg-black/35 p-4 space-y-3">
+                            <div className="text-[10px] uppercase tracking-[0.24em] text-red-400 font-black">Upload External Image</div>
+                            <Input value={uploadForm.title} onChange={e => setUploadForm({ ...uploadForm, title: e.target.value })} placeholder="Strategy title" />
+                            <Input value={uploadForm.imageUrl} onChange={e => setUploadForm({ ...uploadForm, imageUrl: e.target.value })} placeholder="Image URL or upload below" />
+                            <input type="file" accept="image/*" onChange={handleImageFile} className="block w-full text-xs text-neutral-500 file:mr-3 file:rounded-lg file:border-0 file:bg-white/10 file:px-3 file:py-2 file:text-xs file:font-black file:uppercase file:text-white hover:file:bg-red-600" />
+                            <textarea value={uploadForm.notes} onChange={e => setUploadForm({ ...uploadForm, notes: e.target.value })} placeholder="Optional notes, callouts, or source link..." className="w-full h-24 bg-black/40 border border-neutral-800 rounded-xl p-3 text-white text-sm outline-none focus:border-red-600 placeholder-neutral-600 resize-y" />
+                            <ButtonPrimary onClick={saveUploadedStrat} disabled={uploading} className="w-full text-xs py-3">{uploading ? 'Saving...' : 'Save Upload'}</ButtonPrimary>
+                        </div>
+                    </div>
+
+                    <div className="space-y-6">
+                        <div>
+                            <div className="flex items-center justify-between gap-3 mb-3">
+                                <h3 className="text-sm font-black uppercase tracking-widest text-white">Made In Stratbook</h3>
+                                <span className="text-[10px] uppercase tracking-widest text-neutral-500">{filteredAppStrats.length} saved</span>
+                            </div>
+                            <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+                                {filteredAppStrats.length ? filteredAppStrats.map(strat => (
+                                    <div key={strat.id} className="rounded-xl border border-white/10 bg-black/45 p-4">
+                                        <div className="flex items-start justify-between gap-3">
+                                            <div className="min-w-0">
+                                                <div className="text-lg font-black text-white truncate">{strat.name || strat.title || 'Untitled strategy'}</div>
+                                                <div className="mt-1 text-[10px] uppercase tracking-widest text-neutral-500">{strat.side || 'Attack'} / {strat.objects?.length || 0} items / {strat.updatedAt ? new Date(strat.updatedAt).toLocaleDateString() : 'No date'}</div>
+                                            </div>
+                                            <button onClick={() => deleteAppStrat(strat.id)} className="text-neutral-600 hover:text-red-500 text-xl leading-none">×</button>
+                                        </div>
+                                        <div className="mt-4 flex flex-wrap gap-2">
+                                            <ButtonSecondary onClick={() => exportAppStrat(strat)} className="text-[10px] py-2">Export JSON</ButtonSecondary>
+                                        </div>
+                                    </div>
+                                )) : <div className="lg:col-span-2 p-8 text-center text-sm text-neutral-500 border border-dashed border-neutral-800 rounded-xl">No app-made strategies saved for {selectedMap} {side}.</div>}
+                            </div>
+                        </div>
+
+                        <div>
+                            <div className="flex items-center justify-between gap-3 mb-3">
+                                <h3 className="text-sm font-black uppercase tracking-widest text-white">Uploaded External Plans</h3>
+                                <span className="text-[10px] uppercase tracking-widest text-neutral-500">{filteredExternalStrats.length} images</span>
+                            </div>
+                            <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+                                {filteredExternalStrats.length ? filteredExternalStrats.map(strat => (
+                                    <div key={strat.id} className="rounded-xl border border-white/10 bg-black/45 overflow-hidden">
+                                        <div className="aspect-video bg-neutral-950">
+                                            <img src={strat.imageUrl} alt={strat.title} className="h-full w-full object-contain" />
+                                        </div>
+                                        <div className="p-4">
+                                            <div className="flex items-start justify-between gap-3">
+                                                <div className="min-w-0">
+                                                    <div className="text-lg font-black text-white truncate">{strat.title}</div>
+                                                    <div className="mt-1 text-[10px] uppercase tracking-widest text-neutral-500">{strat.source || 'External'} / {strat.createdAt ? new Date(strat.createdAt).toLocaleDateString() : 'No date'}</div>
+                                                </div>
+                                                <button onClick={() => deleteUploadedStrat(strat.id)} className="text-neutral-600 hover:text-red-500 text-xl leading-none">×</button>
+                                            </div>
+                                            {strat.notes && <p className="mt-3 text-sm text-neutral-400 whitespace-pre-wrap">{strat.notes}</p>}
+                                            {String(strat.imageUrl || '').startsWith('http') && <a href={strat.imageUrl} target="_blank" rel="noreferrer" className="mt-3 inline-flex text-[10px] font-black uppercase tracking-widest text-red-400 hover:text-white">Open Image</a>}
+                                        </div>
+                                    </div>
+                                )) : <div className="lg:col-span-2 p-8 text-center text-sm text-neutral-500 border border-dashed border-neutral-800 rounded-xl">No uploaded external plans for {selectedMap} {side}.</div>}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </Card>
         </div>
     );
 }
@@ -3277,6 +3452,9 @@ function PlayerAdminNotes({ members, currentUserName }) {
         notes: ''
     });
     const [saving, setSaving] = useState(false);
+    const [editingId, setEditingId] = useState(null);
+    const [editForm, setEditForm] = useState(null);
+    const [editingSaving, setEditingSaving] = useState(false);
     const addToast = useToast();
 
     useEffect(() => {
@@ -3336,6 +3514,54 @@ function PlayerAdminNotes({ members, currentUserName }) {
         } catch (error) {
             console.error('Player note delete failed:', error);
             addToast('Unable to delete player note', 'error');
+        }
+    };
+
+    const startEditNote = (note) => {
+        setEditingId(note.id);
+        setEditForm({
+            player: note.player || form.player,
+            rating: String(note.rating || 7),
+            playstyle: note.playstyle || '',
+            comms: note.comms || '',
+            improvement: note.improvement || '',
+            notes: note.notes || ''
+        });
+    };
+
+    const cancelEditNote = () => {
+        setEditingId(null);
+        setEditForm(null);
+    };
+
+    const saveEditedNote = async () => {
+        if (!editingId || !editForm) return;
+        const rating = Number(editForm.rating);
+        if (Number.isNaN(rating) || rating < 1 || rating > 10) return addToast('Rating must be between 1 and 10', 'error');
+        if (!editForm.playstyle.trim() && !editForm.comms.trim() && !editForm.improvement.trim() && !editForm.notes.trim()) {
+            return addToast('Add at least one coaching note', 'error');
+        }
+
+        setEditingSaving(true);
+        try {
+            await updateDoc(doc(db, 'admin_player_notes', editingId), {
+                player: editForm.player,
+                rating,
+                playstyle: editForm.playstyle.trim(),
+                comms: editForm.comms.trim(),
+                improvement: editForm.improvement.trim(),
+                notes: editForm.notes.trim(),
+                updatedAt: new Date().toISOString(),
+                updatedBy: currentUserName || 'Admin'
+            });
+            await writeAuditLog('Player note edited', `${editForm.player} rated ${rating}/10`, currentUserName || 'Admin');
+            cancelEditNote();
+            addToast('Player note updated');
+        } catch (error) {
+            console.error('Player note update failed:', error);
+            addToast('Unable to update player note', 'error');
+        } finally {
+            setEditingSaving(false);
         }
     };
 
@@ -3401,21 +3627,64 @@ function PlayerAdminNotes({ members, currentUserName }) {
                 <div className="space-y-3 max-h-[78vh] overflow-y-auto pr-2 custom-scrollbar">
                     {selectedNotes.length ? selectedNotes.map(note => (
                         <div key={note.id} className="bg-black/45 border border-white/10 rounded-xl p-4">
-                            <div className="flex items-start justify-between gap-3">
-                                <div>
-                                    <div className="flex flex-wrap gap-2 mb-2">
-                                        <span className="text-[9px] uppercase tracking-widest bg-red-600 text-white px-2 py-1 rounded">{note.rating || 'N/A'}/10</span>
-                                        <span className="text-[9px] uppercase tracking-widest bg-white/5 border border-white/10 text-neutral-400 px-2 py-1 rounded">{note.author || 'Admin'}</span>
-                                        <span className="text-[9px] uppercase tracking-widest text-neutral-500">{note.createdAt ? new Date(note.createdAt).toLocaleDateString() : 'Date TBD'}</span>
+                            {editingId === note.id && editForm ? (
+                                <div className="space-y-4">
+                                    <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+                                        <div>
+                                            <div className="text-[9px] uppercase tracking-widest text-red-400 font-black mb-1">Editing Note</div>
+                                            <div className="text-lg font-black text-white">{note.player}</div>
+                                        </div>
+                                        <div className="flex gap-2">
+                                            <ButtonSecondary onClick={cancelEditNote} className="text-[10px] py-2">Cancel</ButtonSecondary>
+                                            <ButtonPrimary onClick={saveEditedNote} disabled={editingSaving} className="text-[10px] py-2">{editingSaving ? 'Saving...' : 'Save Edit'}</ButtonPrimary>
+                                        </div>
                                     </div>
-                                    <div className="text-lg font-black text-white">{note.player}</div>
+                                    <div>
+                                        <label className="text-[10px] font-black text-red-500 uppercase mb-1 block">Rating: {editForm.rating}/10</label>
+                                        <input type="range" min="1" max="10" step="1" value={editForm.rating} onChange={e => setEditForm({ ...editForm, rating: e.target.value })} className="w-full accent-red-600" />
+                                    </div>
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                        <div>
+                                            <label className="text-[10px] font-black text-red-500 uppercase mb-1 block">Playstyle</label>
+                                            <textarea value={editForm.playstyle} onChange={e => setEditForm({ ...editForm, playstyle: e.target.value })} className="w-full h-28 bg-black/40 border border-neutral-800 rounded-xl p-3 text-white text-sm outline-none focus:border-red-600 placeholder-neutral-600 resize-y" />
+                                        </div>
+                                        <div>
+                                            <label className="text-[10px] font-black text-red-500 uppercase mb-1 block">Comms</label>
+                                            <textarea value={editForm.comms} onChange={e => setEditForm({ ...editForm, comms: e.target.value })} className="w-full h-28 bg-black/40 border border-neutral-800 rounded-xl p-3 text-white text-sm outline-none focus:border-red-600 placeholder-neutral-600 resize-y" />
+                                        </div>
+                                    </div>
+                                    <div>
+                                        <label className="text-[10px] font-black text-red-500 uppercase mb-1 block">What To Improve</label>
+                                        <textarea value={editForm.improvement} onChange={e => setEditForm({ ...editForm, improvement: e.target.value })} className="w-full h-28 bg-black/40 border border-neutral-800 rounded-xl p-3 text-white text-sm outline-none focus:border-red-600 placeholder-neutral-600 resize-y" />
+                                    </div>
+                                    <div>
+                                        <label className="text-[10px] font-black text-red-500 uppercase mb-1 block">Extra Notes</label>
+                                        <textarea value={editForm.notes} onChange={e => setEditForm({ ...editForm, notes: e.target.value })} className="w-full h-24 bg-black/40 border border-neutral-800 rounded-xl p-3 text-white text-sm outline-none focus:border-red-600 placeholder-neutral-600 resize-y" />
+                                    </div>
                                 </div>
-                                <button onClick={() => removeNote(note)} className="text-neutral-600 hover:text-red-500 text-xl leading-none">×</button>
-                            </div>
-                            {note.playstyle && <div className="mt-3 border-t border-white/10 pt-3"><div className="text-[9px] uppercase tracking-widest text-neutral-500 font-black mb-1">Playstyle</div><p className="text-sm text-neutral-300 whitespace-pre-wrap">{note.playstyle}</p></div>}
-                            {note.comms && <div className="mt-3 border-t border-white/10 pt-3"><div className="text-[9px] uppercase tracking-widest text-neutral-500 font-black mb-1">Comms</div><p className="text-sm text-neutral-300 whitespace-pre-wrap">{note.comms}</p></div>}
-                            {note.improvement && <div className="mt-3 border-t border-white/10 pt-3"><div className="text-[9px] uppercase tracking-widest text-neutral-500 font-black mb-1">Improve</div><p className="text-sm text-neutral-300 whitespace-pre-wrap">{note.improvement}</p></div>}
-                            {note.notes && <div className="mt-3 border-t border-white/10 pt-3"><div className="text-[9px] uppercase tracking-widest text-neutral-500 font-black mb-1">Extra</div><p className="text-sm text-neutral-300 whitespace-pre-wrap">{note.notes}</p></div>}
+                            ) : (
+                                <>
+                                    <div className="flex items-start justify-between gap-3">
+                                        <div>
+                                            <div className="flex flex-wrap gap-2 mb-2">
+                                                <span className="text-[9px] uppercase tracking-widest bg-red-600 text-white px-2 py-1 rounded">{note.rating || 'N/A'}/10</span>
+                                                <span className="text-[9px] uppercase tracking-widest bg-white/5 border border-white/10 text-neutral-400 px-2 py-1 rounded">{note.author || 'Admin'}</span>
+                                                <span className="text-[9px] uppercase tracking-widest text-neutral-500">{note.createdAt ? new Date(note.createdAt).toLocaleDateString() : 'Date TBD'}</span>
+                                                {note.updatedAt && <span className="text-[9px] uppercase tracking-widest text-neutral-600">Edited {new Date(note.updatedAt).toLocaleDateString()}</span>}
+                                            </div>
+                                            <div className="text-lg font-black text-white">{note.player}</div>
+                                        </div>
+                                        <div className="flex items-center gap-2">
+                                            <button onClick={() => startEditNote(note)} className="px-3 py-2 rounded-lg border border-white/10 bg-white/5 text-[10px] font-black uppercase tracking-widest text-neutral-400 hover:text-white hover:border-red-500/40">Edit</button>
+                                            <button onClick={() => removeNote(note)} className="text-neutral-600 hover:text-red-500 text-xl leading-none">×</button>
+                                        </div>
+                                    </div>
+                                    {note.playstyle && <div className="mt-3 border-t border-white/10 pt-3"><div className="text-[9px] uppercase tracking-widest text-neutral-500 font-black mb-1">Playstyle</div><p className="text-sm text-neutral-300 whitespace-pre-wrap">{note.playstyle}</p></div>}
+                                    {note.comms && <div className="mt-3 border-t border-white/10 pt-3"><div className="text-[9px] uppercase tracking-widest text-neutral-500 font-black mb-1">Comms</div><p className="text-sm text-neutral-300 whitespace-pre-wrap">{note.comms}</p></div>}
+                                    {note.improvement && <div className="mt-3 border-t border-white/10 pt-3"><div className="text-[9px] uppercase tracking-widest text-neutral-500 font-black mb-1">Improve</div><p className="text-sm text-neutral-300 whitespace-pre-wrap">{note.improvement}</p></div>}
+                                    {note.notes && <div className="mt-3 border-t border-white/10 pt-3"><div className="text-[9px] uppercase tracking-widest text-neutral-500 font-black mb-1">Extra</div><p className="text-sm text-neutral-300 whitespace-pre-wrap">{note.notes}</p></div>}
+                                </>
+                            )}
                         </div>
                     )) : <div className="p-8 text-center text-sm text-neutral-500 border border-dashed border-neutral-800 rounded-xl">No private notes for this player yet.</div>}
                 </div>
@@ -4321,7 +4590,7 @@ function SyrixDashboard({ onBack }) {
     const navGroups = [
         { label: 'Command', items: [{ id: 'dashboard', label: 'Dashboard' }, { id: 'calendar', label: 'Calendar' }, { id: 'notifications', label: 'Notifications' }, { id: 'announcements', label: 'Announcements' }, { id: 'tasks', label: 'Tasks' }] },
         { label: 'Team', items: [{ id: 'roster', label: 'Roster' }, { id: 'availability', label: 'Availability' }, { id: 'matches', label: 'Matches' }] },
-        { label: 'Valorant', items: [{ id: 'practice', label: 'Practice' }, { id: 'strats', label: 'Stratbook' }, { id: 'comps', label: 'Comps' }, { id: 'prep', label: 'Match Prep' }, { id: 'mapveto', label: 'Map Veto' }] },
+        { label: 'Valorant', items: [{ id: 'practice', label: 'Practice' }, { id: 'strats', label: 'Stratbook' }, { id: 'stratlibrary', label: 'Strat Library' }, { id: 'comps', label: 'Comps' }, { id: 'prep', label: 'Match Prep' }, { id: 'mapveto', label: 'Map Veto' }] },
         { label: 'Library', items: [{ id: 'lineups', label: 'Lineups' }, { id: 'playbook', label: 'Playbook' }] },
         ...(isAdmin ? [{ label: 'Admin', items: [{ id: 'playernotes', label: 'Player Notes' }, { id: 'content', label: 'Content' }, { id: 'partners', label: 'Partners' }, { id: 'audit', label: 'Audit Log' }, { id: 'admin', label: 'Admin Panel' }] }] : [])
     ];
@@ -4342,6 +4611,7 @@ function SyrixDashboard({ onBack }) {
         playbook: 'Write map-specific protocols for attack and defense.',
         comps: 'Build and save team compositions by map.',
         strats: 'Plan rounds visually with agents, utility, paths, and saved strats.',
+        stratlibrary: 'Review app-made strategies and uploaded ValoPlant images by map and side.',
         lineups: 'Store lineup media and map pins for fast review.',
         mapveto: 'Track pick, ban, and comfort status for the active map pool.',
         prep: 'Create opponent files with veto plans, comps, win conditions, and review notes.',
@@ -4473,6 +4743,7 @@ function SyrixDashboard({ onBack }) {
                     {activeTab === 'comps' && <div className="animate-fade-in h-full"><TeamComps members={dynamicMembers} /></div>}
                     {activeTab === 'matches' && <div className="animate-fade-in"><MatchHistory currentUser={currentUser} members={dynamicMembers} /></div>}
                     {activeTab === 'strats' && <div className="animate-fade-in h-[85vh]"><StratBook /></div>}
+                    {activeTab === 'stratlibrary' && <StratLibrary />}
                     {activeTab === 'lineups' && <div className="animate-fade-in h-[85vh]"><LineupLibrary /></div>}
                     {activeTab === 'roster' && <div className="animate-fade-in h-full flex-1 flex flex-col"><RosterManager members={dynamicMembers} events={events} canManageRoster={isAdmin} /></div>}
                     {activeTab === 'prep' && <MatchPrep members={dynamicMembers} events={events} currentUserName={rosterName || currentUser.displayName || 'Unknown'} />}
