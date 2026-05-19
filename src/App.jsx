@@ -53,18 +53,6 @@ const safeDocId = (value, fallback = 'Unknown_User') => String(value || fallback
     .replaceAll(']', '-')
     .slice(0, 120) || fallback;
 
-const buildValorantTrackerUrl = (gameId = '') => {
-    const clean = String(gameId || '').trim();
-    if (!clean) return '';
-    return `https://tracker.gg/valorant/profile/riot/${encodeURIComponent(clean)}/overview`;
-};
-
-const normalizeExternalUrl = (url = '') => {
-    const clean = String(url || '').trim();
-    if (!clean) return '';
-    return /^https?:\/\//i.test(clean) ? clean : `https://${clean}`;
-};
-
 const normalizeAvailabilitySlots = (data = {}) => {
     if (Array.isArray(data.slots)) return data.slots;
 
@@ -1339,7 +1327,6 @@ const AdminPanel = () => {
                 rank: application.rank || 'Unranked',
                 ingameRole: application.role || 'Flex',
                 gameId: application.ign || application.user || '',
-                tracker: application.tracker || '',
                 notes: application.why || application.exp || '',
                 joinedAt: new Date().toISOString()
             }, { merge: true });
@@ -1433,7 +1420,6 @@ const AdminPanel = () => {
                                 </div>
                                 <div className="text-[10px] text-neutral-600 font-mono">{application.submittedAt ? new Date(application.submittedAt).toLocaleDateString() : 'No date'}</div>
                             </div>
-                            {application.tracker && <a href={application.tracker} target="_blank" rel="noreferrer" className="block text-xs text-red-400 hover:text-red-300 truncate">{application.tracker}</a>}
                             {(application.why || application.exp) && <p className="text-sm text-neutral-400 leading-relaxed line-clamp-3">{application.why || application.exp}</p>}
                             <div className="flex gap-2">
                                 <ButtonPrimary onClick={() => approveApplication(application)} className="flex-1 text-xs py-2">Approve</ButtonPrimary>
@@ -1457,7 +1443,7 @@ function AvailabilityHeatmap({ availabilities, members }) {
 
 function ApplicationForm({ currentUser }) {
     // added 'ign' (In-Game Name) to state
-    const [form, setForm] = useState({ ign: '', tracker: '', rank: 'Unranked', role: 'Flex', exp: '', why: '' });
+    const [form, setForm] = useState({ ign: '', rank: 'Unranked', role: 'Flex', exp: '', why: '' });
     const [status, setStatus] = useState('idle');
     const addToast = useToast();
 
@@ -1476,7 +1462,7 @@ function ApplicationForm({ currentUser }) {
 
     const submitApp = async () => {
         // Validation: Ensure IGN is filled
-        if (!form.ign || !form.tracker || !form.why) return addToast("Please fill out all fields (IGN, Tracker, Why)", "error");
+        if (!form.ign || !form.why) return addToast("Please fill out all required fields (IGN and Why)", "error");
 
         setStatus('saving');
 
@@ -1494,7 +1480,7 @@ function ApplicationForm({ currentUser }) {
             await addDoc(collection(db, 'applications'), appData);
 
             // Discord Webhook
-            const content = { embeds: [{ title: `New App: ${finalUsername}`, color: 16776960, fields: [{ name: 'Rank', value: form.rank }, { name: 'Role', value: form.role }, { name: 'Tracker', value: form.tracker }] }] };
+            const content = { embeds: [{ title: `New App: ${finalUsername}`, color: 16776960, fields: [{ name: 'Rank', value: form.rank }, { name: 'Role', value: form.role }] }] };
             fetch(discordWebhookUrl, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(content) }).catch(console.error);
 
             setStatus('success');
@@ -1540,7 +1526,6 @@ function ApplicationForm({ currentUser }) {
                     </div>
                 </div>
 
-                <Input value={form.tracker} onChange={e => setForm({ ...form, tracker: e.target.value })} placeholder="Tracker.gg URL" />
                 <Input value={form.exp} onChange={e => setForm({ ...form, exp: e.target.value })} placeholder="Competitive Experience" />
 
                 <textarea
@@ -3298,153 +3283,166 @@ function MatchHistory({ currentUser, members }) {
     );
 }
 
-function TrackerCenter({ members }) {
-    const [rosterData, setRosterData] = useState({});
-    const [selectedMember, setSelectedMember] = useState('');
-    const [gameId, setGameId] = useState('');
-    const [tracker, setTracker] = useState('');
+function ActionItems({ members }) {
+    const [tasks, setTasks] = useState([]);
+    const [form, setForm] = useState({ title: '', owner: '', priority: 'Normal', due: '', type: 'Practice', notes: '' });
     const [saving, setSaving] = useState(false);
     const addToast = useToast();
 
     useEffect(() => {
-        const unsub = onSnapshot(collection(db, 'roster'), (snap) => {
-            const data = {};
-            snap.forEach(d => data[d.id] = d.data());
-            setRosterData(data);
+        const unsub = onSnapshot(collection(db, 'tasks'), (snap) => {
+            const rows = [];
+            snap.forEach(d => rows.push({ id: d.id, ...d.data() }));
+            setTasks(rows.sort((a, b) => {
+                if (Boolean(a.done) !== Boolean(b.done)) return a.done ? 1 : -1;
+                return new Date(a.due || '2999-12-31') - new Date(b.due || '2999-12-31');
+            }));
         });
         return () => unsub();
     }, []);
 
-    const trackerRows = useMemo(() => {
-        return sortRosterByRole(members, rosterData).map(member => {
-            const data = rosterData[member] || {};
-            const directTracker = normalizeExternalUrl(data.tracker);
-            const generatedTracker = buildValorantTrackerUrl(data.gameId);
-            return {
-                member,
-                ...data,
-                trackerUrl: directTracker || generatedTracker,
-                hasProfile: Boolean(directTracker || generatedTracker)
-            };
-        });
-    }, [members, rosterData]);
+    const openTasks = tasks.filter(task => !task.done);
+    const doneTasks = tasks.filter(task => task.done);
+    const dueSoon = openTasks.filter(task => task.due && new Date(task.due).getTime() <= Date.now() + 1000 * 60 * 60 * 24 * 3).length;
 
-    const completeCount = trackerRows.filter(row => row.hasProfile).length;
-    const selectedData = selectedMember ? rosterData[selectedMember] || {} : {};
-
-    const selectMember = (member) => {
-        setSelectedMember(member);
-        setGameId(rosterData[member]?.gameId || '');
-        setTracker(rosterData[member]?.tracker || '');
-    };
-
-    const saveTrackerProfile = async () => {
-        if (!selectedMember) return addToast('Select a player first', 'error');
+    const createTask = async () => {
+        if (!form.title.trim()) return addToast('Task title is required', 'error');
         setSaving(true);
         try {
-            await setDoc(doc(db, 'roster', selectedMember), {
-                gameId: gameId.trim(),
-                tracker: tracker.trim()
-            }, { merge: true });
-            addToast('Tracker profile updated');
+            await addDoc(collection(db, 'tasks'), {
+                ...form,
+                title: form.title.trim(),
+                notes: form.notes.trim(),
+                done: false,
+                createdAt: new Date().toISOString()
+            });
+            setForm({ title: '', owner: '', priority: 'Normal', due: '', type: 'Practice', notes: '' });
+            addToast('Task added');
         } catch (error) {
-            console.error('Tracker profile save failed:', error);
-            addToast('Unable to save tracker profile', 'error');
+            console.error('Task create failed:', error);
+            addToast('Unable to add task', 'error');
         } finally {
             setSaving(false);
         }
+    };
+
+    const toggleTask = async (task) => {
+        try {
+            await updateDoc(doc(db, 'tasks', task.id), {
+                done: !task.done,
+                completedAt: !task.done ? new Date().toISOString() : ''
+            });
+        } catch (error) {
+            console.error('Task update failed:', error);
+            addToast('Unable to update task', 'error');
+        }
+    };
+
+    const removeTask = async (id) => {
+        await deleteDoc(doc(db, 'tasks', id));
+        addToast('Task removed');
+    };
+
+    const priorityClass = (priority) => {
+        if (priority === 'High') return 'text-red-300 border-red-900/50 bg-red-950/30';
+        if (priority === 'Low') return 'text-neutral-400 border-white/10 bg-white/5';
+        return 'text-yellow-300 border-yellow-900/40 bg-yellow-950/20';
     };
 
     return (
         <div className="animate-fade-in space-y-6">
             <div className="grid grid-cols-1 xl:grid-cols-[1.1fr_0.9fr] gap-6">
                 <Card className="border-red-900/20">
-                    <div className="text-[10px] uppercase tracking-[0.28em] text-red-400 font-black mb-3">Valorant Tracker</div>
+                    <div className="text-[10px] uppercase tracking-[0.28em] text-red-400 font-black mb-3">Command Queue</div>
                     <div className="flex flex-col md:flex-row md:items-end md:justify-between gap-4 mb-6">
                         <div>
-                            <h2 className="text-3xl md:text-4xl font-black text-white uppercase italic leading-none">Player Intel</h2>
-                            <p className="mt-3 text-sm text-neutral-400 max-w-2xl">Store Riot IDs and Tracker.gg profile links for quick review before trials, scrims, and roster decisions.</p>
+                            <h2 className="text-3xl md:text-4xl font-black text-white uppercase italic leading-none">Action Items</h2>
+                            <p className="mt-3 text-sm text-neutral-400 max-w-2xl">Assign practice prep, matchday jobs, review follow-ups, and admin tasks so the next session has a clear owner.</p>
                         </div>
-                        <div className="grid grid-cols-2 gap-3 min-w-[15rem]">
+                        <div className="grid grid-cols-3 gap-3 min-w-[18rem]">
                             <div className="bg-black/40 border border-white/10 p-3 rounded-xl">
-                                <div className="text-[10px] uppercase tracking-widest text-neutral-500 font-black">Profiles</div>
-                                <div className="mt-1 text-2xl font-black text-white">{completeCount}/{trackerRows.length}</div>
+                                <div className="text-[10px] uppercase tracking-widest text-neutral-500 font-black">Open</div>
+                                <div className="mt-1 text-2xl font-black text-white">{openTasks.length}</div>
                             </div>
                             <div className="bg-black/40 border border-white/10 p-3 rounded-xl">
-                                <div className="text-[10px] uppercase tracking-widest text-neutral-500 font-black">Missing</div>
-                                <div className="mt-1 text-2xl font-black text-white">{Math.max(trackerRows.length - completeCount, 0)}</div>
+                                <div className="text-[10px] uppercase tracking-widest text-neutral-500 font-black">Due Soon</div>
+                                <div className="mt-1 text-2xl font-black text-white">{dueSoon}</div>
+                            </div>
+                            <div className="bg-black/40 border border-white/10 p-3 rounded-xl">
+                                <div className="text-[10px] uppercase tracking-widest text-neutral-500 font-black">Done</div>
+                                <div className="mt-1 text-2xl font-black text-white">{doneTasks.length}</div>
                             </div>
                         </div>
                     </div>
 
-                    <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
-                        {trackerRows.length ? trackerRows.map(row => (
-                            <div key={row.member} className={`bg-black/45 border rounded-xl p-4 flex flex-col gap-4 transition-all ${row.hasProfile ? 'border-white/10 hover:border-red-500/40' : 'border-red-900/35'}`}>
-                                <div className="flex items-start justify-between gap-3">
-                                    <div className="min-w-0">
-                                        <div className="font-black text-white truncate">{row.member}</div>
-                                        <div className="mt-1 text-xs text-neutral-500 truncate">{row.gameId || 'No Riot ID saved'}</div>
+                    <div className="space-y-3">
+                        {tasks.length ? tasks.map(task => (
+                            <div key={task.id} className={`bg-black/45 border rounded-xl p-4 transition-all ${task.done ? 'border-white/5 opacity-55' : 'border-white/10 hover:border-red-500/35'}`}>
+                                <div className="flex flex-col md:flex-row md:items-start justify-between gap-4">
+                                    <div className="min-w-0 flex-1">
+                                        <div className="flex flex-wrap items-center gap-2 mb-2">
+                                            <span className={`text-[9px] uppercase tracking-widest border px-2 py-1 rounded ${priorityClass(task.priority)}`}>{task.priority || 'Normal'}</span>
+                                            <span className="text-[9px] uppercase tracking-widest border border-white/10 bg-white/5 text-neutral-400 px-2 py-1 rounded">{task.type || 'Task'}</span>
+                                            {task.due && <span className="text-[9px] uppercase tracking-widest text-neutral-500">Due {task.due}</span>}
+                                        </div>
+                                        <div className={`text-lg font-black ${task.done ? 'line-through text-neutral-500' : 'text-white'}`}>{task.title}</div>
+                                        <div className="mt-1 text-xs text-neutral-500">Owner: <span className="text-neutral-300 font-bold">{task.owner || 'Unassigned'}</span></div>
+                                        {task.notes && <p className="mt-3 text-sm text-neutral-400 leading-relaxed">{task.notes}</p>}
                                     </div>
-                                    <span className={`text-[9px] uppercase tracking-widest border px-2 py-1 rounded ${row.hasProfile ? 'text-green-400 border-green-900/40 bg-green-950/20' : 'text-red-400 border-red-900/40 bg-red-950/20'}`}>
-                                        {row.hasProfile ? 'Linked' : 'Missing'}
-                                    </span>
-                                </div>
-                                <div className="grid grid-cols-2 gap-2 text-xs">
-                                    <div className="bg-white/5 border border-white/10 rounded-lg px-2 py-2">
-                                        <div className="text-[9px] uppercase tracking-widest text-neutral-500 font-black">Rank</div>
-                                        <div className="mt-1 text-white font-bold truncate">{row.rank || 'Unranked'}</div>
+                                    <div className="flex md:flex-col gap-2">
+                                        <button onClick={() => toggleTask(task)} className={`px-3 py-2 rounded-lg text-[10px] font-black uppercase tracking-widest border ${task.done ? 'bg-white/5 border-white/10 text-neutral-400 hover:text-white' : 'bg-green-950/30 border-green-900/40 text-green-300 hover:bg-green-900/40'}`}>{task.done ? 'Reopen' : 'Done'}</button>
+                                        <button onClick={() => removeTask(task.id)} className="px-3 py-2 rounded-lg text-[10px] font-black uppercase tracking-widest border border-red-900/40 bg-red-950/20 text-red-400 hover:bg-red-900/40">Delete</button>
                                     </div>
-                                    <div className="bg-white/5 border border-white/10 rounded-lg px-2 py-2">
-                                        <div className="text-[9px] uppercase tracking-widest text-neutral-500 font-black">Role</div>
-                                        <div className="mt-1 text-white font-bold truncate">{row.ingameRole || row.role || 'Flex'}</div>
-                                    </div>
-                                </div>
-                                <div className="mt-auto flex gap-2">
-                                    <button onClick={() => selectMember(row.member)} className="flex-1 bg-white/10 hover:bg-white/15 border border-white/10 text-white px-3 py-2 rounded-lg text-[10px] font-black uppercase tracking-widest">Edit</button>
-                                    {row.trackerUrl ? (
-                                        <a href={row.trackerUrl} target="_blank" rel="noreferrer" className="flex-1 text-center bg-red-600 hover:bg-red-500 text-white px-3 py-2 rounded-lg text-[10px] font-black uppercase tracking-widest">Open</a>
-                                    ) : (
-                                        <button onClick={() => selectMember(row.member)} className="flex-1 bg-red-950/30 border border-red-900/50 text-red-400 px-3 py-2 rounded-lg text-[10px] font-black uppercase tracking-widest">Add Link</button>
-                                    )}
                                 </div>
                             </div>
                         )) : (
-                            <div className="md:col-span-2 xl:col-span-3 p-8 text-center text-sm text-neutral-500 border border-dashed border-neutral-800 rounded-xl">No roster members found yet.</div>
+                            <div className="p-8 text-center text-sm text-neutral-500 border border-dashed border-neutral-800 rounded-xl">No action items yet.</div>
                         )}
                     </div>
                 </Card>
 
                 <Card>
-                    <div className="text-[10px] uppercase tracking-[0.28em] text-neutral-500 font-black mb-3">Profile Control</div>
-                    <h3 className="text-2xl font-black text-white uppercase italic mb-5">{selectedMember ? selectedMember : 'Select Player'}</h3>
+                    <div className="text-[10px] uppercase tracking-[0.28em] text-neutral-500 font-black mb-3">New Task</div>
+                    <h3 className="text-2xl font-black text-white uppercase italic mb-5">Assign Work</h3>
                     <div className="space-y-4">
                         <div>
-                            <label className="block text-xs font-bold text-neutral-500 mb-1">Player</label>
-                            <Select value={selectedMember} onChange={e => selectMember(e.target.value)}>
-                                <option value="">Select Player</option>
-                                {trackerRows.map(row => <option key={row.member} value={row.member}>{row.member}</option>)}
-                            </Select>
+                            <label className="block text-xs font-bold text-neutral-500 mb-1">Title</label>
+                            <Input value={form.title} onChange={e => setForm({ ...form, title: e.target.value })} placeholder="Review Sunset pistol round" />
                         </div>
-                        <div>
-                            <label className="block text-xs font-bold text-neutral-500 mb-1">Riot ID</label>
-                            <Input value={gameId} onChange={e => setGameId(e.target.value)} placeholder="Name#TAG" />
-                            {gameId && <a href={buildValorantTrackerUrl(gameId)} target="_blank" rel="noreferrer" className="mt-2 inline-block text-xs text-red-400 hover:text-red-300">Open generated Tracker.gg profile</a>}
-                        </div>
-                        <div>
-                            <label className="block text-xs font-bold text-neutral-500 mb-1">Tracker.gg URL</label>
-                            <Input value={tracker} onChange={e => setTracker(e.target.value)} placeholder="https://tracker.gg/valorant/profile/riot/..." />
-                            <p className="mt-2 text-[11px] text-neutral-600">Optional. If this is empty, the hub builds a Tracker.gg profile link from the Riot ID.</p>
-                        </div>
-                        <ButtonPrimary onClick={saveTrackerProfile} disabled={saving || !selectedMember} className="w-full py-3">
-                            {saving ? 'Saving...' : 'Save Tracker Profile'}
-                        </ButtonPrimary>
-                        {selectedMember && (
-                            <div className="pt-4 border-t border-white/10 text-sm text-neutral-400">
-                                <div className="flex justify-between gap-3 py-2 border-b border-white/5"><span className="text-neutral-600">Rank</span><span className="font-bold text-white">{selectedData.rank || 'Unranked'}</span></div>
-                                <div className="flex justify-between gap-3 py-2 border-b border-white/5"><span className="text-neutral-600">Team Role</span><span className="font-bold text-white">{selectedData.role || 'Member'}</span></div>
-                                <div className="flex justify-between gap-3 py-2"><span className="text-neutral-600">Agent Role</span><span className="font-bold text-white">{selectedData.ingameRole || 'Flex'}</span></div>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div>
+                                <label className="block text-xs font-bold text-neutral-500 mb-1">Owner</label>
+                                <Select value={form.owner} onChange={e => setForm({ ...form, owner: e.target.value })}>
+                                    <option value="">Unassigned</option>
+                                    {members.map(member => <option key={member} value={member}>{member}</option>)}
+                                </Select>
                             </div>
-                        )}
+                            <div>
+                                <label className="block text-xs font-bold text-neutral-500 mb-1">Due Date</label>
+                                <Input type="date" value={form.due} onChange={e => setForm({ ...form, due: e.target.value })} className="[color-scheme:dark]" />
+                            </div>
+                        </div>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div>
+                                <label className="block text-xs font-bold text-neutral-500 mb-1">Type</label>
+                                <Select value={form.type} onChange={e => setForm({ ...form, type: e.target.value })}>
+                                    {['Practice', 'Matchday', 'VOD Review', 'Admin', 'Content', 'Roster'].map(type => <option key={type}>{type}</option>)}
+                                </Select>
+                            </div>
+                            <div>
+                                <label className="block text-xs font-bold text-neutral-500 mb-1">Priority</label>
+                                <Select value={form.priority} onChange={e => setForm({ ...form, priority: e.target.value })}>
+                                    {['Low', 'Normal', 'High'].map(priority => <option key={priority}>{priority}</option>)}
+                                </Select>
+                            </div>
+                        </div>
+                        <div>
+                            <label className="block text-xs font-bold text-neutral-500 mb-1">Notes</label>
+                            <textarea value={form.notes} onChange={e => setForm({ ...form, notes: e.target.value })} placeholder="Context, link, or expected outcome..." className="w-full h-32 bg-black/40 border border-neutral-800 rounded-xl p-3 text-white text-sm outline-none focus:border-red-600 focus:ring-1 focus:ring-red-600 transition-all placeholder-neutral-600 resize-none" />
+                        </div>
+                        <ButtonPrimary onClick={createTask} disabled={saving} className="w-full py-3">
+                            {saving ? 'Adding...' : 'Add Action Item'}
+                        </ButtonPrimary>
                     </div>
                 </Card>
             </div>
@@ -3463,7 +3461,6 @@ function RosterManager({ members, events }) {
     const [role, setRole] = useState('Tryout');
     const [rank, setRank] = useState('Unranked');
     const [gameId, setGameId] = useState('');
-    const [tracker, setTracker] = useState('');
     const [pfp, setPfp] = useState('');
     const [ingameRole, setIngameRole] = useState('Flex');
     const [notes, setNotes] = useState('');
@@ -3492,7 +3489,6 @@ function RosterManager({ members, events }) {
                 rank,
                 notes,
                 gameId,
-                tracker,
                 pfp,
                 ingameRole
             }, { merge: true });
@@ -3590,7 +3586,6 @@ function RosterManager({ members, events }) {
                                         setRank(rosterData[m]?.rank || 'Unranked');
                                         setNotes(rosterData[m]?.notes || '');
                                         setGameId(rosterData[m]?.gameId || '');
-                                        setTracker(rosterData[m]?.tracker || '');
                                         setPfp(rosterData[m]?.pfp || '');
                                         setIngameRole(rosterData[m]?.ingameRole || 'Flex');
                                     }} className={`p-3 rounded-xl cursor-pointer border transition-all flex justify-between items-center ${selectedMember === m ? 'bg-red-900/20 border-red-600' : 'bg-black border-neutral-800'}`}>
@@ -3633,12 +3628,6 @@ function RosterManager({ members, events }) {
                                         <label className="block text-xs font-bold text-neutral-500 mb-1">Riot ID</label>
                                         <Input value={gameId} onChange={e => setGameId(e.target.value)} />
                                     </div>
-                                </div>
-
-                                <div>
-                                    <label className="block text-xs font-bold text-neutral-500 mb-1">Tracker.gg URL</label>
-                                    <Input value={tracker} onChange={e => setTracker(e.target.value)} placeholder="https://tracker.gg/valorant/profile/riot/..." />
-                                    {tracker || gameId ? <a href={normalizeExternalUrl(tracker) || buildValorantTrackerUrl(gameId)} target="_blank" rel="noreferrer" className="mt-2 inline-block text-xs text-red-400 hover:text-red-300">Open tracker profile</a> : null}
                                 </div>
 
                                 <div>
@@ -4195,7 +4184,7 @@ function SyrixDashboard({ onBack }) {
     const navGroups = [
         { label: 'Command', items: [{ id: 'dashboard', label: 'Dashboard' }, { id: 'availability', label: 'Availability' }, { id: 'matches', label: 'Matches' }, { id: 'roster', label: 'Roster' }] },
         { label: 'Practice', items: [{ id: 'playbook', label: 'Playbook' }, { id: 'comps', label: 'Comps' }, { id: 'strats', label: 'Stratbook' }, { id: 'lineups', label: 'Lineups' }, { id: 'mapveto', label: 'Map Veto' }] },
-        { label: 'Intel', items: [{ id: 'tracker', label: 'Tracker' }, { id: 'warroom', label: 'War Room' }] },
+        { label: 'Intel', items: [{ id: 'tasks', label: 'Tasks' }, { id: 'warroom', label: 'War Room' }] },
         ...(isAdmin ? [{ label: 'Admin', items: [{ id: 'content', label: 'Content' }, { id: 'partners', label: 'Partners' }, { id: 'admin', label: 'Admin Panel' }] }] : [])
     ];
     const flatNav = navGroups.flatMap(group => group.items);
@@ -4213,7 +4202,7 @@ function SyrixDashboard({ onBack }) {
         strats: 'Plan rounds visually with agents, utility, paths, and saved strats.',
         lineups: 'Store lineup media and map pins for fast review.',
         mapveto: 'Track pick, ban, and comfort status for the active map pool.',
-        tracker: 'Open and manage Valorant Tracker profiles for every roster member.',
+        tasks: 'Assign and clear team action items for practice, matchday, and admin work.',
         warroom: 'Keep scouting notes and opponent tendencies organized.',
         content: 'Manage public site news, merch, achievements, and media.',
         partners: 'Track partner contacts and sponsorship notes.',
@@ -4314,7 +4303,7 @@ function SyrixDashboard({ onBack }) {
 
             <main className="flex-1 overflow-y-auto p-4 md:p-6 scrollbar-thin scrollbar-thumb-red-900/50 scrollbar-track-black/20">
                 <div className="max-w-[1920px] mx-auto min-h-screen flex flex-col">
-                    {activeTab === 'dashboard' && <div className="animate-fade-in space-y-6"><div className="grid grid-cols-1 xl:grid-cols-[1.25fr_0.75fr] gap-4"><div className="glass-panel rounded-xl p-6 border-white/10 overflow-hidden"><div className="text-[10px] uppercase tracking-[0.28em] text-red-400 font-black mb-3">Today Command</div><h2 className="text-4xl md:text-5xl font-black text-white uppercase italic leading-none">Ready Room</h2><p className="mt-4 text-sm text-neutral-400 max-w-2xl">Review the next operation, keep team notes current, and jump into planning before practice starts.</p><div className="mt-6 flex flex-wrap gap-2"><button onClick={() => setActiveTab('strats')} className="bg-red-600 hover:bg-red-500 text-white px-4 py-2 text-xs font-black uppercase tracking-widest">Open Planner</button><button onClick={() => setActiveTab('matches')} className="bg-white/10 hover:bg-white/15 border border-white/10 text-white px-4 py-2 text-xs font-black uppercase tracking-widest">Match Logs</button><button onClick={() => setActiveTab('tracker')} className="bg-white/10 hover:bg-white/15 border border-white/10 text-white px-4 py-2 text-xs font-black uppercase tracking-widest">Tracker</button><button onClick={() => setActiveTab('roster')} className="bg-white/10 hover:bg-white/15 border border-white/10 text-white px-4 py-2 text-xs font-black uppercase tracking-widest">Roster</button></div></div><div className="glass-panel rounded-xl p-6 border-white/10"><div className="text-[10px] uppercase tracking-[0.28em] text-neutral-500 font-black mb-4">Next Operation</div><div className="text-2xl font-black text-white uppercase italic leading-tight">{nextEvent ? `${nextEvent.type || 'Event'} vs ${nextEvent.opponent || 'TBD'}` : 'No Event Scheduled'}</div><div className="mt-3 text-sm text-neutral-400">{nextEvent ? `${nextEvent.date || 'Date TBD'} @ ${nextEvent.time || 'Time TBD'} ${nextEvent.timezone || ''}` : 'Use Event Operations to schedule the next practice, scrim, or official.'}</div><div className="mt-5 pt-4 border-t border-white/10 grid grid-cols-2 gap-3"><div><div className="text-3xl font-black text-white">{dynamicMembers.length}</div><div className="text-[10px] uppercase tracking-widest text-neutral-500 font-black">Members</div></div><div><div className="text-3xl font-black text-white">{events.length}</div><div className="text-[10px] uppercase tracking-widest text-neutral-500 font-black">Upcoming</div></div></div></div></div><div className="grid grid-cols-1 md:grid-cols-4 gap-4"><div className="glass-panel rounded-xl p-4 border-white/10"><div className="text-[10px] uppercase tracking-widest text-neutral-500 font-black">Members</div><div className="mt-2 text-3xl font-black text-white">{dynamicMembers.length}</div></div><div className="glass-panel rounded-xl p-4 border-white/10"><div className="text-[10px] uppercase tracking-widest text-neutral-500 font-black">Events</div><div className="mt-2 text-3xl font-black text-white">{events.length}</div></div><div className="glass-panel rounded-xl p-4 border-white/10"><div className="text-[10px] uppercase tracking-widest text-neutral-500 font-black">Timezone</div><div className="mt-2 text-sm font-bold text-white truncate">{userTimezone}</div></div><div className="glass-panel rounded-xl p-4 border-white/10"><div className="text-[10px] uppercase tracking-widest text-neutral-500 font-black">Access</div><div className="mt-2 text-sm font-bold text-white">{isAdmin ? 'Admin' : 'Member'}</div></div></div><div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
+                    {activeTab === 'dashboard' && <div className="animate-fade-in space-y-6"><div className="grid grid-cols-1 xl:grid-cols-[1.25fr_0.75fr] gap-4"><div className="glass-panel rounded-xl p-6 border-white/10 overflow-hidden"><div className="text-[10px] uppercase tracking-[0.28em] text-red-400 font-black mb-3">Today Command</div><h2 className="text-4xl md:text-5xl font-black text-white uppercase italic leading-none">Ready Room</h2><p className="mt-4 text-sm text-neutral-400 max-w-2xl">Review the next operation, keep team notes current, and jump into planning before practice starts.</p><div className="mt-6 flex flex-wrap gap-2"><button onClick={() => setActiveTab('strats')} className="bg-red-600 hover:bg-red-500 text-white px-4 py-2 text-xs font-black uppercase tracking-widest">Open Planner</button><button onClick={() => setActiveTab('matches')} className="bg-white/10 hover:bg-white/15 border border-white/10 text-white px-4 py-2 text-xs font-black uppercase tracking-widest">Match Logs</button><button onClick={() => setActiveTab('tasks')} className="bg-white/10 hover:bg-white/15 border border-white/10 text-white px-4 py-2 text-xs font-black uppercase tracking-widest">Tasks</button><button onClick={() => setActiveTab('roster')} className="bg-white/10 hover:bg-white/15 border border-white/10 text-white px-4 py-2 text-xs font-black uppercase tracking-widest">Roster</button></div></div><div className="glass-panel rounded-xl p-6 border-white/10"><div className="text-[10px] uppercase tracking-[0.28em] text-neutral-500 font-black mb-4">Next Operation</div><div className="text-2xl font-black text-white uppercase italic leading-tight">{nextEvent ? `${nextEvent.type || 'Event'} vs ${nextEvent.opponent || 'TBD'}` : 'No Event Scheduled'}</div><div className="mt-3 text-sm text-neutral-400">{nextEvent ? `${nextEvent.date || 'Date TBD'} @ ${nextEvent.time || 'Time TBD'} ${nextEvent.timezone || ''}` : 'Use Event Operations to schedule the next practice, scrim, or official.'}</div><div className="mt-5 pt-4 border-t border-white/10 grid grid-cols-2 gap-3"><div><div className="text-3xl font-black text-white">{dynamicMembers.length}</div><div className="text-[10px] uppercase tracking-widest text-neutral-500 font-black">Members</div></div><div><div className="text-3xl font-black text-white">{events.length}</div><div className="text-[10px] uppercase tracking-widest text-neutral-500 font-black">Upcoming</div></div></div></div></div><div className="grid grid-cols-1 md:grid-cols-4 gap-4"><div className="glass-panel rounded-xl p-4 border-white/10"><div className="text-[10px] uppercase tracking-widest text-neutral-500 font-black">Members</div><div className="mt-2 text-3xl font-black text-white">{dynamicMembers.length}</div></div><div className="glass-panel rounded-xl p-4 border-white/10"><div className="text-[10px] uppercase tracking-widest text-neutral-500 font-black">Events</div><div className="mt-2 text-3xl font-black text-white">{events.length}</div></div><div className="glass-panel rounded-xl p-4 border-white/10"><div className="text-[10px] uppercase tracking-widest text-neutral-500 font-black">Timezone</div><div className="mt-2 text-sm font-bold text-white truncate">{userTimezone}</div></div><div className="glass-panel rounded-xl p-4 border-white/10"><div className="text-[10px] uppercase tracking-widest text-neutral-500 font-black">Access</div><div className="mt-2 text-sm font-bold text-white">{isAdmin ? 'Admin' : 'Member'}</div></div></div><div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
                         <div className="lg:col-span-4 space-y-8">
                             <CaptainsMessage />
                             <Card className="border-red-900/20"><div className="absolute top-0 left-0 w-1 h-full bg-red-600/50"></div><h2 className="text-xl font-bold text-white mb-6 uppercase tracking-wide">Event Operations</h2><ScrimScheduler onSchedule={schedEvent} userTimezone={userTimezone} /></Card>
@@ -4331,7 +4320,7 @@ function SyrixDashboard({ onBack }) {
                     {activeTab === 'strats' && <div className="animate-fade-in h-[85vh]"><StratBook /></div>}
                     {activeTab === 'lineups' && <div className="animate-fade-in h-[85vh]"><LineupLibrary /></div>}
                     {activeTab === 'roster' && <div className="animate-fade-in h-full flex-1 flex flex-col"><RosterManager members={dynamicMembers} events={events} /></div>}
-                    {activeTab === 'tracker' && <TrackerCenter members={dynamicMembers} />}
+                    {activeTab === 'tasks' && <ActionItems members={dynamicMembers} />}
                     {activeTab === 'partners' && isAdmin && <div className="animate-fade-in h-full"><PartnerDirectory /></div>}
                     {activeTab === 'content' && isAdmin && <div className="animate-fade-in h-full"><ContentManager /></div>}
                     {activeTab === 'admin' && isAdmin && <div className="animate-fade-in h-full"><AdminPanel /></div>}
