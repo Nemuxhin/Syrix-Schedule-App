@@ -29,6 +29,7 @@ const ROLES = ["Flex", "Duelist", "Initiator", "Controller", "Sentinel", "Coach"
 const RANKS = ["Unranked", "Iron", "Bronze", "Silver", "Gold", "Platinum", "Diamond", "Ascendant", "Immortal", "Radiant"];
 const AGENT_NAMES = ["Jett", "Raze", "Reyna", "Yoru", "Phoenix", "Neon", "Iso", "Tejo", "Vyse", "Waylay", "Omen", "Astra", "Brimstone", "Viper", "Harbor", "Clove", "Sova", "Fade", "Skye", "Breach", "KAY/O", "Gekko", "Killjoy", "Cypher", "Sage", "Chamber", "Deadlock", "Miks", "Veto"];
 const ROLE_ABBREVIATIONS = { Flex: "FLX", Duelist: "DUEL", Initiator: "INIT", Controller: "CTRL", Sentinel: "SENT", Coach: "HC" };
+const TEAM_LOGO = "/syrix-logo.jpeg";
 
 const UTILITY_TYPES = [
     { id: 'smoke', color: 'rgba(209, 213, 219, 0.3)', border: '#d1d5db', label: 'Smoke', shape: 'ring' },
@@ -42,6 +43,12 @@ const UTILITY_TYPES = [
 ];
 
 const timezones = ["UTC", "GMT", "Europe/London", "Europe/Paris", "Europe/Berlin", "America/New_York", "America/Chicago", "America/Denver", "America/Los_Angeles", "Asia/Tokyo", "Australia/Sydney"];
+
+const TeamLogo = ({ className = "", imageClassName = "" }) => (
+    <span className={`relative inline-flex shrink-0 overflow-hidden bg-black border border-white/10 ${className}`}>
+        <img src={TEAM_LOGO} alt="SYRIX logo" className={`h-full w-full object-cover ${imageClassName}`} />
+    </span>
+);
 
 // --- UTILITY FUNCTIONS ---
 function timeToMinutes(t) { if (!t || t === '24:00') return 1440; const [h, m] = t.split(":").map(Number); return h * 60 + m; }
@@ -533,7 +540,7 @@ const LandingPage = ({ onEnterHub }) => {
             <header className="fixed top-0 w-full z-50 bg-[#050608]/90 backdrop-blur-xl border-b border-white/10 flex justify-center">
                 <nav className="max-w-[1480px] w-full px-5 md:px-8 py-3 flex justify-between items-center">
                     <a href="#home" className="flex items-center gap-3 text-white hover:text-red-500 transition-colors">
-                        <span className="h-9 w-9 bg-red-600 text-white flex items-center justify-center font-black italic text-2xl">S</span>
+                        <TeamLogo className="h-9 w-9 rounded-sm shadow-lg shadow-red-950/30" />
                         <span className="text-xl font-black uppercase tracking-tight italic">Syrix</span>
                     </a>
                     <button onClick={() => setMobileMenuOpen(!mobileMenuOpen)} className="md:hidden text-2xl z-50 p-2 focus:outline-none text-white">☰</button>
@@ -571,7 +578,7 @@ const LandingPage = ({ onEnterHub }) => {
                     <div className="relative z-10 max-w-[1480px] w-full mx-auto px-5 md:px-8 grid grid-cols-1 lg:grid-cols-[1.12fr_0.88fr] gap-6 items-center">
                         <div data-aos="fade-up">
                             <div className="inline-flex items-center gap-3 border border-white/15 bg-white/5 backdrop-blur-md px-3 py-1.5 mb-6">
-                                <span className="w-2 h-2 bg-red-600 animate-pulse"></span>
+                                <TeamLogo className="h-5 w-5 rounded-sm border-white/20" />
                                 <span className="text-[10px] font-black uppercase tracking-[0.28em] text-neutral-300">Official Valorant Team Portal</span>
                             </div>
                             <h1 className="text-[18vw] sm:text-[7.4rem] lg:text-[9rem] font-black leading-[0.78] tracking-tight italic text-white">SYRIX</h1>
@@ -831,7 +838,10 @@ const LandingPage = ({ onEnterHub }) => {
                 <div className="max-w-[1480px] w-full px-5 md:px-8">
                     <div className="grid grid-cols-1 md:grid-cols-[1fr_auto] gap-8 items-end">
                         <div>
-                            <div className="text-4xl font-black text-white italic tracking-tight mb-3">SYRIX</div>
+                            <div className="mb-3 flex items-center gap-3">
+                                <TeamLogo className="h-12 w-12 rounded-sm shadow-lg shadow-red-950/30" />
+                                <div className="text-4xl font-black text-white italic tracking-tight">SYRIX</div>
+                            </div>
                             <div className="text-sm text-neutral-500 max-w-xl">A competitive Valorant organization page with public content and private team operations in one build.</div>
                         </div>
                         <div className="flex flex-wrap gap-5 text-[10px] font-black uppercase tracking-[0.2em] text-neutral-500">
@@ -2164,7 +2174,7 @@ function StratBook() {
             setTextDraft('');
             return;
         }
-        const item = { id: uid(), type: 'text', text: textDraft.trim(), x: pendingTextPoint.x, y: pendingTextPoint.y, color, size: TEXT_DEFAULT, rotation: 0, side };
+        const item = { id: uid(), type: 'text', text: textDraft.trim(), x: pendingTextPoint.x, y: pendingTextPoint.y, color, size: TEXT_DEFAULT, width: 18, rotation: 0, side };
         commitObjects([...objects, item]);
         setSelectedId(item.id);
         setPendingTextPoint(null);
@@ -2408,10 +2418,11 @@ function StratBook() {
 
         if (obj.type === 'text') {
             const textSize = clamp(obj.size || TEXT_DEFAULT, TEXT_MIN, TEXT_MAX);
+            const textWidth = clamp(obj.width || 18, 8, 34);
             return (
-                <foreignObject key={obj.id} x={`${obj.x}%`} y={`${obj.y}%`} width="18%" height="16%" className="overflow-visible">
+                <foreignObject key={obj.id} x={`${obj.x}%`} y={`${obj.y}%`} width={`${textWidth}%`} height="30%" className="overflow-visible">
                     <div
-                        className={`inline-block max-w-[150px] rounded bg-black/75 border border-white/20 px-1 py-0.5 text-[5px] font-bold leading-tight tracking-normal whitespace-pre-wrap shadow-[0_3px_14px_rgba(0,0,0,0.8)] select-none cursor-grab ${isSelected ? 'outline outline-1 outline-green-400 outline-offset-1' : ''}`}
+                        className={`inline-block w-full rounded bg-black/72 border border-white/20 px-1.5 py-1 text-[4.5px] font-bold leading-snug tracking-normal whitespace-pre-wrap break-words shadow-[0_3px_14px_rgba(0,0,0,0.8)] select-none cursor-grab ${isSelected ? 'outline outline-1 outline-green-400 outline-offset-1' : ''}`}
                         style={{ color: obj.color, transform: `translate(-50%, -50%) rotate(${obj.rotation || 0}deg) scale(${textSize})`, transformOrigin: 'center' }}
                         onPointerDown={(e) => startDragObject(e, obj)}
                     >
@@ -2638,6 +2649,7 @@ function StratBook() {
                         <div className="space-y-3">
                             <div className="text-sm font-bold text-white truncate">{selectedObject.name || selectedObject.text || selectedObject.type}</div>
                             {'size' in selectedObject && <div><label className="text-[10px] text-neutral-500 uppercase font-bold">Size</label><input type="range" min={selectedObject.type === 'text' ? TEXT_MIN : 0.5} max={selectedObject.type === 'text' ? TEXT_MAX : 2.5} step="0.05" value={selectedObject.type === 'text' ? clamp(selectedObject.size || TEXT_DEFAULT, TEXT_MIN, TEXT_MAX) : selectedObject.size || 1} onChange={e => updateSelected({ size: Number(e.target.value) })} className="w-full accent-red-600" /></div>}
+                            {selectedObject.type === 'text' && <div><label className="text-[10px] text-neutral-500 uppercase font-bold">Text Width</label><input type="range" min="8" max="34" step="1" value={selectedObject.width || 18} onChange={e => updateSelected({ width: Number(e.target.value) })} className="w-full accent-red-600" /></div>}
                             {'rotation' in selectedObject && <div><label className="text-[10px] text-neutral-500 uppercase font-bold">Rotation</label><input type="range" min="0" max="360" value={selectedObject.rotation || 0} onChange={e => updateSelected({ rotation: Number(e.target.value) })} className="w-full accent-red-600" /></div>}
                             {selectedObject.type === 'text' && <textarea value={selectedObject.text} onChange={e => updateSelected({ text: e.target.value })} className="w-full min-h-24 bg-black/40 border border-neutral-800 rounded-xl p-3 text-white text-xs outline-none focus:border-red-600 focus:ring-1 focus:ring-red-600 transition-all placeholder-neutral-600 resize-y" />}
                         </div>
@@ -4022,6 +4034,7 @@ function LoginScreen({ signIn, onBack }) {
             <Background />
             <button onClick={onBack} className="absolute top-4 left-4 z-20 text-neutral-400 hover:text-white font-bold uppercase text-sm">&larr; Home</button>
             <div className="relative z-10 w-full max-w-md glass-panel rounded-xl border border-red-900/30 p-8 text-center">
+                <TeamLogo className="mx-auto mb-5 h-20 w-20 rounded-sm border-white/15 shadow-2xl shadow-red-950/40" />
                 <div className="text-5xl font-black italic tracking-tighter mb-2">SYRIX</div>
                 <p className="text-neutral-400 text-sm mb-8">Sign in with Discord to access the team hub.</p>
                 <ButtonPrimary onClick={signIn} className="w-full">Sign In With Discord</ButtonPrimary>
@@ -4397,7 +4410,7 @@ function SyrixDashboard({ onBack }) {
             <aside className={`relative z-40 hidden lg:flex ${sidebarCollapsed ? 'w-20' : 'w-72'} flex-none flex-col border-r border-white/10 bg-[#080a0f]/92 backdrop-blur-xl transition-[width] duration-200`}>
                 <div className={`${sidebarCollapsed ? 'p-3' : 'p-5'} border-b border-white/10`}>
                     <button onClick={onBack} className={`flex items-center ${sidebarCollapsed ? 'justify-center' : 'gap-3'} text-white hover:text-red-400 transition w-full`}>
-                        <span className="h-10 w-10 bg-red-600 text-white flex items-center justify-center font-black italic text-2xl">S</span>
+                        <TeamLogo className="h-10 w-10 rounded-sm shadow-lg shadow-red-950/30" />
                         {!sidebarCollapsed && <span className="text-2xl font-black tracking-tight italic">SYRIX</span>}
                     </button>
                     <button onClick={() => setSidebarCollapsed(value => !value)} className="mt-3 w-full bg-white/5 hover:bg-white/10 border border-white/10 text-neutral-400 hover:text-white py-2 text-[10px] font-black uppercase tracking-widest">
