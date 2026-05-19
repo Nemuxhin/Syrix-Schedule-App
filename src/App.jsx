@@ -4015,21 +4015,83 @@ function SyrixDashboard({ onBack }) {
         </div>
     );
 
-    const NavBtn = ({ id, label }) => <button onClick={() => setActiveTab(id)} className={`px-4 py-1.5 rounded-full text-xs font-bold uppercase tracking-widest transition-all duration-200 whitespace-nowrap ${activeTab === id ? 'bg-gradient-to-r from-red-700 to-red-900 text-white shadow-lg shadow-red-900/20 border border-red-500/50' : 'bg-black/30 text-neutral-400 hover:text-white hover:bg-white/10 border border-transparent'}`}>{label}</button>;
-
     const isAdmin = currentUser && ADMIN_UIDS.includes(currentUser.uid);
+    const navGroups = [
+        { label: 'Command', items: [{ id: 'dashboard', label: 'Dashboard' }, { id: 'availability', label: 'Availability' }, { id: 'matches', label: 'Matches' }, { id: 'roster', label: 'Roster' }] },
+        { label: 'Practice', items: [{ id: 'playbook', label: 'Playbook' }, { id: 'comps', label: 'Comps' }, { id: 'strats', label: 'Stratbook' }, { id: 'lineups', label: 'Lineups' }, { id: 'mapveto', label: 'Map Veto' }] },
+        { label: 'Intel', items: [{ id: 'warroom', label: 'War Room' }] },
+        ...(isAdmin ? [{ label: 'Admin', items: [{ id: 'content', label: 'Content' }, { id: 'partners', label: 'Partners' }, { id: 'admin', label: 'Admin Panel' }] }] : [])
+    ];
+    const flatNav = navGroups.flatMap(group => group.items);
+    const activeLabel = flatNav.find(item => item.id === activeTab)?.label || 'Dashboard';
+    const nextEvent = events[0];
+    const todayName = new Date().toLocaleDateString('en-US', { weekday: 'long', timeZone: userTimezone });
+    const availableToday = dynamicMembers.filter(member => (displayAvail[member] || []).some(slot => slot.day === todayName)).length;
+    const NavItem = ({ item, compact = false }) => (
+        <button
+            onClick={() => setActiveTab(item.id)}
+            className={`${compact ? 'px-3 py-2 text-[10px]' : 'w-full px-3 py-2.5 text-xs'} text-left font-black uppercase tracking-[0.16em] transition-all border ${activeTab === item.id ? 'bg-red-600 text-white border-red-500' : 'bg-transparent text-neutral-500 border-transparent hover:text-white hover:bg-white/5 hover:border-white/10'}`}
+        >
+            {item.label}
+        </button>
+    );
 
     return (
-        <div className="fixed inset-0 h-full w-full text-neutral-200 font-sans selection:bg-red-500/30 flex flex-col overflow-hidden bg-[#050608]">
+        <div className="fixed inset-0 h-full w-full text-neutral-200 font-sans selection:bg-red-500/30 flex overflow-hidden bg-[#050608]">
             <Background />
 
-            <header className="flex-none flex flex-col gap-4 px-4 md:px-6 py-3 border-b border-white/10 bg-[#080a0f]/88 backdrop-blur-xl z-40">
-                <div className="flex justify-between items-center">
-                    <div className="flex items-center gap-4">
-                        <button onClick={onBack} className="text-neutral-500 hover:text-white transition">
+            <aside className="relative z-40 hidden lg:flex w-72 flex-none flex-col border-r border-white/10 bg-[#080a0f]/92 backdrop-blur-xl">
+                <div className="p-5 border-b border-white/10">
+                    <button onClick={onBack} className="flex items-center gap-3 text-white hover:text-red-400 transition">
+                        <span className="h-10 w-10 bg-red-600 text-white flex items-center justify-center font-black italic text-2xl">S</span>
+                        <span className="text-2xl font-black tracking-tight italic">SYRIX</span>
+                    </button>
+                    <div className="mt-5 grid grid-cols-2 gap-2">
+                        <div className="bg-black/35 border border-white/10 p-3">
+                            <div className="text-[9px] uppercase tracking-widest text-neutral-500 font-black">Access</div>
+                            <div className="mt-1 text-sm font-black text-white">{isAdmin ? 'Admin' : 'Member'}</div>
+                        </div>
+                        <div className="bg-black/35 border border-white/10 p-3">
+                            <div className="text-[9px] uppercase tracking-widest text-neutral-500 font-black">Members</div>
+                            <div className="mt-1 text-sm font-black text-white">{dynamicMembers.length}</div>
+                        </div>
+                    </div>
+                </div>
+
+                <nav className="flex-1 overflow-y-auto p-4 space-y-6 custom-scrollbar">
+                    {navGroups.map(group => (
+                        <div key={group.label}>
+                            <div className="px-3 mb-2 text-[10px] uppercase tracking-[0.24em] text-neutral-600 font-black">{group.label}</div>
+                            <div className="space-y-1">
+                                {group.items.map(item => <NavItem key={item.id} item={item} />)}
+                            </div>
+                        </div>
+                    ))}
+                </nav>
+
+                <div className="p-4 border-t border-white/10">
+                    <div className="bg-black/40 border border-white/10 p-4">
+                        <div className="text-sm font-black text-white truncate">{rosterName || currentUser.displayName || 'Guest'}</div>
+                        <div className="mt-1 text-[10px] uppercase tracking-widest text-neutral-500">Signed in</div>
+                        <div className="mt-4 grid grid-cols-[1fr_auto] gap-2">
+                            <select value={userTimezone} onChange={e => { setUserTimezone(e.target.value); }} className="min-w-0 bg-black/60 border border-neutral-800 text-xs p-2 text-neutral-400 backdrop-blur-sm">{timezones.map(t => <option key={t} value={t}>{t}</option>)}</select>
+                            <button onClick={handleSignOut} className="bg-red-600 hover:bg-red-500 text-white font-black uppercase tracking-widest text-[10px] px-3">Out</button>
+                        </div>
+                    </div>
+                </div>
+            </aside>
+
+            <div className="relative z-10 flex-1 min-w-0 flex flex-col">
+            <header className="flex-none border-b border-white/10 bg-[#080a0f]/88 backdrop-blur-xl">
+                <div className="flex justify-between items-center px-4 md:px-6 py-3">
+                    <div className="flex items-center gap-3 min-w-0">
+                        <button onClick={onBack} className="lg:hidden text-neutral-500 hover:text-white transition">
                             <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"></path></svg>
                         </button>
-                        <h1 className="text-2xl md:text-3xl font-black tracking-tighter text-white drop-shadow-lg italic">SYRIX <span className="text-red-600">HUB</span></h1>
+                        <div>
+                            <div className="text-[10px] uppercase tracking-[0.24em] text-red-400 font-black">Command Center</div>
+                            <h1 className="text-xl md:text-2xl font-black text-white uppercase tracking-tight">{activeLabel}</h1>
+                        </div>
                     </div>
                     <div className="flex items-center gap-4">
                         <div className="text-right hidden md:block">
@@ -4037,28 +4099,17 @@ function SyrixDashboard({ onBack }) {
                                 {rosterName || currentUser.displayName || 'Guest'}
                             </div>
                             <button onClick={handleSignOut} className="text-[10px] text-red-500 font-bold uppercase">Log Out</button>
-                        </div>                        <select value={userTimezone} onChange={e => { setUserTimezone(e.target.value); }} className="bg-black/50 border border-neutral-800 text-xs rounded p-2 text-neutral-400 backdrop-blur-sm">{timezones.map(t => <option key={t} value={t}>{t}</option>)}</select>
+                        </div>                        <select value={userTimezone} onChange={e => { setUserTimezone(e.target.value); }} className="bg-black/50 border border-neutral-800 text-xs p-2 text-neutral-400 backdrop-blur-sm max-w-40">{timezones.map(t => <option key={t} value={t}>{t}</option>)}</select>
                     </div>
                 </div>
-                <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-hide mask-fade">
-                    <NavBtn id="dashboard" label="Dashboard" />
-                    <NavBtn id="playbook" label="Playbook" />
-                    <NavBtn id="comps" label="Comps" />
-                    <NavBtn id="matches" label="Matches" />
-                    <NavBtn id="warroom" label="War Room" />
-                    <NavBtn id="strats" label="Stratbook" />
-                    <NavBtn id="lineups" label="Lineups" />
-                    <NavBtn id="roster" label="Roster" />
-                    {isAdmin && <NavBtn id="partners" label="Partners" />}
-                    {isAdmin && <NavBtn id="content" label="Content Mgr" />}
-                    <NavBtn id="mapveto" label="Map Veto" />
-                    {isAdmin && <NavBtn id="admin" label="Admin" />}
+                <div className="lg:hidden flex gap-2 overflow-x-auto px-4 pb-3 scrollbar-hide mask-fade">
+                    {flatNav.map(item => <NavItem key={item.id} item={item} compact />)}
                 </div>
             </header>
 
-            <main className="flex-1 overflow-y-auto p-4 md:p-6 scrollbar-thin scrollbar-thumb-red-900/50 scrollbar-track-black/20 relative z-10">
+            <main className="flex-1 overflow-y-auto p-4 md:p-6 scrollbar-thin scrollbar-thumb-red-900/50 scrollbar-track-black/20">
                 <div className="max-w-[1920px] mx-auto min-h-screen flex flex-col">
-                    {activeTab === 'dashboard' && <div className="animate-fade-in space-y-6"><div className="grid grid-cols-1 md:grid-cols-4 gap-4"><div className="glass-panel rounded-xl p-4 border-white/10"><div className="text-[10px] uppercase tracking-widest text-neutral-500 font-black">Members</div><div className="mt-2 text-3xl font-black text-white">{dynamicMembers.length}</div></div><div className="glass-panel rounded-xl p-4 border-white/10"><div className="text-[10px] uppercase tracking-widest text-neutral-500 font-black">Events</div><div className="mt-2 text-3xl font-black text-white">{events.length}</div></div><div className="glass-panel rounded-xl p-4 border-white/10"><div className="text-[10px] uppercase tracking-widest text-neutral-500 font-black">Timezone</div><div className="mt-2 text-sm font-bold text-white truncate">{userTimezone}</div></div><div className="glass-panel rounded-xl p-4 border-white/10"><div className="text-[10px] uppercase tracking-widest text-neutral-500 font-black">Access</div><div className="mt-2 text-sm font-bold text-white">{isAdmin ? 'Admin' : 'Member'}</div></div></div><div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
+                    {activeTab === 'dashboard' && <div className="animate-fade-in space-y-6"><div className="grid grid-cols-1 xl:grid-cols-[1.25fr_0.75fr] gap-4"><div className="glass-panel rounded-xl p-6 border-white/10 overflow-hidden"><div className="text-[10px] uppercase tracking-[0.28em] text-red-400 font-black mb-3">Today Command</div><h2 className="text-4xl md:text-5xl font-black text-white uppercase italic leading-none">Ready Room</h2><p className="mt-4 text-sm text-neutral-400 max-w-2xl">Check availability, review the next operation, and keep team notes current before practice starts.</p><div className="mt-6 flex flex-wrap gap-2"><button onClick={() => setActiveTab('availability')} className="bg-red-600 hover:bg-red-500 text-white px-4 py-2 text-xs font-black uppercase tracking-widest">Availability</button><button onClick={() => setActiveTab('strats')} className="bg-white/10 hover:bg-white/15 border border-white/10 text-white px-4 py-2 text-xs font-black uppercase tracking-widest">Open Planner</button><button onClick={() => setActiveTab('matches')} className="bg-white/10 hover:bg-white/15 border border-white/10 text-white px-4 py-2 text-xs font-black uppercase tracking-widest">Match Logs</button><button onClick={() => setActiveTab('roster')} className="bg-white/10 hover:bg-white/15 border border-white/10 text-white px-4 py-2 text-xs font-black uppercase tracking-widest">Roster</button></div></div><div className="glass-panel rounded-xl p-6 border-white/10"><div className="text-[10px] uppercase tracking-[0.28em] text-neutral-500 font-black mb-4">Next Operation</div><div className="text-2xl font-black text-white uppercase italic leading-tight">{nextEvent ? `${nextEvent.type || 'Event'} vs ${nextEvent.opponent || 'TBD'}` : 'No Event Scheduled'}</div><div className="mt-3 text-sm text-neutral-400">{nextEvent ? `${nextEvent.date || 'Date TBD'} @ ${nextEvent.time || 'Time TBD'} ${nextEvent.timezone || ''}` : 'Use Event Operations to schedule the next practice, scrim, or official.'}</div><div className="mt-5 pt-4 border-t border-white/10 grid grid-cols-2 gap-3"><div><div className="text-3xl font-black text-white">{availableToday}</div><div className="text-[10px] uppercase tracking-widest text-neutral-500 font-black">Available Today</div></div><div><div className="text-3xl font-black text-white">{events.length}</div><div className="text-[10px] uppercase tracking-widest text-neutral-500 font-black">Upcoming</div></div></div></div></div><div className="grid grid-cols-1 md:grid-cols-4 gap-4"><div className="glass-panel rounded-xl p-4 border-white/10"><div className="text-[10px] uppercase tracking-widest text-neutral-500 font-black">Members</div><div className="mt-2 text-3xl font-black text-white">{dynamicMembers.length}</div></div><div className="glass-panel rounded-xl p-4 border-white/10"><div className="text-[10px] uppercase tracking-widest text-neutral-500 font-black">Events</div><div className="mt-2 text-3xl font-black text-white">{events.length}</div></div><div className="glass-panel rounded-xl p-4 border-white/10"><div className="text-[10px] uppercase tracking-widest text-neutral-500 font-black">Timezone</div><div className="mt-2 text-sm font-bold text-white truncate">{userTimezone}</div></div><div className="glass-panel rounded-xl p-4 border-white/10"><div className="text-[10px] uppercase tracking-widest text-neutral-500 font-black">Access</div><div className="mt-2 text-sm font-bold text-white">{isAdmin ? 'Admin' : 'Member'}</div></div></div><div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
                         <div className="lg:col-span-4 space-y-8">
                             <CaptainsMessage />
                             <LeaveLogger members={dynamicMembers} rosterName={rosterName} />
@@ -4071,6 +4122,7 @@ function SyrixDashboard({ onBack }) {
                             <Card><h2 className="text-xl font-bold text-white mb-6 uppercase tracking-wide">Detailed Timeline <span className="text-neutral-500 text-sm normal-case">({userTimezone})</span></h2><div className="overflow-x-auto scrollbar-thin scrollbar-thumb-neutral-700"><table className="w-full text-left border-collapse min-w-[600px]"><thead><tr className="border-b border-neutral-800"><th className="p-3 text-xs font-bold text-neutral-500 uppercase tracking-wider w-32">Team Member</th>{SHORT_DAYS.map(day => (<th key={day} className="p-3 text-xs font-bold text-red-600 uppercase tracking-wider text-center border-l border-neutral-800">{day}</th>))}</tr></thead><tbody className="divide-y divide-neutral-800/50">{dynamicMembers.map(member => (<tr key={member} className="hover:bg-neutral-800/30 transition-colors group"><td className="p-4 font-bold text-white text-sm flex items-center gap-2"><div className="w-2 h-2 rounded-full bg-red-500 shadow-red-500/50 shadow-sm"></div>{member}</td>{DAYS.map((day) => { const slots = (displayAvail[member] || []).filter(s => s.day === day); return (<td key={day} className="p-2 align-middle border-l border-neutral-800/50"><div className="flex flex-col gap-1 items-center justify-center">{slots.length > 0 ? slots.map((s, i) => (<div key={i} className="bg-gradient-to-br from-red-600 to-red-700 text-white text-[10px] font-bold px-2 py-1 rounded w-full text-center shadow-md whitespace-nowrap flex items-center justify-center gap-1">{s.start}-{s.end}<span className="opacity-75 ml-1 text-[9px] border border-white/20 px-1 rounded bg-black/20">{ROLE_ABBREVIATIONS[s.role] || s.role}</span></div>)) : <div className="h-1 w-4 bg-neutral-800 rounded-full"></div>}</div></td>); })}</tr>))}</tbody></table></div></Card>
                         </div>
                     </div></div>}
+                    {activeTab === 'availability' && <div className="animate-fade-in space-y-6"><div className="grid grid-cols-1 xl:grid-cols-[0.7fr_1.3fr] gap-6"><div className="space-y-6"><Card className="border-red-900/20"><div className="absolute top-0 left-0 w-1 h-full bg-red-600/50"></div><div className="text-[10px] uppercase tracking-[0.28em] text-red-400 font-black mb-3">Your Week</div><h2 className="text-2xl font-black text-white uppercase italic mb-5">Availability Editor</h2><div className="space-y-4"><div><label className="text-[10px] font-black text-red-500 uppercase mb-1 block">Day</label><Select value={day} onChange={e => setDay(e.target.value)}>{DAYS.map(d => <option key={d} value={d}>{d}</option>)}</Select><div className="mt-2 text-[11px] text-neutral-500">Editing availability for <span className="text-neutral-300 font-bold">{currentMemberName}</span> in <span className="text-neutral-300 font-bold">{userTimezone}</span>.</div></div><div className="grid grid-cols-2 gap-3"><div><label className="text-[10px] font-black text-red-500 uppercase mb-1 block">Start</label><Input type="time" value={start} onChange={e => setStart(e.target.value)} className="[color-scheme:dark]" /></div><div><label className="text-[10px] font-black text-red-500 uppercase mb-1 block">End</label><Input type="time" value={end} onChange={e => setEnd(e.target.value)} className="[color-scheme:dark]" /></div></div><div><label className="text-[10px] font-black text-red-500 uppercase mb-1 block">Pref. Role</label><div className="flex gap-2 overflow-x-auto pb-2 scrollbar-hide">{ROLES.map(r => (<button key={r} onClick={() => setRole(r)} className={`px-3 py-2 rounded-lg text-xs font-black border transition-all whitespace-nowrap flex items-center justify-center ${role === r ? 'bg-red-600 text-white border-red-500' : 'bg-black/50 border-neutral-800 text-neutral-500 hover:text-white'}`}>{ROLE_ABBREVIATIONS[r] || r}</button>))}</div></div><div className="pt-2 flex gap-2"><ButtonPrimary onClick={saveAvail} disabled={saveStatus !== 'idle'} className="flex-1">{saveStatus === 'idle' ? 'Save Slot' : 'Saving...'}</ButtonPrimary><ButtonSecondary onClick={() => openModal('Clear Day', `Clear all for ${day}?`, clearDay)}>Clear</ButtonSecondary></div></div></Card><LeaveLogger members={dynamicMembers} rosterName={rosterName} /></div><div className="space-y-6"><div className="grid grid-cols-1 xl:grid-cols-2 gap-6"><Card><h2 className="text-lg font-bold text-white mb-4 uppercase tracking-wide">Team Heatmap</h2><AvailabilityHeatmap availabilities={displayAvail} members={dynamicMembers} /></Card><Card><div className="text-[10px] uppercase tracking-[0.28em] text-neutral-500 font-black mb-3">Today</div><div className="text-4xl font-black text-white">{availableToday}/{dynamicMembers.length}</div><div className="mt-2 text-sm text-neutral-400">members have availability logged for {todayName}.</div><div className="mt-5 pt-4 border-t border-white/10 text-xs text-neutral-500">Keep this current before scrims so captains can plan realistic blocks.</div></Card></div><Card><h2 className="text-xl font-bold text-white mb-6 uppercase tracking-wide">Weekly Timeline <span className="text-neutral-500 text-sm normal-case">({userTimezone})</span></h2><div className="overflow-x-auto scrollbar-thin scrollbar-thumb-neutral-700"><table className="w-full text-left border-collapse min-w-[600px]"><thead><tr className="border-b border-neutral-800"><th className="p-3 text-xs font-bold text-neutral-500 uppercase tracking-wider w-32">Team Member</th>{SHORT_DAYS.map(day => (<th key={day} className="p-3 text-xs font-bold text-red-600 uppercase tracking-wider text-center border-l border-neutral-800">{day}</th>))}</tr></thead><tbody className="divide-y divide-neutral-800/50">{dynamicMembers.map(member => (<tr key={member} className="hover:bg-neutral-800/30 transition-colors group"><td className="p-4 font-bold text-white text-sm flex items-center gap-2"><div className="w-2 h-2 rounded-full bg-red-500 shadow-red-500/50 shadow-sm"></div>{member}</td>{DAYS.map((day) => { const slots = (displayAvail[member] || []).filter(s => s.day === day); return (<td key={day} className="p-2 align-middle border-l border-neutral-800/50"><div className="flex flex-col gap-1 items-center justify-center">{slots.length > 0 ? slots.map((s, i) => (<div key={i} className="bg-gradient-to-br from-red-600 to-red-700 text-white text-[10px] font-bold px-2 py-1 rounded w-full text-center shadow-md whitespace-nowrap flex items-center justify-center gap-1">{s.start}-{s.end}<span className="opacity-75 ml-1 text-[9px] border border-white/20 px-1 rounded bg-black/20">{ROLE_ABBREVIATIONS[s.role] || s.role}</span></div>)) : <div className="h-1 w-4 bg-neutral-800 rounded-full"></div>}</div></td>); })}</tr>))}</tbody></table></div></Card></div></div></div>}
                     {activeTab === 'playbook' && <div className="animate-fade-in h-[80vh]"><Playbook /></div>}
                     {activeTab === 'comps' && <div className="animate-fade-in h-full"><TeamComps members={dynamicMembers} /></div>}
                     {activeTab === 'matches' && <div className="animate-fade-in"><MatchHistory currentUser={currentUser} members={dynamicMembers} /></div>}
@@ -4085,6 +4137,7 @@ function SyrixDashboard({ onBack }) {
 
                 </div>
             </main>
+            </div>
             <Modal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} onConfirm={modalContent.onConfirm} title={modalContent.title}>{modalContent.children}</Modal>
         </div>
     );
