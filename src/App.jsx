@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { collection, onSnapshot, doc, setDoc, deleteDoc, addDoc, updateDoc, query, where, getDoc, getDocs } from 'firebase/firestore';
 import { onAuthStateChanged, signInWithPopup, signOut, OAuthProvider } from 'firebase/auth';
-import { auth, db, discordWebhookUrl } from './lib/firebase';
+import { deleteObject, getDownloadURL, ref as storageRef, uploadBytes } from 'firebase/storage';
+import { auth, db, discordWebhookUrl, storage } from './lib/firebase';
 import { ADMIN_ACCESS_ROLES, ADMIN_ROLES, ADMIN_UIDS, AGENT_NAMES, DAYS, MAPS, RANKS, ROLE_ABBREVIATIONS, ROLES, SHORT_DAYS, UTILITY_TYPES, timezones } from './lib/constants';
 import { convertFromGMT, convertToGMT, normalizeAvailabilitySlots, safeDocId, sortRosterByRole, timeToMinutes, writeAuditLog } from './lib/utils';
 import { Background, ButtonPrimary, ButtonSecondary, Card, GlobalStyles, Input, Modal, Select, TeamLogo } from './components/shared';
@@ -2262,6 +2263,7 @@ function StratLibrary() {
     const [externalStrats, setExternalStrats] = useState([]);
     const [fullscreenStrat, setFullscreenStrat] = useState(null);
     const [uploadForm, setUploadForm] = useState({ title: '', notes: '', imageUrl: '' });
+    const [uploadFile, setUploadFile] = useState(null);
     const [uploading, setUploading] = useState(false);
 
     useEffect(() => {
@@ -2317,29 +2319,39 @@ function StratLibrary() {
         if (!file) return;
         if (!file.type.startsWith('image/')) return addToast('Please choose an image file', 'error');
         if (file.size > MAX_UPLOAD_SIZE_BYTES) return addToast(`Image is too large. Use an image under ${MAX_UPLOAD_SIZE_MB}MB or paste an image URL.`, 'error');
-
-        const reader = new FileReader();
-        reader.onload = () => setUploadForm(prev => ({ ...prev, imageUrl: String(reader.result || '') }));
-        reader.onerror = () => addToast('Unable to read image file', 'error');
-        reader.readAsDataURL(file);
+        setUploadFile(file);
+        setUploadForm(prev => ({ ...prev, imageUrl: '' }));
     };
 
     const saveUploadedStrat = async () => {
         if (!uploadForm.title.trim()) return addToast('Strategy title is required', 'error');
-        if (!uploadForm.imageUrl.trim()) return addToast('Add an image URL or upload an image file', 'error');
+        if (!uploadForm.imageUrl.trim() && !uploadFile) return addToast('Add an image URL or upload an image file', 'error');
 
         setUploading(true);
         try {
+            let imageUrl = uploadForm.imageUrl.trim();
+            let storagePath = '';
+            if (uploadFile) {
+                const ext = uploadFile.name.includes('.') ? uploadFile.name.split('.').pop().toLowerCase() : 'image';
+                const owner = auth.currentUser?.uid || 'unknown';
+                storagePath = `external_strats/${selectedMap}/${side}/${owner}-${Date.now()}.${ext}`;
+                const fileRef = storageRef(storage, storagePath);
+                await uploadBytes(fileRef, uploadFile, { contentType: uploadFile.type });
+                imageUrl = await getDownloadURL(fileRef);
+            }
+
             await addDoc(collection(db, 'external_strats'), {
                 title: uploadForm.title.trim(),
                 notes: uploadForm.notes.trim(),
-                imageUrl: uploadForm.imageUrl.trim(),
+                imageUrl,
+                storagePath,
                 map: selectedMap,
                 side,
-                source: 'ValoPlant',
+                source: uploadFile ? 'Uploaded Image' : 'ValoPlant',
                 createdAt: new Date().toISOString()
             });
             setUploadForm({ title: '', notes: '', imageUrl: '' });
+            setUploadFile(null);
             addToast('Uploaded strategy saved');
         } catch (error) {
             console.error('Upload strat save failed:', error);
@@ -2349,9 +2361,12 @@ function StratLibrary() {
         }
     };
 
-    const deleteUploadedStrat = async (id) => {
+    const deleteUploadedStrat = async (strat) => {
         try {
-            await deleteDoc(doc(db, 'external_strats', id));
+            if (strat.storagePath) {
+                await deleteObject(storageRef(storage, strat.storagePath));
+            }
+            await deleteDoc(doc(db, 'external_strats', strat.id));
             addToast('Uploaded strategy removed');
         } catch (error) {
             console.error('Upload strat delete failed:', error);
@@ -2481,8 +2496,9 @@ function StratLibrary() {
                         <div className="rounded-xl border border-white/10 bg-black/35 p-4 space-y-3">
                             <div className="text-[10px] uppercase tracking-[0.24em] text-red-400 font-black">Upload External Image</div>
                             <Input value={uploadForm.title} onChange={e => setUploadForm({ ...uploadForm, title: e.target.value })} placeholder="Strategy title" />
-                            <Input value={uploadForm.imageUrl} onChange={e => setUploadForm({ ...uploadForm, imageUrl: e.target.value })} placeholder="Image URL or upload below" />
+                            <Input value={uploadForm.imageUrl} onChange={e => { setUploadForm({ ...uploadForm, imageUrl: e.target.value }); if (e.target.value.trim()) setUploadFile(null); }} placeholder="Image URL or upload below" />
                             <input type="file" accept="image/*" onChange={handleImageFile} className="block w-full text-xs text-neutral-500 file:mr-3 file:rounded-lg file:border-0 file:bg-white/10 file:px-3 file:py-2 file:text-xs file:font-black file:uppercase file:text-white hover:file:bg-red-600" />
+                            {uploadFile && <div className="rounded-lg border border-white/10 bg-black/40 px-3 py-2 text-xs text-neutral-400"><span className="font-black text-white">Selected:</span> {uploadFile.name} <span className="text-neutral-600">({(uploadFile.size / (1024 * 1024)).toFixed(2)}MB)</span></div>}
                             <textarea value={uploadForm.notes} onChange={e => setUploadForm({ ...uploadForm, notes: e.target.value })} placeholder="Optional notes, callouts, or source link..." className="w-full h-24 bg-black/40 border border-neutral-800 rounded-xl p-3 text-white text-sm outline-none focus:border-red-600 placeholder-neutral-600 resize-y" />
                             <ButtonPrimary onClick={saveUploadedStrat} disabled={uploading} className="w-full text-xs py-3">{uploading ? 'Saving...' : 'Save Upload'}</ButtonPrimary>
                         </div>
@@ -2541,7 +2557,7 @@ function StratLibrary() {
                                                     <div className="text-lg font-black text-white truncate">{strat.title}</div>
                                                     <div className="mt-1 text-[10px] uppercase tracking-widest text-neutral-500">{strat.source || 'External'} / {strat.createdAt ? new Date(strat.createdAt).toLocaleDateString() : 'No date'}</div>
                                                 </div>
-                                                <button onClick={() => deleteUploadedStrat(strat.id)} className="text-neutral-600 hover:text-red-500 text-xl leading-none">×</button>
+                                                <button onClick={() => deleteUploadedStrat(strat)} className="text-neutral-600 hover:text-red-500 text-xl leading-none">×</button>
                                             </div>
                                             {strat.notes && <p className="mt-3 text-sm text-neutral-400 whitespace-pre-wrap">{strat.notes}</p>}
                                             <div className="mt-3 flex flex-wrap gap-3">
