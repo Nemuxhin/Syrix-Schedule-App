@@ -2139,6 +2139,118 @@ function StratBook() {
     );
 }
 
+function StratPreviewBoard({ strat, mapImage, className = '' }) {
+    const objects = Array.isArray(strat?.objects) ? strat.objects : [];
+    const clampValue = (value, min, max) => Math.max(min, Math.min(max, value));
+    const renderArrowHead = (obj) => {
+        const angle = Math.atan2(obj.y2 - obj.y1, obj.x2 - obj.x1) * 180 / Math.PI;
+        return `translate(${obj.x2} ${obj.y2}) rotate(${angle})`;
+    };
+
+    const renderObject = (obj, index) => {
+        const key = obj.id || `${obj.type}-${index}`;
+        if (obj.type === 'line' || obj.type === 'arrow') {
+            return (
+                <g key={key}>
+                    <line x1={`${obj.x1}%`} y1={`${obj.y1}%`} x2={`${obj.x2}%`} y2={`${obj.y2}%`} stroke={obj.color || '#ef4444'} strokeWidth={obj.width || 0.45} strokeLinecap="round" />
+                    {obj.type === 'arrow' && <path d="M 0 0 L -1.4 -0.9 L -1.4 0.9 Z" transform={renderArrowHead(obj)} fill={obj.color || '#ef4444'} />}
+                </g>
+            );
+        }
+
+        if (obj.type === 'freehand') {
+            const points = obj.points?.map(point => `${point.x},${point.y}`).join(' ') || '';
+            return <polyline key={key} points={points} fill="none" stroke={obj.color || '#ef4444'} strokeWidth={obj.width || 0.45} strokeLinecap="round" strokeLinejoin="round" />;
+        }
+
+        if (obj.type === 'text') {
+            const textSize = clampValue(obj.size || 0.32, 0.2, 0.85);
+            const textWidth = clampValue(obj.width || 18, 8, 34);
+            return (
+                <foreignObject key={key} x={`${obj.x}%`} y={`${obj.y}%`} width={`${textWidth}%`} height="30%" className="overflow-visible">
+                    <div
+                        className="inline-block w-full rounded bg-black/72 border border-white/20 px-1.5 py-1 text-[4.5px] font-bold leading-snug tracking-normal whitespace-pre-wrap break-words shadow-[0_3px_14px_rgba(0,0,0,0.8)]"
+                        style={{ color: obj.color || '#f8fafc', transform: `translate(-50%, -50%) rotate(${obj.rotation || 0}deg) scale(${textSize})`, transformOrigin: 'center' }}
+                    >
+                        {obj.text}
+                    </div>
+                </foreignObject>
+            );
+        }
+
+        if (obj.type === 'ability' || obj.type === 'area') {
+            const markerSize = 3.2 * (obj.size || 1);
+            if ((obj.shape || 'circle') === 'circle') {
+                return (
+                    <g key={key}>
+                        <circle cx={`${obj.x}%`} cy={`${obj.y}%`} r={`${obj.radius || 2.2}%`} fill={obj.fill || 'rgba(226,232,240,0.16)'} stroke={obj.stroke || '#e2e8f0'} strokeWidth="1.2" />
+                        {obj.icon && <image href={obj.icon} x={`${obj.x - 1.05}%`} y={`${obj.y - 1.05}%`} width="2.1%" height="2.1%" opacity="0.95" />}
+                    </g>
+                );
+            }
+            if (obj.shape === 'beam') {
+                return (
+                    <g key={key} transform={`translate(${obj.x} ${obj.y}) rotate(${obj.rotation || 0})`}>
+                        <rect x="0" y={`${-(obj.width || 3) / 2}`} width={obj.length || 12} height={obj.width || 3} rx={(obj.width || 3) / 2} fill={obj.fill || 'rgba(168,85,247,0.2)'} stroke={obj.stroke || '#c084fc'} strokeWidth="0.45" />
+                        <line x1="0" y1="0" x2={obj.length || 12} y2="0" stroke={obj.stroke || '#c084fc'} strokeWidth="0.35" strokeDasharray="1.5 1.2" />
+                        {obj.icon && <image href={obj.icon} x="-1.4" y="-1.4" width="2.8" height="2.8" />}
+                    </g>
+                );
+            }
+            if (obj.shape === 'wall') {
+                const length = obj.length || 18;
+                return (
+                    <g key={key} transform={`translate(${obj.x} ${obj.y}) rotate(${obj.rotation || 0})`}>
+                        <line x1={-length / 2} y1="0" x2={length / 2} y2="0" stroke={obj.stroke || '#2dd4bf'} strokeWidth={obj.width || 1.1} strokeLinecap="round" opacity="0.9" />
+                        <line x1={-length / 2} y1="0" x2={length / 2} y2="0" stroke="rgba(255,255,255,0.55)" strokeWidth="0.25" strokeLinecap="round" />
+                        {obj.icon && <image href={obj.icon} x="-1.25" y="-1.25" width="2.5" height="2.5" />}
+                    </g>
+                );
+            }
+            if (obj.shape === 'cone') {
+                const length = obj.length || 7;
+                const width = obj.width || 5;
+                return (
+                    <g key={key} transform={`translate(${obj.x} ${obj.y}) rotate(${obj.rotation || 0})`}>
+                        <path d={`M 0 0 L ${length} ${-width / 2} L ${length} ${width / 2} Z`} fill={obj.fill || 'rgba(250,204,21,0.18)'} stroke={obj.stroke || '#facc15'} strokeWidth="0.35" />
+                        {obj.icon && <image href={obj.icon} x="-1.25" y="-1.25" width="2.5" height="2.5" />}
+                    </g>
+                );
+            }
+            return (
+                <g key={key} transform={`translate(${obj.x} ${obj.y}) rotate(${obj.rotation || 0})`}>
+                    <circle cx="0" cy="0" r={markerSize / 2} fill="rgba(0,0,0,0.78)" stroke={obj.stroke || obj.color || '#f8fafc'} strokeWidth="0.45" />
+                    {obj.icon && <image href={obj.icon} x={-markerSize / 2 + 0.35} y={-markerSize / 2 + 0.35} width={markerSize - 0.7} height={markerSize - 0.7} />}
+                </g>
+            );
+        }
+
+        return (
+            <foreignObject key={key} x={`${(obj.x || 50) - 2.8}%`} y={`${(obj.y || 50) - 2.8}%`} width="5.6%" height="5.6%" className="overflow-visible">
+                <div className="relative flex h-full w-full items-center justify-center" style={{ transform: `rotate(${obj.rotation || 0}deg) scale(${obj.size || 1})`, transformOrigin: 'center' }}>
+                    {obj.type === 'agent' && (obj.icon ? <img src={obj.icon} alt={obj.name || 'Agent'} className="h-full w-full object-contain drop-shadow-[0_2px_8px_rgba(0,0,0,0.95)]" /> : <div className="h-full w-full text-white flex items-center justify-center text-[10px] font-black">{obj.name?.slice(0, 2)}</div>)}
+                    {obj.type === 'spike' && <div className="h-2/3 w-2/3 rotate-45 bg-yellow-400 border border-yellow-100 shadow-[0_0_10px_rgba(250,204,21,0.65)]" />}
+                    {obj.type === 'ping' && <div className="h-4/5 w-4/5 rounded-full border-2 bg-transparent animate-pulse" style={{ borderColor: obj.color || '#ef4444' }} />}
+                </div>
+            </foreignObject>
+        );
+    };
+
+    return (
+        <div className={`relative aspect-square overflow-hidden bg-neutral-950 ${className}`}>
+            {mapImage ? (
+                <img src={mapImage} alt={`${strat?.map || 'Map'} tactical map`} className="absolute inset-0 h-full w-full object-cover opacity-95" draggable={false} />
+            ) : (
+                <div className="absolute inset-0 flex items-center justify-center text-neutral-700 font-black text-5xl italic">{strat?.map || 'Map'}</div>
+            )}
+            <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,transparent_45%,rgba(0,0,0,0.35)_100%)]" />
+            <svg className="absolute inset-0 h-full w-full" viewBox="0 0 100 100" preserveAspectRatio="none">
+                {objects.map(renderObject)}
+            </svg>
+        </div>
+    );
+}
+
 function StratLibrary() {
     const { mapImages } = useValorantData();
     const addToast = useToast();
@@ -2278,10 +2390,10 @@ function StratLibrary() {
                     <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 border-b border-white/10 bg-neutral-950/80 px-4 md:px-6 py-4">
                         <div className="min-w-0">
                             <div className="text-[10px] uppercase tracking-[0.28em] text-red-400 font-black">{fullscreenStrat.map} / {fullscreenStrat.side || side}</div>
-                            <h3 className="mt-1 text-xl md:text-2xl font-black uppercase italic text-white truncate">{fullscreenStrat.title}</h3>
+                            <h3 className="mt-1 text-xl md:text-2xl font-black uppercase italic text-white truncate">{fullscreenStrat.title || fullscreenStrat.name || 'Untitled strategy'}</h3>
                         </div>
                         <div className="flex flex-wrap items-center gap-2">
-                            {String(fullscreenStrat.imageUrl || '').startsWith('http') && (
+                            {fullscreenStrat.kind === 'external' && String(fullscreenStrat.imageUrl || '').startsWith('http') && (
                                 <a href={fullscreenStrat.imageUrl} target="_blank" rel="noreferrer" className="rounded-lg border border-white/10 bg-white/5 px-4 py-3 text-[10px] font-black uppercase tracking-widest text-white hover:bg-white hover:text-black">
                                     Open Source
                                 </a>
@@ -2293,7 +2405,11 @@ function StratLibrary() {
                     </div>
                     <div className="min-h-0 flex-1 grid grid-cols-1 xl:grid-cols-[1fr_22rem]">
                         <div className="min-h-0 flex items-center justify-center bg-black p-3 md:p-6">
-                            <img src={fullscreenStrat.imageUrl} alt={fullscreenStrat.title} className="max-h-full max-w-full object-contain rounded-lg border border-white/10 shadow-2xl" />
+                            {fullscreenStrat.kind === 'external' ? (
+                                <img src={fullscreenStrat.imageUrl} alt={fullscreenStrat.title} className="max-h-full max-w-full object-contain rounded-lg border border-white/10 shadow-2xl" />
+                            ) : (
+                                <StratPreviewBoard strat={fullscreenStrat} mapImage={mapImages[fullscreenStrat.map]} className="h-full max-h-full w-auto max-w-full rounded-lg border border-white/10 shadow-2xl" />
+                            )}
                         </div>
                         <aside className="border-t xl:border-t-0 xl:border-l border-white/10 bg-neutral-950 p-5 overflow-y-auto">
                             <div className="text-[10px] uppercase tracking-[0.24em] text-neutral-500 font-black">Plan Notes</div>
@@ -2305,13 +2421,19 @@ function StratLibrary() {
                             <div className="mt-6 grid grid-cols-2 gap-3">
                                 <div className="rounded-xl border border-white/10 bg-black/40 p-3">
                                     <div className="text-[10px] uppercase tracking-widest text-neutral-500 font-black">Source</div>
-                                    <div className="mt-1 text-sm font-black text-white">{fullscreenStrat.source || 'External'}</div>
+                                    <div className="mt-1 text-sm font-black text-white">{fullscreenStrat.kind === 'app' ? 'Stratbook' : fullscreenStrat.source || 'External'}</div>
                                 </div>
                                 <div className="rounded-xl border border-white/10 bg-black/40 p-3">
                                     <div className="text-[10px] uppercase tracking-widest text-neutral-500 font-black">Saved</div>
-                                    <div className="mt-1 text-sm font-black text-white">{fullscreenStrat.createdAt ? new Date(fullscreenStrat.createdAt).toLocaleDateString() : 'No date'}</div>
+                                    <div className="mt-1 text-sm font-black text-white">{fullscreenStrat.createdAt || fullscreenStrat.updatedAt || fullscreenStrat.date ? new Date(fullscreenStrat.createdAt || fullscreenStrat.updatedAt || fullscreenStrat.date).toLocaleDateString() : 'No date'}</div>
                                 </div>
                             </div>
+                            {fullscreenStrat.kind === 'app' && (
+                                <div className="mt-3 rounded-xl border border-white/10 bg-black/40 p-3">
+                                    <div className="text-[10px] uppercase tracking-widest text-neutral-500 font-black">Items</div>
+                                    <div className="mt-1 text-sm font-black text-white">{fullscreenStrat.objects?.length || 0}</div>
+                                </div>
+                            )}
                         </aside>
                     </div>
                 </div>
@@ -2373,6 +2495,13 @@ function StratLibrary() {
                             <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
                                 {filteredAppStrats.length ? filteredAppStrats.map(strat => (
                                     <div key={strat.id} className="rounded-xl border border-white/10 bg-black/45 p-4">
+                                        <button onClick={() => setFullscreenStrat({ ...strat, kind: 'app', title: strat.name || strat.title || 'Untitled strategy' })} className="group relative mb-4 block w-full overflow-hidden rounded-lg border border-white/10 bg-neutral-950 text-left">
+                                            <StratPreviewBoard strat={strat} mapImage={mapImages[strat.map]} className="opacity-90 transition-opacity group-hover:opacity-100" />
+                                            <span className="absolute inset-x-0 bottom-0 flex items-center justify-between gap-3 bg-gradient-to-t from-black/85 to-transparent p-3 opacity-0 transition-opacity group-hover:opacity-100">
+                                                <span className="text-[10px] font-black uppercase tracking-widest text-white">View Fullscreen</span>
+                                                <span className="rounded-md border border-white/15 bg-white px-2 py-1 text-[10px] font-black uppercase tracking-widest text-black">Open</span>
+                                            </span>
+                                        </button>
                                         <div className="flex items-start justify-between gap-3">
                                             <div className="min-w-0">
                                                 <div className="text-lg font-black text-white truncate">{strat.name || strat.title || 'Untitled strategy'}</div>
@@ -2381,6 +2510,7 @@ function StratLibrary() {
                                             <button onClick={() => deleteAppStrat(strat.id)} className="text-neutral-600 hover:text-red-500 text-xl leading-none">×</button>
                                         </div>
                                         <div className="mt-4 flex flex-wrap gap-2">
+                                            <ButtonSecondary onClick={() => setFullscreenStrat({ ...strat, kind: 'app', title: strat.name || strat.title || 'Untitled strategy' })} className="text-[10px] py-2">Fullscreen</ButtonSecondary>
                                             <ButtonSecondary onClick={() => exportAppStrat(strat)} className="text-[10px] py-2">Export JSON</ButtonSecondary>
                                         </div>
                                     </div>
@@ -2396,7 +2526,7 @@ function StratLibrary() {
                             <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
                                 {filteredExternalStrats.length ? filteredExternalStrats.map(strat => (
                                     <div key={strat.id} className="rounded-xl border border-white/10 bg-black/45 overflow-hidden">
-                                        <button onClick={() => setFullscreenStrat(strat)} className="group relative block aspect-video w-full bg-neutral-950 text-left">
+                                        <button onClick={() => setFullscreenStrat({ ...strat, kind: 'external' })} className="group relative block aspect-video w-full bg-neutral-950 text-left">
                                             <img src={strat.imageUrl} alt={strat.title} className="h-full w-full object-contain" />
                                             <span className="absolute inset-x-0 bottom-0 flex items-center justify-between gap-3 bg-gradient-to-t from-black/85 to-transparent p-3 opacity-0 transition-opacity group-hover:opacity-100">
                                                 <span className="text-[10px] font-black uppercase tracking-widest text-white">View Fullscreen</span>
@@ -2413,7 +2543,7 @@ function StratLibrary() {
                                             </div>
                                             {strat.notes && <p className="mt-3 text-sm text-neutral-400 whitespace-pre-wrap">{strat.notes}</p>}
                                             <div className="mt-3 flex flex-wrap gap-3">
-                                                <button onClick={() => setFullscreenStrat(strat)} className="text-[10px] font-black uppercase tracking-widest text-red-400 hover:text-white">Fullscreen</button>
+                                                <button onClick={() => setFullscreenStrat({ ...strat, kind: 'external' })} className="text-[10px] font-black uppercase tracking-widest text-red-400 hover:text-white">Fullscreen</button>
                                                 {String(strat.imageUrl || '').startsWith('http') && <a href={strat.imageUrl} target="_blank" rel="noreferrer" className="text-[10px] font-black uppercase tracking-widest text-neutral-500 hover:text-white">Open Image</a>}
                                             </div>
                                         </div>
