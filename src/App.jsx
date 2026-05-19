@@ -21,6 +21,7 @@ const discordWebhookUrl = "https://discord.com/api/webhooks/1427426922228351042/
 
 // --- GLOBAL CONSTANTS ---
 const ADMIN_UIDS = ["M9FzRywhRIdUveh5JKUfQgJtlIB3", "SiPLxB20VzVGBZL3rTM42FsgEy52", "pmXgTX5dxbVns0nnO54kl1BR07A3"];
+const ADMIN_ROLES = ["Manager"];
 const DAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
 const SHORT_DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 const MAPS = ["Ascent", "Bind", "Breeze", "Fracture", "Haven", "Icebox", "Lotus", "Pearl", "Split", "Sunset", "Abyss", "Corrode"];
@@ -137,7 +138,7 @@ const convertToGMT = (day, time, timezone = Intl.DateTimeFormat().resolvedOption
 
 // --- HELPER: SORT ROSTER ---
 const sortRosterByRole = (rosterList, lookupData = null) => {
-    const priority = { 'Head Coach': 0, 'Coach': 1, 'Captain': 2, 'Main': 3, 'Sub': 4, 'Tryout': 5 };
+    const priority = { 'Manager': 0, 'Head Coach': 1, 'Coach': 2, 'Captain': 3, 'Main': 4, 'Sub': 5, 'Tryout': 6 };
     return [...rosterList].sort((a, b) => {
         const roleA = (lookupData ? lookupData[a]?.role : a.role) || 'Tryout';
         const roleB = (lookupData ? lookupData[b]?.role : b.role) || 'Tryout';
@@ -396,7 +397,7 @@ const LandingPage = ({ onEnterHub }) => {
 
     const { activePlayers, coachingStaff } = useMemo(() => {
         const sorted = sortRosterByRole(roster);
-        const staffRoles = ["Head Coach", "Coach"]; // Make sure these match exactly what you put in the Admin dropdown
+        const staffRoles = ["Manager", "Head Coach", "Coach"];
 
         return {
             coachingStaff: sorted.filter(p => staffRoles.includes(p.role)),
@@ -3450,9 +3451,9 @@ function ActionItems({ members }) {
     );
 }
 
-function RosterManager({ members, events }) {
+function RosterManager({ members, events, canManageRoster = false }) {
     const [rosterData, setRosterData] = useState({});
-    const [mode, setMode] = useState('edit');
+    const [mode, setMode] = useState(canManageRoster ? 'edit' : 'compare');
     const [compare1, setCompare1] = useState('');
     const [compare2, setCompare2] = useState('');
     const [selectedMember, setSelectedMember] = useState(null);
@@ -3567,11 +3568,11 @@ function RosterManager({ members, events }) {
     return (
         <div className="h-full flex flex-col gap-6">
             <div className="flex gap-4 border-b border-white/10 pb-4">
-                <button onClick={() => setMode('edit')} className={`text-sm font-bold uppercase ${mode === 'edit' ? 'text-red-500' : 'text-neutral-500'}`}>Edit Mode</button>
+                {canManageRoster && <button onClick={() => setMode('edit')} className={`text-sm font-bold uppercase ${mode === 'edit' ? 'text-red-500' : 'text-neutral-500'}`}>Edit Mode</button>}
                 <button onClick={() => setMode('compare')} className={`text-sm font-bold uppercase ${mode === 'compare' ? 'text-red-500' : 'text-neutral-500'}`}>Compare Players</button>
             </div>
 
-            {mode === 'edit' ? (
+            {mode === 'edit' && canManageRoster ? (
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 h-full">
                     {/* Sidebar List */}
                     <div className="lg:col-span-1 bg-neutral-900/80 p-6 rounded-xl border border-white/5 flex flex-col">
@@ -3607,8 +3608,7 @@ function RosterManager({ members, events }) {
                                     <div>
                                         <label className="block text-xs font-bold text-neutral-500 mb-1">Team Role</label>
                                         <Select value={role} onChange={e => setRole(e.target.value)}>
-                                            {/* UPDATED: Added Coach Roles */}
-                                            {['Head Coach', 'Coach', 'Captain', 'Main', 'Sub', 'Tryout'].map(r => <option key={r}>{r}</option>)}
+                                            {['Manager', 'Head Coach', 'Coach', 'Captain', 'Main', 'Sub', 'Tryout'].map(r => <option key={r}>{r}</option>)}
                                         </Select>
                                     </div>
                                     <div>
@@ -3707,10 +3707,107 @@ function PartnerDirectory() {
 }
 
 function MapVeto() {
-    const [vetoState, setVetoState] = useState({}); useEffect(() => { const unsub = onSnapshot(doc(db, 'general', 'map_veto'), (snap) => { if (snap.exists()) setVetoState(snap.data()); }); return () => unsub(); }, []);
-    const toggleMap = async (map) => { const current = vetoState[map] || 'neutral'; const next = current === 'neutral' ? 'ban' : current === 'ban' ? 'pick' : 'neutral'; await setDoc(doc(db, 'general', 'map_veto'), { ...vetoState, [map]: next }); };
-    const resetVeto = async () => { await setDoc(doc(db, 'general', 'map_veto'), {}); };
-    return (<Card className="h-full"><div className="flex justify-between items-center mb-6"><h3 className="text-2xl font-black text-white">MAP VETO</h3><ButtonSecondary onClick={resetVeto} className="text-xs px-3 py-1">Reset Board</ButtonSecondary></div><div className="grid grid-cols-2 md:grid-cols-5 gap-4">{MAPS.map(map => { const status = vetoState[map] || 'neutral'; return (<div key={map} onClick={() => toggleMap(map)} className={`aspect-video rounded-xl border-2 cursor-pointer flex items-center justify-center relative group ${status === 'neutral' ? 'border-neutral-800 bg-black/50' : ''} ${status === 'ban' ? 'border-red-600 bg-red-900/20' : ''} ${status === 'pick' ? 'border-green-500 bg-green-900/20' : ''}`}><span className="font-black uppercase text-white">{map}</span><div className="absolute bottom-2 text-[10px] font-bold">{status.toUpperCase()}</div></div>); })}</div></Card>);
+    const [vetoState, setVetoState] = useState({});
+    const addToast = useToast();
+
+    useEffect(() => {
+        const unsub = onSnapshot(doc(db, 'general', 'map_veto'), (snap) => {
+            setVetoState(snap.exists() ? snap.data() : {});
+        });
+        return () => unsub();
+    }, []);
+
+    const statusOrder = ['neutral', 'ban', 'pick', 'inactive'];
+    const activeMaps = MAPS.filter(map => (vetoState[map] || 'neutral') !== 'inactive');
+    const inactiveMaps = MAPS.filter(map => (vetoState[map] || 'neutral') === 'inactive');
+
+    const setMapStatus = async (map, status) => {
+        await setDoc(doc(db, 'general', 'map_veto'), { ...vetoState, [map]: status });
+    };
+
+    const toggleMap = async (map) => {
+        const current = vetoState[map] || 'neutral';
+        const next = statusOrder[(statusOrder.indexOf(current) + 1) % statusOrder.length];
+        await setMapStatus(map, next);
+    };
+
+    const resetVeto = async () => {
+        await setDoc(doc(db, 'general', 'map_veto'), {});
+        addToast('Map veto board reset');
+    };
+
+    const statusClasses = (status) => {
+        if (status === 'ban') return 'border-red-600 bg-red-950/35 text-red-100';
+        if (status === 'pick') return 'border-green-500 bg-green-950/30 text-green-100';
+        if (status === 'inactive') return 'border-neutral-700 bg-neutral-950/80 text-neutral-500 grayscale';
+        return 'border-neutral-800 bg-black/50 text-white';
+    };
+
+    const MapTile = ({ map }) => {
+        const status = vetoState[map] || 'neutral';
+        return (
+            <div className={`rounded-xl border-2 overflow-hidden ${statusClasses(status)}`}>
+                <button onClick={() => toggleMap(map)} className="aspect-video w-full flex items-center justify-center relative group">
+                    <span className="font-black uppercase tracking-wide">{map}</span>
+                    <div className="absolute bottom-2 text-[10px] font-black tracking-widest">{status.toUpperCase()}</div>
+                </button>
+                <div className="grid grid-cols-4 border-t border-white/10">
+                    {statusOrder.map(nextStatus => (
+                        <button
+                            key={nextStatus}
+                            onClick={() => setMapStatus(map, nextStatus)}
+                            className={`py-2 text-[9px] font-black uppercase tracking-widest border-r border-white/5 last:border-r-0 ${status === nextStatus ? 'bg-white text-black' : 'bg-black/30 text-neutral-500 hover:text-white hover:bg-white/10'}`}
+                        >
+                            {nextStatus === 'neutral' ? 'Live' : nextStatus}
+                        </button>
+                    ))}
+                </div>
+            </div>
+        );
+    };
+
+    return (
+        <Card className="h-full">
+            <div className="flex flex-col lg:flex-row lg:items-end justify-between gap-4 mb-6">
+                <div>
+                    <div className="text-[10px] uppercase tracking-[0.28em] text-red-400 font-black mb-2">Map Pool</div>
+                    <h3 className="text-3xl font-black text-white uppercase italic leading-none">Map Veto</h3>
+                    <p className="mt-3 text-sm text-neutral-400 max-w-2xl">Mark maps as live, ban, pick, or inactive so the team can separate current rotation maps from out-of-pool prep.</p>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                    <div className="px-3 py-2 rounded-lg border border-white/10 bg-black/40 text-xs font-black text-white">{activeMaps.length} ACTIVE</div>
+                    <div className="px-3 py-2 rounded-lg border border-white/10 bg-black/40 text-xs font-black text-neutral-400">{inactiveMaps.length} INACTIVE</div>
+                    <ButtonSecondary onClick={resetVeto} className="text-xs px-3 py-2">Reset Board</ButtonSecondary>
+                </div>
+            </div>
+
+            <div className="space-y-8">
+                <section>
+                    <div className="flex items-center justify-between mb-3">
+                        <h4 className="text-sm font-black text-white uppercase tracking-widest">Active Rotation</h4>
+                        <span className="text-[10px] text-neutral-500 uppercase tracking-widest">Click a map to cycle status</span>
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 2xl:grid-cols-5 gap-4">
+                        {activeMaps.map(map => <MapTile key={map} map={map} />)}
+                    </div>
+                </section>
+
+                <section>
+                    <div className="flex items-center justify-between mb-3">
+                        <h4 className="text-sm font-black text-neutral-400 uppercase tracking-widest">Inactive Maps</h4>
+                        <span className="text-[10px] text-neutral-600 uppercase tracking-widest">Kept visible for rotation planning</span>
+                    </div>
+                    {inactiveMaps.length ? (
+                        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 2xl:grid-cols-5 gap-4">
+                            {inactiveMaps.map(map => <MapTile key={map} map={map} />)}
+                        </div>
+                    ) : (
+                        <div className="p-6 border border-dashed border-neutral-800 rounded-xl text-sm text-neutral-500 text-center">No inactive maps selected.</div>
+                    )}
+                </section>
+            </div>
+        </Card>
+    );
 }
 
 function ContentManager() {
@@ -4017,8 +4114,10 @@ function SyrixDashboard({ onBack }) {
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [modalContent, setModalContent] = useState({ title: '', children: null });
     const [isMember, setIsMember] = useState(false);
+    const [currentUserRole, setCurrentUserRole] = useState('');
     const addToast = useToast();
     const [allRosterNames, setAllRosterNames] = useState([]);
+    const [openTaskCount, setOpenTaskCount] = useState(0);
 
     useEffect(() => { return onAuthStateChanged(auth, user => { setCurrentUser(user); setAuthLoading(false); }); }, []);
     const signIn = async () => { try { await signInWithPopup(auth, new OAuthProvider('oidc.discord')); } catch (e) { console.error(e); } };
@@ -4031,11 +4130,14 @@ function SyrixDashboard({ onBack }) {
         const memberQuery = query(collection(db, 'roster'), where("uid", "==", currentUser.uid));
         const unsub1 = onSnapshot(memberQuery, (snapshot) => {
             if (!snapshot.empty) {
+                const profile = snapshot.docs[0].data();
                 setRosterName(snapshot.docs[0].id);
+                setCurrentUserRole(profile.role || '');
                 setIsMember(true);
             } else {
                 setIsMember(ADMIN_UIDS.includes(currentUser.uid));
                 setRosterName(currentUser.displayName);
+                setCurrentUserRole('');
             }
         });
 
@@ -4070,7 +4172,13 @@ function SyrixDashboard({ onBack }) {
             setAllRosterNames(names);
         });
 
-        return () => { unsub1(); unsub2(); unsub3(); unsub4(); };
+        const unsub5 = onSnapshot(collection(db, 'tasks'), (s) => {
+            let count = 0;
+            s.forEach(task => { if (!task.data().done) count += 1; });
+            setOpenTaskCount(count);
+        });
+
+        return () => { unsub1(); unsub2(); unsub3(); unsub4(); unsub5(); };
     }, [currentUser]);
 
     // 3. UPDATE dynamicMembers TO USE THE ROSTER LIST
@@ -4180,7 +4288,9 @@ function SyrixDashboard({ onBack }) {
         </div>
     );
 
-    const isAdmin = currentUser && ADMIN_UIDS.includes(currentUser.uid);
+    const isManager = ADMIN_ROLES.includes(currentUserRole);
+    const isAdmin = currentUser && (ADMIN_UIDS.includes(currentUser.uid) || isManager);
+    const accessLabel = ADMIN_UIDS.includes(currentUser.uid) ? 'Admin' : isManager ? 'Manager' : 'Member';
     const navGroups = [
         { label: 'Command', items: [{ id: 'dashboard', label: 'Dashboard' }, { id: 'availability', label: 'Availability' }, { id: 'matches', label: 'Matches' }, { id: 'roster', label: 'Roster' }] },
         { label: 'Practice', items: [{ id: 'playbook', label: 'Playbook' }, { id: 'comps', label: 'Comps' }, { id: 'strats', label: 'Stratbook' }, { id: 'lineups', label: 'Lineups' }, { id: 'mapveto', label: 'Map Veto' }] },
@@ -4212,6 +4322,7 @@ function SyrixDashboard({ onBack }) {
         if (id === 'availability') return availableToday ? String(availableToday) : '';
         if (id === 'matches') return events.length ? String(events.length) : '';
         if (id === 'roster') return dynamicMembers.length ? String(dynamicMembers.length) : '';
+        if (id === 'tasks') return openTaskCount ? String(openTaskCount) : '';
         return '';
     };
     const NavItem = ({ item, compact = false }) => (
@@ -4237,7 +4348,7 @@ function SyrixDashboard({ onBack }) {
                     <div className="mt-5 grid grid-cols-2 gap-2">
                         <div className="bg-black/35 border border-white/10 p-3">
                             <div className="text-[9px] uppercase tracking-widest text-neutral-500 font-black">Access</div>
-                            <div className="mt-1 text-sm font-black text-white">{isAdmin ? 'Admin' : 'Member'}</div>
+                            <div className="mt-1 text-sm font-black text-white">{accessLabel}</div>
                         </div>
                         <div className="bg-black/35 border border-white/10 p-3">
                             <div className="text-[9px] uppercase tracking-widest text-neutral-500 font-black">Members</div>
@@ -4303,7 +4414,7 @@ function SyrixDashboard({ onBack }) {
 
             <main className="flex-1 overflow-y-auto p-4 md:p-6 scrollbar-thin scrollbar-thumb-red-900/50 scrollbar-track-black/20">
                 <div className="max-w-[1920px] mx-auto min-h-screen flex flex-col">
-                    {activeTab === 'dashboard' && <div className="animate-fade-in space-y-6"><div className="grid grid-cols-1 xl:grid-cols-[1.25fr_0.75fr] gap-4"><div className="glass-panel rounded-xl p-6 border-white/10 overflow-hidden"><div className="text-[10px] uppercase tracking-[0.28em] text-red-400 font-black mb-3">Today Command</div><h2 className="text-4xl md:text-5xl font-black text-white uppercase italic leading-none">Ready Room</h2><p className="mt-4 text-sm text-neutral-400 max-w-2xl">Review the next operation, keep team notes current, and jump into planning before practice starts.</p><div className="mt-6 flex flex-wrap gap-2"><button onClick={() => setActiveTab('strats')} className="bg-red-600 hover:bg-red-500 text-white px-4 py-2 text-xs font-black uppercase tracking-widest">Open Planner</button><button onClick={() => setActiveTab('matches')} className="bg-white/10 hover:bg-white/15 border border-white/10 text-white px-4 py-2 text-xs font-black uppercase tracking-widest">Match Logs</button><button onClick={() => setActiveTab('tasks')} className="bg-white/10 hover:bg-white/15 border border-white/10 text-white px-4 py-2 text-xs font-black uppercase tracking-widest">Tasks</button><button onClick={() => setActiveTab('roster')} className="bg-white/10 hover:bg-white/15 border border-white/10 text-white px-4 py-2 text-xs font-black uppercase tracking-widest">Roster</button></div></div><div className="glass-panel rounded-xl p-6 border-white/10"><div className="text-[10px] uppercase tracking-[0.28em] text-neutral-500 font-black mb-4">Next Operation</div><div className="text-2xl font-black text-white uppercase italic leading-tight">{nextEvent ? `${nextEvent.type || 'Event'} vs ${nextEvent.opponent || 'TBD'}` : 'No Event Scheduled'}</div><div className="mt-3 text-sm text-neutral-400">{nextEvent ? `${nextEvent.date || 'Date TBD'} @ ${nextEvent.time || 'Time TBD'} ${nextEvent.timezone || ''}` : 'Use Event Operations to schedule the next practice, scrim, or official.'}</div><div className="mt-5 pt-4 border-t border-white/10 grid grid-cols-2 gap-3"><div><div className="text-3xl font-black text-white">{dynamicMembers.length}</div><div className="text-[10px] uppercase tracking-widest text-neutral-500 font-black">Members</div></div><div><div className="text-3xl font-black text-white">{events.length}</div><div className="text-[10px] uppercase tracking-widest text-neutral-500 font-black">Upcoming</div></div></div></div></div><div className="grid grid-cols-1 md:grid-cols-4 gap-4"><div className="glass-panel rounded-xl p-4 border-white/10"><div className="text-[10px] uppercase tracking-widest text-neutral-500 font-black">Members</div><div className="mt-2 text-3xl font-black text-white">{dynamicMembers.length}</div></div><div className="glass-panel rounded-xl p-4 border-white/10"><div className="text-[10px] uppercase tracking-widest text-neutral-500 font-black">Events</div><div className="mt-2 text-3xl font-black text-white">{events.length}</div></div><div className="glass-panel rounded-xl p-4 border-white/10"><div className="text-[10px] uppercase tracking-widest text-neutral-500 font-black">Timezone</div><div className="mt-2 text-sm font-bold text-white truncate">{userTimezone}</div></div><div className="glass-panel rounded-xl p-4 border-white/10"><div className="text-[10px] uppercase tracking-widest text-neutral-500 font-black">Access</div><div className="mt-2 text-sm font-bold text-white">{isAdmin ? 'Admin' : 'Member'}</div></div></div><div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
+                    {activeTab === 'dashboard' && <div className="animate-fade-in space-y-6"><div className="grid grid-cols-1 xl:grid-cols-[1.25fr_0.75fr] gap-4"><div className="glass-panel rounded-xl p-6 border-white/10 overflow-hidden"><div className="text-[10px] uppercase tracking-[0.28em] text-red-400 font-black mb-3">Today Command</div><h2 className="text-4xl md:text-5xl font-black text-white uppercase italic leading-none">Ready Room</h2><p className="mt-4 text-sm text-neutral-400 max-w-2xl">Review the next operation, keep team notes current, and jump into planning before practice starts.</p><div className="mt-6 flex flex-wrap gap-2"><button onClick={() => setActiveTab('strats')} className="bg-red-600 hover:bg-red-500 text-white px-4 py-2 text-xs font-black uppercase tracking-widest">Open Planner</button><button onClick={() => setActiveTab('matches')} className="bg-white/10 hover:bg-white/15 border border-white/10 text-white px-4 py-2 text-xs font-black uppercase tracking-widest">Match Logs</button><button onClick={() => setActiveTab('tasks')} className="bg-white/10 hover:bg-white/15 border border-white/10 text-white px-4 py-2 text-xs font-black uppercase tracking-widest">Tasks</button><button onClick={() => setActiveTab('roster')} className="bg-white/10 hover:bg-white/15 border border-white/10 text-white px-4 py-2 text-xs font-black uppercase tracking-widest">Roster</button></div></div><div className="glass-panel rounded-xl p-6 border-white/10"><div className="text-[10px] uppercase tracking-[0.28em] text-neutral-500 font-black mb-4">Next Operation</div><div className="text-2xl font-black text-white uppercase italic leading-tight">{nextEvent ? `${nextEvent.type || 'Event'} vs ${nextEvent.opponent || 'TBD'}` : 'No Event Scheduled'}</div><div className="mt-3 text-sm text-neutral-400">{nextEvent ? `${nextEvent.date || 'Date TBD'} @ ${nextEvent.time || 'Time TBD'} ${nextEvent.timezone || ''}` : 'Use Event Operations to schedule the next practice, scrim, or official.'}</div><div className="mt-5 pt-4 border-t border-white/10 grid grid-cols-2 gap-3"><div><div className="text-3xl font-black text-white">{dynamicMembers.length}</div><div className="text-[10px] uppercase tracking-widest text-neutral-500 font-black">Members</div></div><div><div className="text-3xl font-black text-white">{events.length}</div><div className="text-[10px] uppercase tracking-widest text-neutral-500 font-black">Upcoming</div></div></div></div></div><div className="grid grid-cols-1 md:grid-cols-4 gap-4"><div className="glass-panel rounded-xl p-4 border-white/10"><div className="text-[10px] uppercase tracking-widest text-neutral-500 font-black">Members</div><div className="mt-2 text-3xl font-black text-white">{dynamicMembers.length}</div></div><div className="glass-panel rounded-xl p-4 border-white/10"><div className="text-[10px] uppercase tracking-widest text-neutral-500 font-black">Events</div><div className="mt-2 text-3xl font-black text-white">{events.length}</div></div><div className="glass-panel rounded-xl p-4 border-white/10"><div className="text-[10px] uppercase tracking-widest text-neutral-500 font-black">Timezone</div><div className="mt-2 text-sm font-bold text-white truncate">{userTimezone}</div></div><div className="glass-panel rounded-xl p-4 border-white/10"><div className="text-[10px] uppercase tracking-widest text-neutral-500 font-black">Access</div><div className="mt-2 text-sm font-bold text-white">{accessLabel}</div></div></div><div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
                         <div className="lg:col-span-4 space-y-8">
                             <CaptainsMessage />
                             <Card className="border-red-900/20"><div className="absolute top-0 left-0 w-1 h-full bg-red-600/50"></div><h2 className="text-xl font-bold text-white mb-6 uppercase tracking-wide">Event Operations</h2><ScrimScheduler onSchedule={schedEvent} userTimezone={userTimezone} /></Card>
@@ -4319,7 +4430,7 @@ function SyrixDashboard({ onBack }) {
                     {activeTab === 'matches' && <div className="animate-fade-in"><MatchHistory currentUser={currentUser} members={dynamicMembers} /></div>}
                     {activeTab === 'strats' && <div className="animate-fade-in h-[85vh]"><StratBook /></div>}
                     {activeTab === 'lineups' && <div className="animate-fade-in h-[85vh]"><LineupLibrary /></div>}
-                    {activeTab === 'roster' && <div className="animate-fade-in h-full flex-1 flex flex-col"><RosterManager members={dynamicMembers} events={events} /></div>}
+                    {activeTab === 'roster' && <div className="animate-fade-in h-full flex-1 flex flex-col"><RosterManager members={dynamicMembers} events={events} canManageRoster={isAdmin} /></div>}
                     {activeTab === 'tasks' && <ActionItems members={dynamicMembers} />}
                     {activeTab === 'partners' && isAdmin && <div className="animate-fade-in h-full"><PartnerDirectory /></div>}
                     {activeTab === 'content' && isAdmin && <div className="animate-fade-in h-full"><ContentManager /></div>}
