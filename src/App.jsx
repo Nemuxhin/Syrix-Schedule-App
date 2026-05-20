@@ -3932,6 +3932,187 @@ function CoachRoom({ members, currentUserName }) {
     );
 }
 
+function TeamBulletinBoard({ currentUserName, currentUserUid, isAdmin }) {
+    const [posts, setPosts] = useState([]);
+    const [filter, setFilter] = useState('All');
+    const [saving, setSaving] = useState(false);
+    const [form, setForm] = useState({
+        type: 'Scrim Request',
+        priority: 'Normal',
+        title: '',
+        date: '',
+        time: '',
+        opponent: '',
+        link: '',
+        notes: ''
+    });
+    const addToast = useToast();
+    const types = ['All', 'Scrim Request', 'Tournament Lead', 'Training Idea', 'Availability Note', 'Team Info', 'General'];
+    const priorities = ['Low', 'Normal', 'High'];
+    const statuses = ['Open', 'Reviewing', 'Done', 'Archived'];
+
+    useEffect(() => {
+        const unsub = onSnapshot(collection(db, 'team_bulletins'), (snap) => {
+            const rows = [];
+            snap.forEach(d => rows.push({ id: d.id, ...d.data() }));
+            setPosts(rows.sort((a, b) => {
+                const statusWeight = (item) => item.status === 'Open' ? 0 : item.status === 'Reviewing' ? 1 : item.status === 'Done' ? 2 : 3;
+                const priorityWeight = (item) => item.priority === 'High' ? 0 : item.priority === 'Normal' ? 1 : 2;
+                return statusWeight(a) - statusWeight(b) || priorityWeight(a) - priorityWeight(b) || new Date(b.createdAt || 0) - new Date(a.createdAt || 0);
+            }));
+        });
+        return () => unsub();
+    }, []);
+
+    const filteredPosts = posts.filter(post => filter === 'All' || post.type === filter);
+    const openCount = posts.filter(post => post.status === 'Open' || post.status === 'Reviewing').length;
+    const scrimCount = posts.filter(post => post.type === 'Scrim Request' && post.status !== 'Archived').length;
+    const tourneyCount = posts.filter(post => post.type === 'Tournament Lead' && post.status !== 'Archived').length;
+
+    const createPost = async () => {
+        if (!form.title.trim()) return addToast('Bulletin title is required', 'error');
+        if (!form.notes.trim() && !form.link.trim()) return addToast('Add a note or link so the team has context', 'error');
+        setSaving(true);
+        try {
+            await addDoc(collection(db, 'team_bulletins'), {
+                ...form,
+                title: form.title.trim(),
+                opponent: form.opponent.trim(),
+                link: form.link.trim(),
+                notes: form.notes.trim(),
+                status: 'Open',
+                author: currentUserName || 'Unknown',
+                authorUid: currentUserUid || '',
+                createdAt: new Date().toISOString(),
+                updatedAt: new Date().toISOString()
+            });
+            await writeAuditLog('Bulletin posted', form.title.trim(), currentUserName || 'Unknown');
+            setForm({ type: 'Scrim Request', priority: 'Normal', title: '', date: '', time: '', opponent: '', link: '', notes: '' });
+            addToast('Bulletin posted');
+        } catch (error) {
+            console.error('Bulletin create failed:', error);
+            addToast('Unable to post bulletin', 'error');
+        } finally {
+            setSaving(false);
+        }
+    };
+
+    const updatePostStatus = async (post, status) => {
+        try {
+            await updateDoc(doc(db, 'team_bulletins', post.id), {
+                status,
+                updatedAt: new Date().toISOString(),
+                updatedBy: currentUserName || 'Unknown'
+            });
+            addToast('Bulletin updated');
+        } catch (error) {
+            console.error('Bulletin update failed:', error);
+            addToast('Unable to update bulletin', 'error');
+        }
+    };
+
+    const removePost = async (post) => {
+        const canDelete = isAdmin || post.authorUid === currentUserUid;
+        if (!canDelete) return addToast('Only the author or an admin can delete this', 'error');
+        try {
+            await deleteDoc(doc(db, 'team_bulletins', post.id));
+            await writeAuditLog('Bulletin deleted', post.title, currentUserName || 'Unknown');
+            addToast('Bulletin removed');
+        } catch (error) {
+            console.error('Bulletin delete failed:', error);
+            addToast('Unable to delete bulletin', 'error');
+        }
+    };
+
+    const priorityClass = (priority) => {
+        if (priority === 'High') return 'border-red-700/60 bg-red-950/35 text-red-200';
+        if (priority === 'Low') return 'border-white/10 bg-white/5 text-neutral-500';
+        return 'border-yellow-700/50 bg-yellow-950/20 text-yellow-200';
+    };
+
+    return (
+        <div className="animate-fade-in space-y-6">
+            <Card>
+                <div className="flex flex-col xl:flex-row xl:items-end xl:justify-between gap-5 mb-6">
+                    <div>
+                        <div className="text-[10px] uppercase tracking-[0.28em] text-red-400 font-black mb-3">Player Board</div>
+                        <h2 className="text-3xl md:text-4xl font-black text-white uppercase italic leading-none">Bulletin Board</h2>
+                        <p className="mt-3 text-sm text-neutral-400 max-w-3xl">Post scrim requests, tournament leads, training ideas, team info, or anything useful the rest of the team should see.</p>
+                    </div>
+                    <div className="grid grid-cols-3 gap-3 min-w-[18rem]">
+                        <div className="bg-black/40 border border-white/10 p-3 rounded-xl"><div className="text-[10px] uppercase tracking-widest text-neutral-500 font-black">Open</div><div className="mt-1 text-2xl font-black text-white">{openCount}</div></div>
+                        <div className="bg-black/40 border border-white/10 p-3 rounded-xl"><div className="text-[10px] uppercase tracking-widest text-neutral-500 font-black">Scrims</div><div className="mt-1 text-2xl font-black text-white">{scrimCount}</div></div>
+                        <div className="bg-black/40 border border-white/10 p-3 rounded-xl"><div className="text-[10px] uppercase tracking-widest text-neutral-500 font-black">Tourneys</div><div className="mt-1 text-2xl font-black text-white">{tourneyCount}</div></div>
+                    </div>
+                </div>
+
+                <div className="grid grid-cols-1 xl:grid-cols-[0.78fr_1.22fr] gap-6">
+                    <div className="rounded-xl border border-white/10 bg-black/35 p-4 space-y-3">
+                        <div className="text-[10px] uppercase tracking-[0.24em] text-red-400 font-black">New Bulletin</div>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                            <Select value={form.type} onChange={e => setForm({ ...form, type: e.target.value })}>
+                                {types.filter(type => type !== 'All').map(type => <option key={type}>{type}</option>)}
+                            </Select>
+                            <Select value={form.priority} onChange={e => setForm({ ...form, priority: e.target.value })}>
+                                {priorities.map(priority => <option key={priority}>{priority}</option>)}
+                            </Select>
+                        </div>
+                        <Input value={form.title} onChange={e => setForm({ ...form, title: e.target.value })} placeholder="Title, e.g. Scrim offer this Friday" />
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                            <Input type="date" value={form.date} onChange={e => setForm({ ...form, date: e.target.value })} className="[color-scheme:dark]" />
+                            <Input type="time" value={form.time} onChange={e => setForm({ ...form, time: e.target.value })} className="[color-scheme:dark]" />
+                        </div>
+                        <Input value={form.opponent} onChange={e => setForm({ ...form, opponent: e.target.value })} placeholder="Opponent/team/event name optional" />
+                        <Input value={form.link} onChange={e => setForm({ ...form, link: e.target.value })} placeholder="Discord, tournament, sheet, tracker, or contact link" />
+                        <textarea value={form.notes} onChange={e => setForm({ ...form, notes: e.target.value })} placeholder="What do people need to know? Who should answer? Any deadline?" className="w-full h-36 bg-black/40 border border-neutral-800 rounded-xl p-3 text-white text-sm outline-none focus:border-red-600 placeholder-neutral-600 resize-y" />
+                        <ButtonPrimary onClick={createPost} disabled={saving} className="w-full py-3 text-xs">{saving ? 'Posting...' : 'Post Bulletin'}</ButtonPrimary>
+                    </div>
+
+                    <div className="space-y-4">
+                        <div className="flex gap-2 overflow-x-auto pb-1 custom-scrollbar">
+                            {types.map(type => (
+                                <button key={type} onClick={() => setFilter(type)} className={`px-3 py-2 rounded-lg border text-[10px] font-black uppercase tracking-widest whitespace-nowrap ${filter === type ? 'bg-red-600 border-red-500 text-white' : 'bg-black/40 border-white/10 text-neutral-500 hover:text-white'}`}>{type}</button>
+                            ))}
+                        </div>
+                        <div className="space-y-3 max-h-[72vh] overflow-y-auto pr-2 custom-scrollbar">
+                            {filteredPosts.length ? filteredPosts.map(post => (
+                                <div key={post.id} className="rounded-xl border border-white/10 bg-black/45 p-4">
+                                    <div className="flex items-start justify-between gap-3">
+                                        <div className="min-w-0">
+                                            <div className="flex flex-wrap gap-2 mb-2">
+                                                <span className="text-[9px] uppercase tracking-widest bg-red-950/25 border border-red-900/40 text-red-300 px-2 py-1 rounded">{post.type}</span>
+                                                <span className={`text-[9px] uppercase tracking-widest border px-2 py-1 rounded ${priorityClass(post.priority)}`}>{post.priority || 'Normal'}</span>
+                                                <span className="text-[9px] uppercase tracking-widest bg-white/5 border border-white/10 text-neutral-400 px-2 py-1 rounded">{post.status || 'Open'}</span>
+                                            </div>
+                                            <div className="text-xl font-black text-white uppercase italic">{post.title}</div>
+                                            <div className="mt-1 text-[10px] uppercase tracking-widest text-neutral-500">{post.author || 'Unknown'} / {post.createdAt ? new Date(post.createdAt).toLocaleDateString() : 'No date'}</div>
+                                        </div>
+                                        {(isAdmin || post.authorUid === currentUserUid) && <button onClick={() => removePost(post)} className="text-neutral-600 hover:text-red-500 text-xl leading-none">×</button>}
+                                    </div>
+                                    {(post.date || post.time || post.opponent) && (
+                                        <div className="mt-4 grid grid-cols-1 md:grid-cols-3 gap-2">
+                                            {post.date && <div className="rounded-lg border border-white/10 bg-white/5 p-3"><div className="text-[9px] uppercase tracking-widest text-neutral-500 font-black">Date</div><div className="mt-1 text-sm font-black text-white">{post.date}</div></div>}
+                                            {post.time && <div className="rounded-lg border border-white/10 bg-white/5 p-3"><div className="text-[9px] uppercase tracking-widest text-neutral-500 font-black">Time</div><div className="mt-1 text-sm font-black text-white">{post.time}</div></div>}
+                                            {post.opponent && <div className="rounded-lg border border-white/10 bg-white/5 p-3"><div className="text-[9px] uppercase tracking-widest text-neutral-500 font-black">Info</div><div className="mt-1 text-sm font-black text-white truncate">{post.opponent}</div></div>}
+                                        </div>
+                                    )}
+                                    {post.notes && <p className="mt-4 text-sm text-neutral-300 whitespace-pre-wrap leading-relaxed">{post.notes}</p>}
+                                    <div className="mt-4 flex flex-wrap items-center gap-3">
+                                        <Select value={post.status || 'Open'} onChange={e => updatePostStatus(post, e.target.value)} className="max-w-40 text-xs py-2">
+                                            {statuses.map(status => <option key={status}>{status}</option>)}
+                                        </Select>
+                                        {post.link && <a href={post.link} target="_blank" rel="noreferrer" className="text-[10px] font-black uppercase tracking-widest text-red-400 hover:text-white">Open Link</a>}
+                                    </div>
+                                </div>
+                            )) : <div className="p-8 text-center text-sm text-neutral-500 border border-dashed border-neutral-800 rounded-xl">No bulletins in this category yet.</div>}
+                        </div>
+                    </div>
+                </div>
+            </Card>
+        </div>
+    );
+}
+
 function Announcements({ currentUserName }) {
     const [announcements, setAnnouncements] = useState([]);
     const [form, setForm] = useState({ title: '', body: '', level: 'Team', pinned: false });
@@ -5219,7 +5400,7 @@ function SyrixDashboard({ onBack }) {
     const isAdmin = currentUser && (ADMIN_UIDS.includes(currentUser.uid) || isRosterManager || isDbAdmin);
     const accessLabel = ADMIN_UIDS.includes(currentUser.uid) ? 'Owner' : dbAdminRole || (isRosterManager ? 'Manager' : 'Member');
     const navGroups = [
-        { label: 'Command', items: [{ id: 'dashboard', label: 'Dashboard' }, { id: 'calendar', label: 'Calendar' }, { id: 'notifications', label: 'Notifications' }, { id: 'announcements', label: 'Announcements' }, { id: 'tasks', label: 'Tasks' }] },
+        { label: 'Command', items: [{ id: 'dashboard', label: 'Dashboard' }, { id: 'calendar', label: 'Calendar' }, { id: 'bulletins', label: 'Bulletin Board' }, { id: 'notifications', label: 'Notifications' }, { id: 'announcements', label: 'Announcements' }, { id: 'tasks', label: 'Tasks' }] },
         { label: 'Team', items: [{ id: 'roster', label: 'Roster' }, { id: 'availability', label: 'Availability' }, { id: 'matches', label: 'Matches' }] },
         { label: 'Coaching', items: [{ id: 'coachroom', label: 'Coach Room' }, { id: 'practice', label: 'Practice Plans' }, { id: 'prep', label: 'Match Prep' }, ...(isAdmin ? [{ id: 'playernotes', label: 'Player Notes' }] : [])] },
         { label: 'Valorant', items: [{ id: 'strats', label: 'Stratbook' }, { id: 'stratlibrary', label: 'Strat Library' }, { id: 'comps', label: 'Comps' }, { id: 'mapveto', label: 'Map Veto' }] },
@@ -5234,6 +5415,7 @@ function SyrixDashboard({ onBack }) {
     const pageMeta = {
         dashboard: 'Overview, next operation, quick actions, and team status.',
         calendar: 'View upcoming scrims, officials, practices, and VOD reviews by month.',
+        bulletins: 'Player-submitted scrim requests, tournament leads, training ideas, and team info.',
         notifications: 'Track upcoming events, due tasks, and pinned announcements.',
         announcements: 'Post captain messages, urgent updates, and team-wide comms.',
         availability: 'Edit your weekly availability and inspect the team schedule.',
@@ -5368,6 +5550,7 @@ function SyrixDashboard({ onBack }) {
                         </div>
                     </div></div>}
                     {activeTab === 'calendar' && <TeamCalendar events={events} />}
+                    {activeTab === 'bulletins' && <TeamBulletinBoard currentUserName={rosterName || currentUser.displayName || 'Unknown'} currentUserUid={currentUser.uid} isAdmin={isAdmin} />}
                     {activeTab === 'notifications' && <NotificationCenter events={events} />}
                     {activeTab === 'announcements' && <Announcements currentUserName={rosterName || currentUser.displayName || 'Unknown'} />}
                     {activeTab === 'availability' && <div className="animate-fade-in space-y-6"><div className="grid grid-cols-1 xl:grid-cols-[0.7fr_1.3fr] gap-6"><div className="space-y-6"><Card className="border-red-900/20"><div className="absolute top-0 left-0 w-1 h-full bg-red-600/50"></div><div className="text-[10px] uppercase tracking-[0.28em] text-red-400 font-black mb-3">Your Week</div><h2 className="text-2xl font-black text-white uppercase italic mb-5">Availability Editor</h2><div className="space-y-4"><div><label className="text-[10px] font-black text-red-500 uppercase mb-1 block">Day</label><Select value={day} onChange={e => setDay(e.target.value)}>{DAYS.map(d => <option key={d} value={d}>{d}</option>)}</Select><div className="mt-2 text-[11px] text-neutral-500">Editing availability for <span className="text-neutral-300 font-bold">{currentMemberName}</span> in <span className="text-neutral-300 font-bold">{userTimezone}</span>.</div></div><div className="grid grid-cols-2 gap-3"><div><label className="text-[10px] font-black text-red-500 uppercase mb-1 block">Start</label><Input type="time" value={start} onChange={e => setStart(e.target.value)} className="[color-scheme:dark]" /></div><div><label className="text-[10px] font-black text-red-500 uppercase mb-1 block">End</label><Input type="time" value={end} onChange={e => setEnd(e.target.value)} className="[color-scheme:dark]" /></div></div><div><label className="text-[10px] font-black text-red-500 uppercase mb-1 block">Pref. Role</label><div className="flex gap-2 overflow-x-auto pb-2 scrollbar-hide">{ROLES.map(r => (<button key={r} onClick={() => setRole(r)} className={`px-3 py-2 rounded-lg text-xs font-black border transition-all whitespace-nowrap flex items-center justify-center ${role === r ? 'bg-red-600 text-white border-red-500' : 'bg-black/50 border-neutral-800 text-neutral-500 hover:text-white'}`}>{ROLE_ABBREVIATIONS[r] || r}</button>))}</div></div><div className="pt-2 flex gap-2"><ButtonPrimary onClick={saveAvail} disabled={saveStatus !== 'idle'} className="flex-1">{saveStatus === 'idle' ? 'Save Slot' : 'Saving...'}</ButtonPrimary><ButtonSecondary onClick={() => openModal('Clear Day', `Clear all for ${day}?`, clearDay)}>Clear</ButtonSecondary></div></div></Card><LeaveLogger members={dynamicMembers} rosterName={rosterName} /></div><div className="space-y-6"><div className="grid grid-cols-1 xl:grid-cols-2 gap-6"><Card><h2 className="text-lg font-bold text-white mb-4 uppercase tracking-wide">Team Heatmap</h2><AvailabilityHeatmap availabilities={displayAvail} members={dynamicMembers} /></Card><Card><div className="text-[10px] uppercase tracking-[0.28em] text-neutral-500 font-black mb-3">Today</div><div className="text-4xl font-black text-white">{availableToday}/{dynamicMembers.length}</div><div className="mt-2 text-sm text-neutral-400">members have availability logged for {todayName}.</div><div className="mt-5 pt-4 border-t border-white/10 text-xs text-neutral-500">Keep this current before scrims so captains can plan realistic blocks.</div></Card></div><Card><h2 className="text-xl font-bold text-white mb-6 uppercase tracking-wide">Weekly Timeline <span className="text-neutral-500 text-sm normal-case">({userTimezone})</span></h2><div className="overflow-x-auto scrollbar-thin scrollbar-thumb-neutral-700"><table className="w-full text-left border-collapse min-w-[600px]"><thead><tr className="border-b border-neutral-800"><th className="p-3 text-xs font-bold text-neutral-500 uppercase tracking-wider w-32">Team Member</th>{SHORT_DAYS.map(day => (<th key={day} className="p-3 text-xs font-bold text-red-600 uppercase tracking-wider text-center border-l border-neutral-800">{day}</th>))}</tr></thead><tbody className="divide-y divide-neutral-800/50">{dynamicMembers.map(member => (<tr key={member} className="hover:bg-neutral-800/30 transition-colors group"><td className="p-4 font-bold text-white text-sm flex items-center gap-2"><div className="w-2 h-2 rounded-full bg-red-500 shadow-red-500/50 shadow-sm"></div>{member}</td>{DAYS.map((day) => { const slots = (displayAvail[member] || []).filter(s => s.day === day); return (<td key={day} className="p-2 align-middle border-l border-neutral-800/50"><div className="flex flex-col gap-1 items-center justify-center">{slots.length > 0 ? slots.map((s, i) => (<div key={i} className="bg-gradient-to-br from-red-600 to-red-700 text-white text-[10px] font-bold px-2 py-1 rounded w-full text-center shadow-md whitespace-nowrap flex items-center justify-center gap-1">{s.start}-{s.end}<span className="opacity-75 ml-1 text-[9px] border border-white/20 px-1 rounded bg-black/20">{ROLE_ABBREVIATIONS[s.role] || s.role}</span></div>)) : <div className="h-1 w-4 bg-neutral-800 rounded-full"></div>}</div></td>); })}</tr>))}</tbody></table></div></Card></div></div></div>}
