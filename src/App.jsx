@@ -82,12 +82,15 @@ const LandingPage = ({ onEnterHub }) => {
         };
     }, []);
 
-    const { activePlayers, coachingStaff } = useMemo(() => {
+    const { activePlayers, coachingStaff, managementStaff } = useMemo(() => {
         const sorted = sortRosterByRole(roster);
-        const staffRoles = ["Manager", "Head Coach", "Coach"];
+        const coachingRoles = ["Head Coach", "Coach"];
+        const managementRoles = ["Manager"];
+        const staffRoles = [...managementRoles, ...coachingRoles];
 
         return {
-            coachingStaff: sorted.filter(p => staffRoles.includes(p.role)),
+            managementStaff: sorted.filter(p => managementRoles.includes(p.role)),
+            coachingStaff: sorted.filter(p => coachingRoles.includes(p.role)),
             activePlayers: sorted.filter(p => !staffRoles.includes(p.role))
         };
     }, [roster]);
@@ -206,7 +209,7 @@ const LandingPage = ({ onEnterHub }) => {
     );
 
     const nextMatch = matches[0];
-    const fallbackNews = featuredNews || { title: 'Syrix Operations Online', body: 'Follow the latest roster moves, match prep, and community updates from the team hub.', date: new Date().toISOString().split('T')[0], type: 'Update' };
+    const fallbackNews = featuredNews || { title: 'Built for the next map', body: 'SYRIX is sharpening the work behind every round: cleaner prep, tighter comms, and a roster built to keep improving.', date: new Date().toISOString().split('T')[0], type: 'Update' };
     const heroVideo = intelData[0];
     const matchPreview = matches.slice(0, 3);
     const featuredProducts = merchData.slice(0, 3);
@@ -259,11 +262,11 @@ const LandingPage = ({ onEnterHub }) => {
                         <div data-aos="fade-up">
                             <div className="inline-flex items-center gap-3 border border-white/15 bg-white/5 backdrop-blur-md px-3 py-1.5 mb-6">
                                 <TeamLogo className="h-5 w-5 rounded-sm border-white/20" />
-                                <span className="text-[10px] font-black uppercase tracking-[0.28em] text-neutral-300">Official Valorant Team Portal</span>
+                                <span className="text-[10px] font-black uppercase tracking-[0.28em] text-neutral-300">Official Valorant Team</span>
                             </div>
                             <h1 className="text-[18vw] sm:text-[7.4rem] lg:text-[9rem] font-black leading-[0.78] tracking-tight italic text-white">SYRIX</h1>
                             <p className="text-neutral-300 text-base md:text-lg font-medium mt-5 mb-6 max-w-2xl leading-relaxed">
-                                Matchday, roster, media, shop, community, and private team operations in one premium esports experience.
+                                A competitive VALORANT project built on preparation, trust, and the hunger to win rounds the right way.
                             </p>
                             <div className="flex flex-col sm:flex-row gap-3 w-full sm:w-auto">
                                 <button onClick={() => document.getElementById('roster')?.scrollIntoView({ behavior: 'smooth' })} className="group relative px-8 py-4 bg-red-600 text-white font-black uppercase tracking-widest overflow-hidden hover:bg-red-700 transition-all border border-red-500 rounded-sm">
@@ -276,7 +279,7 @@ const LandingPage = ({ onEnterHub }) => {
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 lg:pt-20" data-aos="fade-left">
                             <div className="bg-[#0d1016]/92 border border-white/10 p-5 min-h-52 flex flex-col justify-between">
                                 <div>
-                                    <div className="text-[10px] uppercase tracking-[0.24em] text-red-400 font-black mb-3">Next Fixture</div>
+                                <div className="text-[10px] uppercase tracking-[0.24em] text-red-400 font-black mb-3">Next Fight</div>
                                     <div className="text-3xl font-black italic uppercase leading-none">SYRIX <span className="text-red-500">vs</span><br />{nextMatch?.opponent || 'TBD'}</div>
                                     <div className="mt-4 text-xs uppercase tracking-widest text-neutral-500">{nextMatch?.type || 'Match'} • {nextMatch?.map || 'Map TBD'}</div>
                                 </div>
@@ -290,7 +293,7 @@ const LandingPage = ({ onEnterHub }) => {
                             </div>
                             <div className="bg-[#151922] text-white border border-white/10 p-5 min-h-52 flex flex-col justify-between">
                                 <div>
-                                    <div className="text-[10px] uppercase tracking-[0.24em] text-red-400 font-black mb-3">Featured</div>
+                                <div className="text-[10px] uppercase tracking-[0.24em] text-red-400 font-black mb-3">From The Camp</div>
                                     <div className="text-2xl font-black uppercase leading-tight">{fallbackNews.title}</div>
                                     <p className="mt-3 text-sm text-neutral-400 line-clamp-3">{fallbackNews.body}</p>
                                 </div>
@@ -307,7 +310,7 @@ const LandingPage = ({ onEnterHub }) => {
                                     <span className="w-1 h-1 bg-red-500 rounded-full"></span>
                                     <span className="text-xs font-black uppercase tracking-[0.2em] text-white/80">MATCHDAY READY</span>
                                     <span className="w-1 h-1 bg-red-500 rounded-full"></span>
-                                    <span className="text-xs font-black uppercase tracking-[0.2em] text-neutral-500">SYRIX TEAM PORTAL</span>
+                                    <span className="text-xs font-black uppercase tracking-[0.2em] text-neutral-500">TRUST THE PREP</span>
                                     <span className="w-1 h-1 bg-red-500 rounded-full"></span>
                                 </div>
                             ))}
@@ -320,7 +323,7 @@ const LandingPage = ({ onEnterHub }) => {
                     <div className="max-w-[1480px] w-full px-5 md:px-8 grid grid-cols-2 lg:grid-cols-4 gap-6">
                         <StatBlock label="Season WR" value={`${teamStats.winRate}%`} sub="Recorded matches" />
                         <StatBlock label="Current Record" value={`${teamStats.wins}W ${teamStats.losses}L`} sub="Completed events" />
-                        <StatBlock label="Active Roster" value={activePlayers.length} sub={`${coachingStaff.length} staff`} />
+                        <StatBlock label="Active Roster" value={activePlayers.length} sub={`${coachingStaff.length + managementStaff.length} staff`} />
                         <div className="border-l border-white/10 pl-4 relative min-h-24">
                             <div className="text-[10px] uppercase tracking-[0.22em] text-neutral-500 font-black mb-2">Performance Trend</div>
                             <svg className="w-full h-16 opacity-80" viewBox="0 0 150 50" preserveAspectRatio="none">
@@ -368,7 +371,7 @@ const LandingPage = ({ onEnterHub }) => {
 
                 <section id="roster" className="w-full py-16 relative flex flex-col items-center">
                     <div className="max-w-[1480px] w-full px-5 md:px-8">
-                        <SectionHeading kicker="The Squad" title="Active Roster" copy="Large portraits, clear role tags, and readable player detail make the roster feel like a real team presentation instead of a database list." />
+                        <SectionHeading kicker="The Squad" title="Active Roster" copy="The players carrying the tag into every scrim, review, and official. Each role has a job, every round has a purpose." />
                         <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-5 mb-12">
                             {activePlayers.length > 0 ? activePlayers.map((p, i) => (
                                 <PlayerCard key={p.id} player={p} delay={i * 50} />
@@ -376,9 +379,17 @@ const LandingPage = ({ onEnterHub }) => {
                                 <div className="sm:col-span-2 xl:col-span-4 text-center text-neutral-500 py-12 border border-dashed border-neutral-800">Roster loading.</div>
                             )}
                         </div>
+                        {managementStaff.length > 0 && (
+                            <div className="border-t border-white/10 pt-12 mb-12">
+                                <SectionHeading kicker="Management" title="Team Management" copy="The people keeping the project moving: scheduling, operations, player support, and the details that make matchday feel clean." />
+                                <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-5">
+                                    {managementStaff.map((p, i) => <PlayerCard key={p.id} player={p} delay={i * 50} />)}
+                                </div>
+                            </div>
+                        )}
                         {coachingStaff.length > 0 && (
                             <div className="border-t border-white/10 pt-12">
-                                <SectionHeading kicker="Tactical Command" title="Coaching Staff" />
+                                <SectionHeading kicker="Tactical Command" title="Coaching Staff" copy="The minds behind the prep, reviews, defaults, and mid-round problem solving that turn practice into results." />
                                 <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-5">
                                     {coachingStaff.map((p, i) => <PlayerCard key={p.id} player={p} delay={i * 50} />)}
                                 </div>
@@ -401,7 +412,7 @@ const LandingPage = ({ onEnterHub }) => {
 
                 <section id="vods" className="w-full py-16 relative flex justify-center">
                     <div className="max-w-[1480px] w-full px-5 md:px-8">
-                        <SectionHeading kicker="Media" title="Highlights, VODs, Intel" copy="Org sites stay sticky by giving visitors something to watch. This puts recent video content beside a larger featured media slot." />
+                        <SectionHeading kicker="Media" title="Highlights, VODs, Intel" copy="Watch the rounds, reviews, and moments that show how the team is growing from week to week." />
                         <div className="grid grid-cols-1 lg:grid-cols-[1.3fr_0.7fr] gap-5">
                             <a href={heroVideo?.url || '#news'} target={heroVideo?.url ? "_blank" : "_self"} rel="noopener noreferrer" className="group bg-[#0d1016] border border-white/10 overflow-hidden min-h-[20rem]" data-aos="fade-up">
                                 <div className="aspect-video bg-neutral-900 relative">
@@ -465,7 +476,7 @@ const LandingPage = ({ onEnterHub }) => {
                     <div className="max-w-[1480px] w-full px-5 md:px-8">
                         <div className="grid grid-cols-1 lg:grid-cols-[0.75fr_1.25fr] gap-6 items-start">
                             <div className="lg:sticky lg:top-24">
-                                <SectionHeading kicker="Official Gear" title="Armory Drop" copy="Commerce is one of the biggest differences between a team page and an org page. This section now feels more like a real product rail." />
+                                <SectionHeading kicker="Official Gear" title="Armory Drop" copy="Wear the mark on match day, in ranked, or wherever the next grind starts. Every drop carries the same red-and-black identity as the server." />
                                 <a href={featuredProducts[0]?.link || '#community'} target={featuredProducts[0]?.link ? "_blank" : "_self"} rel="noreferrer" className="inline-flex bg-white text-black px-6 py-3 text-xs font-black uppercase tracking-widest hover:bg-red-600 hover:text-white transition-colors">Shop Latest</a>
                             </div>
                             <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
@@ -506,7 +517,7 @@ const LandingPage = ({ onEnterHub }) => {
                             <div>
                                 <div className="text-[10px] font-black uppercase tracking-[0.28em] text-white/70 mb-4">Community</div>
                                 <h3 className="text-5xl md:text-7xl font-black italic uppercase leading-none">Join The Syndicate</h3>
-                                <p className="text-red-50/90 mt-5 max-w-2xl text-lg leading-relaxed">Match-day chat, roster updates, community nights, and direct connection with the team.</p>
+                                <p className="text-red-50/90 mt-5 max-w-2xl text-lg leading-relaxed">Be around for match nights, roster updates, watch parties, and the daily climb with the people backing SYRIX.</p>
                             </div>
                             <a href="https://discord.gg/HWbJr8sCse" target="_blank" rel="noopener noreferrer" className="inline-flex justify-center px-8 py-4 bg-white text-black font-black text-sm uppercase tracking-widest hover:bg-black hover:text-white transition-colors">Join Discord</a>
                         </div>
@@ -522,7 +533,7 @@ const LandingPage = ({ onEnterHub }) => {
                                 <TeamLogo className="h-12 w-12 rounded-sm shadow-lg shadow-red-950/30" />
                                 <div className="text-4xl font-black text-white italic tracking-tight">SYRIX</div>
                             </div>
-                            <div className="text-sm text-neutral-500 max-w-xl">A competitive Valorant organization page with public content and private team operations in one build.</div>
+                            <div className="text-sm text-neutral-500 max-w-xl">Built for the players, staff, and supporters pushing SYRIX forward one round at a time.</div>
                         </div>
                         <div className="flex flex-wrap gap-5 text-[10px] font-black uppercase tracking-[0.2em] text-neutral-500">
                             <a href="#roster" className="hover:text-white">Roster</a>
