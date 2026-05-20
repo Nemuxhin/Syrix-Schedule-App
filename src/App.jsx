@@ -3317,22 +3317,45 @@ function ActionItems({ members }) {
 }
 
 function TeamCalendar({ events }) {
+    const formatDateKey = (date) => {
+        const year = date.getFullYear();
+        const month = String(date.getMonth() + 1).padStart(2, '0');
+        const day = String(date.getDate()).padStart(2, '0');
+        return `${year}-${month}-${day}`;
+    };
+    const parseDateKey = (value) => {
+        if (!value) return null;
+        const [year, month, day] = String(value).split('-').map(Number);
+        if (!year || !month || !day) return null;
+        return new Date(year, month - 1, day);
+    };
+    const mondayFirstIndex = (date) => (date.getDay() + 6) % 7;
     const [cursor, setCursor] = useState(() => {
         const now = new Date();
         return new Date(now.getFullYear(), now.getMonth(), 1);
     });
     const monthLabel = cursor.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
-    const startDay = new Date(cursor.getFullYear(), cursor.getMonth(), 1).getDay();
+    const firstOfMonth = new Date(cursor.getFullYear(), cursor.getMonth(), 1);
+    const startDay = mondayFirstIndex(firstOfMonth);
     const daysInMonth = new Date(cursor.getFullYear(), cursor.getMonth() + 1, 0).getDate();
+    const todayKey = formatDateKey(new Date());
     const cells = Array.from({ length: Math.ceil((startDay + daysInMonth) / 7) * 7 }, (_, index) => {
         const dayNumber = index - startDay + 1;
         if (dayNumber < 1 || dayNumber > daysInMonth) return null;
-        const date = `${cursor.getFullYear()}-${String(cursor.getMonth() + 1).padStart(2, '0')}-${String(dayNumber).padStart(2, '0')}`;
-        return { dayNumber, date };
+        const dateObject = new Date(cursor.getFullYear(), cursor.getMonth(), dayNumber);
+        const date = formatDateKey(dateObject);
+        return {
+            dayNumber,
+            date,
+            weekday: dateObject.toLocaleDateString('en-US', { weekday: 'long' }),
+            isToday: date === todayKey
+        };
     });
     const eventsByDate = events.reduce((acc, event) => {
-        if (!event.date) return acc;
-        acc[event.date] = [...(acc[event.date] || []), event];
+        const parsed = parseDateKey(event.date);
+        if (!parsed) return acc;
+        const key = formatDateKey(parsed);
+        acc[key] = [...(acc[key] || []), event];
         return acc;
     }, {});
 
@@ -3358,9 +3381,12 @@ function TeamCalendar({ events }) {
                 <div className="grid grid-cols-7 border border-white/10 rounded-xl overflow-hidden bg-black/35">
                     {SHORT_DAYS.map(day => <div key={day} className="p-3 text-[10px] font-black uppercase tracking-widest text-red-400 border-b border-white/10 bg-white/5">{day}</div>)}
                     {cells.map((cell, index) => (
-                        <div key={index} className="min-h-32 p-3 border-b border-r border-white/10 last:border-r-0">
+                        <div key={cell?.date || `blank-${index}`} className={`min-h-32 p-3 border-b border-r border-white/10 last:border-r-0 ${cell?.isToday ? 'bg-red-950/20 ring-1 ring-inset ring-red-500/50' : ''}`}>
                             {cell && <>
-                                <div className="text-xs font-black text-white mb-2">{cell.dayNumber}</div>
+                                <div className="flex items-center justify-between gap-2 mb-2">
+                                    <div className={`text-xs font-black ${cell.isToday ? 'text-red-300' : 'text-white'}`}>{cell.dayNumber}</div>
+                                    <div className="text-[9px] uppercase tracking-widest text-neutral-600">{cell.weekday.slice(0, 3)}</div>
+                                </div>
                                 <div className="space-y-1">
                                     {(eventsByDate[cell.date] || []).map(event => (
                                         <div key={event.id} className="rounded-md border border-red-900/35 bg-red-950/25 px-2 py-1">
