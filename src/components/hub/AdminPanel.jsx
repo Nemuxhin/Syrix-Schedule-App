@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { addDoc, collection, deleteDoc, doc, onSnapshot, setDoc, updateDoc } from 'firebase/firestore';
-import { ADMIN_ACCESS_ROLES, MAPS, timezones } from '../../lib/constants';
+import { STAFF_ACCESS_ROLES, MAPS, timezones } from '../../lib/constants';
 import { db } from '../../lib/firebase';
 import { safeDocId, writeAuditLog } from '../../lib/utils';
 import { ButtonPrimary, ButtonSecondary, Card, Input, Select } from '../shared';
@@ -91,7 +91,7 @@ export const AdminPanel = () => {
     const saveAdminUser = async () => {
         const uid = adminForm.uid.trim();
         if (!uid) return addToast('UID is required', 'error');
-        if (!ADMIN_ACCESS_ROLES.includes(adminForm.role)) return addToast('Choose a valid access role', 'error');
+        if (!STAFF_ACCESS_ROLES.includes(adminForm.role)) return addToast('Choose a valid access role', 'error');
         try {
             await setDoc(doc(db, 'admin_users', uid), {
                 uid,
@@ -216,7 +216,7 @@ export const AdminPanel = () => {
                     <Input placeholder="Firebase UID" value={adminForm.uid} onChange={e => setAdminForm({ ...adminForm, uid: e.target.value })} />
                     <Input placeholder="Display name" value={adminForm.name} onChange={e => setAdminForm({ ...adminForm, name: e.target.value })} />
                     <Select value={adminForm.role} onChange={e => setAdminForm({ ...adminForm, role: e.target.value })}>
-                        {ADMIN_ACCESS_ROLES.map(role => <option key={role}>{role}</option>)}
+                        {STAFF_ACCESS_ROLES.map(role => <option key={role}>{role}</option>)}
                     </Select>
                     <ButtonPrimary onClick={saveAdminUser} className="w-full text-xs py-2">Grant Access</ButtonPrimary>
                 </div>

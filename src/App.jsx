@@ -1,9 +1,8 @@
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { collection, onSnapshot, doc, setDoc, deleteDoc, addDoc, updateDoc, query, where, getDoc, getDocs } from 'firebase/firestore';
 import { onAuthStateChanged, signInWithPopup, signOut, OAuthProvider } from 'firebase/auth';
-import { deleteObject, getDownloadURL, ref as storageRef, uploadBytes } from 'firebase/storage';
-import { auth, db, discordWebhookUrl, storage } from './lib/firebase';
-import { ADMIN_ACCESS_ROLES, ADMIN_ROLES, ADMIN_UIDS, AGENT_NAMES, DAYS, MAPS, RANKS, ROLE_ABBREVIATIONS, ROLES, SHORT_DAYS, UTILITY_TYPES, timezones } from './lib/constants';
+import { auth, db, discordWebhookUrl } from './lib/firebase';
+import { ADMIN_ACCESS_ROLES, ADMIN_ROLES, ADMIN_UIDS, AGENT_NAMES, DAYS, MAPS, RANKS, ROLE_ABBREVIATIONS, ROLES, SHORT_DAYS, STAFF_ACCESS_ROLES, UTILITY_TYPES, timezones } from './lib/constants';
 import { convertFromGMT, convertToGMT, normalizeAvailabilitySlots, safeDocId, sortRosterByRole, timeToMinutes, writeAuditLog } from './lib/utils';
 import { Background, ButtonPrimary, ButtonSecondary, Card, GlobalStyles, Input, Modal, Select, TeamLogo } from './components/shared';
 import { ToastProvider } from './components/ToastProvider';
@@ -1829,14 +1828,18 @@ function StratBook() {
         if (!objects.length) return addToast('Place something on the board first', 'error');
         setLoadingSave(true);
         try {
+            const identity = currentAuthIdentity();
             await addDoc(collection(db, 'strats'), {
                 name: stratName.trim() || `${selectedMap} ${side} strat`,
                 map: selectedMap,
                 side,
                 status: stratStatus,
-                tags: stratTags.split(',').map(tag => tag.trim()).filter(Boolean),
+                tags: normalizeStratTags(stratTags),
                 objects,
+                createdBy: identity.uid,
+                createdByName: identity.name,
                 date: new Date().toISOString(),
+                createdAt: new Date().toISOString(),
                 updatedAt: new Date().toISOString()
             });
             setStratName('');
@@ -2290,12 +2293,46 @@ function StratPreviewBoard({ strat, mapImage, className = '' }) {
 
 const STRAT_STATUSES = ['All', 'Draft', 'Reviewed', 'Match Ready', 'Archived'];
 const COMMON_STRAT_TAGS = ['pistol', 'anti-eco', 'bonus', 'exec', 'default', 'retake', 'post-plant', 'mid control', 'fake'];
+const BULLETIN_TYPES = ['All', 'Scrim Request', 'Tournament Lead', 'Training Idea', 'Availability Note', 'Team Info', 'General'];
+const BULLETIN_PRIORITIES = ['Low', 'Normal', 'High'];
+const BULLETIN_STATUSES = ['Open', 'Reviewing', 'Done', 'Archived'];
+const REQUEST_STATUS_OPTIONS = ['Open', 'Reviewing', 'Scheduled', 'Done', 'Archived'];
+const normalizeStratTags = (tags) => Array.isArray(tags) ? tags.filter(Boolean) : String(tags || '').split(',').map(tag => tag.trim()).filter(Boolean);
+const currentAuthIdentity = () => ({
+    uid: auth.currentUser?.uid || '',
+    name: safeDocId(auth.currentUser?.displayName || auth.currentUser?.uid || 'Unknown', 'Unknown')
+});
+
+const normalizeAppStrat = (strat = {}) => ({
+    ...strat,
+    name: strat.name || strat.title || 'Untitled strategy',
+    side: strat.side || 'Attack',
+    status: strat.status || 'Draft',
+    tags: normalizeStratTags(strat.tags),
+    objects: Array.isArray(strat.objects) ? strat.objects : [],
+    createdAt: strat.createdAt || strat.date || strat.updatedAt || '',
+    updatedAt: strat.updatedAt || strat.date || strat.createdAt || '',
+    createdBy: strat.createdBy || '',
+    createdByName: strat.createdByName || strat.author || ''
+});
+
+const normalizeExternalStrat = (strat = {}) => ({
+    ...strat,
+    title: strat.title || strat.name || 'External strategy',
+    side: strat.side || 'Attack',
+    status: strat.status || 'Draft',
+    tags: normalizeStratTags(strat.tags),
+    imageUrl: strat.imageUrl || strat.url || '',
+    source: strat.source || 'Image URL',
+    createdAt: strat.createdAt || strat.updatedAt || '',
+    updatedAt: strat.updatedAt || strat.createdAt || '',
+    createdBy: strat.createdBy || '',
+    createdByName: strat.createdByName || strat.author || ''
+});
 
 function StratLibrary() {
     const { mapImages } = useValorantData();
     const addToast = useToast();
-    const MAX_UPLOAD_SIZE_MB = 3;
-    const MAX_UPLOAD_SIZE_BYTES = MAX_UPLOAD_SIZE_MB * 1024 * 1024;
     const [selectedMap, setSelectedMap] = useState(MAPS[0]);
     const [side, setSide] = useState('Attack');
     const [statusFilter, setStatusFilter] = useState('All');
@@ -2305,7 +2342,6 @@ function StratLibrary() {
     const [externalStrats, setExternalStrats] = useState([]);
     const [fullscreenStrat, setFullscreenStrat] = useState(null);
     const [uploadForm, setUploadForm] = useState({ title: '', notes: '', imageUrl: '', status: 'Draft', tags: '' });
-    const [uploadFile, setUploadFile] = useState(null);
     const [uploading, setUploading] = useState(false);
 
     useEffect(() => {
@@ -2313,7 +2349,7 @@ function StratLibrary() {
             query(collection(db, 'strats'), where('map', '==', selectedMap)),
             (snap) => {
                 const rows = [];
-                snap.forEach(docSnap => rows.push({ id: docSnap.id, ...docSnap.data() }));
+                snap.forEach(docSnap => rows.push(normalizeAppStrat({ id: docSnap.id, ...docSnap.data() })));
                 setAppStrats(rows.sort((a, b) => new Date(b.updatedAt || b.date || 0) - new Date(a.updatedAt || a.date || 0)));
             },
             (error) => {
@@ -2329,7 +2365,7 @@ function StratLibrary() {
             query(collection(db, 'external_strats'), where('map', '==', selectedMap)),
             (snap) => {
                 const rows = [];
-                snap.forEach(docSnap => rows.push({ id: docSnap.id, ...docSnap.data() }));
+                snap.forEach(docSnap => rows.push(normalizeExternalStrat({ id: docSnap.id, ...docSnap.data() })));
                 setExternalStrats(rows.sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0)));
             },
             (error) => {
@@ -2340,10 +2376,10 @@ function StratLibrary() {
         return () => unsub();
     }, [selectedMap]);
 
-    const normalizeTags = (tags) => Array.isArray(tags) ? tags.filter(Boolean) : String(tags || '').split(',').map(tag => tag.trim()).filter(Boolean);
+    const normalizeTags = normalizeStratTags;
     const allTags = useMemo(() => {
         const found = new Set(COMMON_STRAT_TAGS);
-        [...appStrats, ...externalStrats].forEach(strat => normalizeTags(strat.tags).forEach(tag => found.add(tag)));
+        [...appStrats, ...externalStrats].forEach(strat => normalizeStratTags(strat.tags).forEach(tag => found.add(tag)));
         return ['All', ...Array.from(found).sort((a, b) => a.localeCompare(b))];
     }, [appStrats, externalStrats]);
     const stratMatchesFilters = (strat) => {
@@ -2370,56 +2406,38 @@ function StratLibrary() {
         };
     }, [fullscreenStrat]);
 
-    const handleImageFile = (event) => {
-        const file = event.target.files?.[0];
-        if (!file) return;
-        if (!file.type.startsWith('image/')) return addToast('Please choose an image file', 'error');
-        if (file.size > MAX_UPLOAD_SIZE_BYTES) return addToast(`Image is too large. Use an image under ${MAX_UPLOAD_SIZE_MB}MB or paste an image URL.`, 'error');
-        setUploadFile(file);
-        setUploadForm(prev => ({ ...prev, imageUrl: '' }));
-    };
-
     const saveUploadedStrat = async () => {
         if (!uploadForm.title.trim()) return addToast('Strategy title is required', 'error');
-        if (!uploadForm.imageUrl.trim() && !uploadFile) return addToast('Add an image URL or upload an image file', 'error');
+        if (!uploadForm.imageUrl.trim()) return addToast('Add an image URL', 'error');
 
         setUploading(true);
         try {
-            let imageUrl = uploadForm.imageUrl.trim();
-            let storagePath = '';
-            if (uploadFile) {
-                const ext = uploadFile.name.includes('.') ? uploadFile.name.split('.').pop().toLowerCase() : 'image';
-                const owner = auth.currentUser?.uid || 'unknown';
-                storagePath = `external_strats/${selectedMap}/${side}/${owner}-${Date.now()}.${ext}`;
-                const fileRef = storageRef(storage, storagePath);
-                await uploadBytes(fileRef, uploadFile, { contentType: uploadFile.type });
-                imageUrl = await getDownloadURL(fileRef);
-            }
+            const imageUrl = uploadForm.imageUrl.trim();
+            const identity = currentAuthIdentity();
 
             await addDoc(collection(db, 'external_strats'), {
                 title: uploadForm.title.trim(),
                 notes: uploadForm.notes.trim(),
                 imageUrl,
-                storagePath,
                 map: selectedMap,
                 side,
                 status: uploadForm.status,
                 tags: normalizeTags(uploadForm.tags),
-                source: uploadFile ? 'Uploaded Image' : 'ValoPlant',
-                createdAt: new Date().toISOString()
+                source: 'Image URL',
+                createdBy: identity.uid,
+                createdByName: identity.name,
+                createdAt: new Date().toISOString(),
+                updatedAt: new Date().toISOString()
             });
             setUploadForm({ title: '', notes: '', imageUrl: '', status: 'Draft', tags: '' });
-            setUploadFile(null);
-            addToast('Uploaded strategy saved');
+            addToast('External strategy saved');
         } catch (error) {
             console.error('Upload strat save failed:', error);
             const code = error?.code || '';
-            if (code.includes('storage/unauthorized') || code.includes('storage/unknown')) {
-                addToast('Storage upload is blocked. Paste an image URL instead, or enable Storage on your Firebase plan.', 'error');
-            } else if (code.includes('permission-denied')) {
+            if (code.includes('permission-denied')) {
                 addToast('Firestore rules blocked this strategy save', 'error');
             } else {
-                addToast('Unable to save uploaded strategy', 'error');
+                addToast('Unable to save external strategy', 'error');
             }
         } finally {
             setUploading(false);
@@ -2441,14 +2459,11 @@ function StratLibrary() {
 
     const deleteUploadedStrat = async (strat) => {
         try {
-            if (strat.storagePath) {
-                await deleteObject(storageRef(storage, strat.storagePath));
-            }
             await deleteDoc(doc(db, 'external_strats', strat.id));
-            addToast('Uploaded strategy removed');
+            addToast('External strategy removed');
         } catch (error) {
             console.error('Upload strat delete failed:', error);
-            addToast('Unable to delete uploaded strategy', 'error');
+            addToast('Unable to delete external strategy', 'error');
         }
     };
 
@@ -2584,17 +2599,15 @@ function StratLibrary() {
                         </div>
 
                         <div className="rounded-xl border border-white/10 bg-black/35 p-4 space-y-3">
-                            <div className="text-[10px] uppercase tracking-[0.24em] text-red-400 font-black">Upload External Image</div>
+                            <div className="text-[10px] uppercase tracking-[0.24em] text-red-400 font-black">External Image Link</div>
                             <Input value={uploadForm.title} onChange={e => setUploadForm({ ...uploadForm, title: e.target.value })} placeholder="Strategy title" />
-                            <Input value={uploadForm.imageUrl} onChange={e => { setUploadForm({ ...uploadForm, imageUrl: e.target.value }); if (e.target.value.trim()) setUploadFile(null); }} placeholder="Image URL or upload below" />
+                            <Input value={uploadForm.imageUrl} onChange={e => setUploadForm({ ...uploadForm, imageUrl: e.target.value })} placeholder="Image URL from ValoPlant, Discord, Imgur, etc." />
                             <Select value={uploadForm.status} onChange={e => setUploadForm({ ...uploadForm, status: e.target.value })}>
                                 {STRAT_STATUSES.filter(status => status !== 'All').map(status => <option key={status}>{status}</option>)}
                             </Select>
                             <Input value={uploadForm.tags} onChange={e => setUploadForm({ ...uploadForm, tags: e.target.value })} placeholder="Tags: pistol, anti-eco, retake" />
-                            <input type="file" accept="image/*" onChange={handleImageFile} className="block w-full text-xs text-neutral-500 file:mr-3 file:rounded-lg file:border-0 file:bg-white/10 file:px-3 file:py-2 file:text-xs file:font-black file:uppercase file:text-white hover:file:bg-red-600" />
-                            {uploadFile && <div className="rounded-lg border border-white/10 bg-black/40 px-3 py-2 text-xs text-neutral-400"><span className="font-black text-white">Selected:</span> {uploadFile.name} <span className="text-neutral-600">({(uploadFile.size / (1024 * 1024)).toFixed(2)}MB)</span></div>}
                             <textarea value={uploadForm.notes} onChange={e => setUploadForm({ ...uploadForm, notes: e.target.value })} placeholder="Optional notes, callouts, or source link..." className="w-full h-24 bg-black/40 border border-neutral-800 rounded-xl p-3 text-white text-sm outline-none focus:border-red-600 placeholder-neutral-600 resize-y" />
-                            <ButtonPrimary onClick={saveUploadedStrat} disabled={uploading} className="w-full text-xs py-3">{uploading ? 'Saving...' : 'Save Upload'}</ButtonPrimary>
+                            <ButtonPrimary onClick={saveUploadedStrat} disabled={uploading} className="w-full text-xs py-3">{uploading ? 'Saving...' : 'Save Image Link'}</ButtonPrimary>
                         </div>
                     </div>
 
@@ -3947,14 +3960,28 @@ function TeamBulletinBoard({ currentUserName, currentUserUid, isAdmin }) {
         notes: ''
     });
     const addToast = useToast();
-    const types = ['All', 'Scrim Request', 'Tournament Lead', 'Training Idea', 'Availability Note', 'Team Info', 'General'];
-    const priorities = ['Low', 'Normal', 'High'];
-    const statuses = ['Open', 'Reviewing', 'Done', 'Archived'];
+    const types = BULLETIN_TYPES;
+    const priorities = BULLETIN_PRIORITIES;
+    const statuses = BULLETIN_STATUSES;
+    const normalizePost = useCallback((post = {}) => ({
+        ...post,
+        type: BULLETIN_TYPES.includes(post.type) && post.type !== 'All' ? post.type : 'General',
+        priority: BULLETIN_PRIORITIES.includes(post.priority) ? post.priority : 'Normal',
+        title: post.title || 'Untitled bulletin',
+        opponent: post.opponent || '',
+        link: post.link || '',
+        notes: post.notes || '',
+        status: BULLETIN_STATUSES.includes(post.status) ? post.status : 'Open',
+        author: post.author || 'Unknown',
+        authorUid: post.authorUid || post.uid || '',
+        createdAt: post.createdAt || post.date || '',
+        updatedAt: post.updatedAt || post.createdAt || post.date || ''
+    }), []);
 
     useEffect(() => {
         const unsub = onSnapshot(collection(db, 'team_bulletins'), (snap) => {
             const rows = [];
-            snap.forEach(d => rows.push({ id: d.id, ...d.data() }));
+            snap.forEach(d => rows.push(normalizePost({ id: d.id, ...d.data() })));
             setPosts(rows.sort((a, b) => {
                 const statusWeight = (item) => item.status === 'Open' ? 0 : item.status === 'Reviewing' ? 1 : item.status === 'Done' ? 2 : 3;
                 const priorityWeight = (item) => item.priority === 'High' ? 0 : item.priority === 'Normal' ? 1 : 2;
@@ -3962,7 +3989,7 @@ function TeamBulletinBoard({ currentUserName, currentUserUid, isAdmin }) {
             }));
         });
         return () => unsub();
-    }, []);
+    }, [normalizePost]);
 
     const filteredPosts = posts.filter(post => filter === 'All' || post.type === filter);
     const openCount = posts.filter(post => post.status === 'Open' || post.status === 'Reviewing').length;
@@ -4012,7 +4039,7 @@ function TeamBulletinBoard({ currentUserName, currentUserUid, isAdmin }) {
     };
 
     const removePost = async (post) => {
-        const canDelete = isAdmin || post.authorUid === currentUserUid;
+        const canDelete = isAdmin || post.authorUid === currentUserUid || (!post.authorUid && post.author === currentUserName);
         if (!canDelete) return addToast('Only the author or an admin can delete this', 'error');
         try {
             await deleteDoc(doc(db, 'team_bulletins', post.id));
@@ -4107,6 +4134,222 @@ function TeamBulletinBoard({ currentUserName, currentUserUid, isAdmin }) {
                             )) : <div className="p-8 text-center text-sm text-neutral-500 border border-dashed border-neutral-800 rounded-xl">No bulletins in this category yet.</div>}
                         </div>
                     </div>
+                </div>
+            </Card>
+        </div>
+    );
+}
+
+function TeamRequestCenter({ mode = 'team', members, currentUserName, currentUserUid, isStaff }) {
+    const [requests, setRequests] = useState([]);
+    const [saving, setSaving] = useState(false);
+    const [filter, setFilter] = useState('Open');
+    const [form, setForm] = useState({
+        kind: mode === 'meetings' ? 'Meeting' : mode === 'coach' ? 'Coach Check-in' : 'General Request',
+        title: '',
+        player: '',
+        date: '',
+        time: '',
+        link: '',
+        notes: '',
+        priority: 'Normal'
+    });
+    const addToast = useToast();
+
+    const isCoachMode = mode === 'coach';
+    const isMeetingMode = mode === 'meetings';
+    const collectionName = 'team_requests';
+    const kindOptions = isMeetingMode
+        ? ['Meeting', 'VOD Review Meeting', 'Role Talk', 'Practice Follow-up', 'Availability Talk']
+        : isCoachMode
+            ? ['Coach Check-in', 'VOD Review Request', 'Role/Agent Feedback', 'Practice Follow-up', 'Availability Update', 'Strat Review']
+            : ['General Request', 'Talk To Coach', '1-on-1 Review', 'Role Feedback', 'Schedule Issue', 'Scrim/Tourney Info', 'Team Issue'];
+    const statusOptions = REQUEST_STATUS_OPTIONS;
+    const normalizeRequest = useCallback((request = {}) => ({
+        ...request,
+        kind: request.kind || 'General Request',
+        title: request.title || 'Untitled request',
+        player: request.player || request.assignedTo || '',
+        direction: request.direction || 'player_to_staff',
+        priority: ['Low', 'Normal', 'High'].includes(request.priority) ? request.priority : 'Normal',
+        status: REQUEST_STATUS_OPTIONS.includes(request.status) ? request.status : 'Open',
+        author: request.author || 'Unknown',
+        authorUid: request.authorUid || request.uid || '',
+        link: request.link || '',
+        notes: request.notes || '',
+        createdAt: request.createdAt || request.date || '',
+        updatedAt: request.updatedAt || request.createdAt || request.date || ''
+    }), []);
+
+    useEffect(() => {
+        const unsub = onSnapshot(collection(db, collectionName), (snap) => {
+            const rows = [];
+            snap.forEach(d => rows.push(normalizeRequest({ id: d.id, ...d.data() })));
+            setRequests(rows.sort((a, b) => {
+                const statusWeight = (item) => item.status === 'Open' ? 0 : item.status === 'Reviewing' ? 1 : item.status === 'Scheduled' ? 2 : item.status === 'Done' ? 3 : 4;
+                return statusWeight(a) - statusWeight(b) || new Date(b.createdAt || 0) - new Date(a.createdAt || 0);
+            }));
+        });
+        return () => unsub();
+    }, [normalizeRequest]);
+
+    useEffect(() => {
+        setForm(prev => ({
+            ...prev,
+            kind: mode === 'meetings' ? 'Meeting' : mode === 'coach' ? 'Coach Check-in' : 'General Request'
+        }));
+    }, [mode]);
+
+    const requestDirection = isCoachMode || isMeetingMode ? 'staff_to_player' : 'player_to_staff';
+    const visibleRequests = requests.filter(item => {
+        if (item.direction !== requestDirection) return false;
+        if (isMeetingMode && !String(item.kind || '').toLowerCase().includes('meeting') && item.kind !== 'Role Talk' && item.kind !== 'Practice Follow-up' && item.kind !== 'Availability Talk') return false;
+        if (!isMeetingMode && mode === 'coach' && String(item.kind || '').toLowerCase().includes('meeting')) return false;
+        if (filter !== 'All' && (item.status || 'Open') !== filter) return false;
+        if (isStaff) return true;
+        if (item.direction === 'player_to_staff') return item.authorUid === currentUserUid || (!item.authorUid && item.author === currentUserName);
+        return item.player === currentUserName || item.player === 'Full Team';
+    });
+
+    const createRequest = async () => {
+        if (!form.title.trim()) return addToast('Request title is required', 'error');
+        if ((isCoachMode || isMeetingMode) && !isStaff) return addToast('Only staff can create coach requests', 'error');
+        if ((isCoachMode || isMeetingMode) && !form.player) return addToast('Choose a player or Full Team', 'error');
+        if (!form.notes.trim() && !form.link.trim()) return addToast('Add notes or a link for context', 'error');
+
+        setSaving(true);
+        try {
+            await addDoc(collection(db, collectionName), {
+                ...form,
+                title: form.title.trim(),
+                player: (isCoachMode || isMeetingMode) ? form.player : currentUserName,
+                direction: requestDirection,
+                status: isMeetingMode ? 'Scheduled' : 'Open',
+                author: currentUserName || 'Unknown',
+                authorUid: currentUserUid || '',
+                createdAt: new Date().toISOString(),
+                updatedAt: new Date().toISOString()
+            });
+            await writeAuditLog('Team request created', form.title.trim(), currentUserName || 'Unknown');
+            setForm({
+                kind: mode === 'meetings' ? 'Meeting' : mode === 'coach' ? 'Coach Check-in' : 'General Request',
+                title: '',
+                player: '',
+                date: '',
+                time: '',
+                link: '',
+                notes: '',
+                priority: 'Normal'
+            });
+            addToast('Request posted');
+        } catch (error) {
+            console.error('Request create failed:', error);
+            addToast('Unable to post request', 'error');
+        } finally {
+            setSaving(false);
+        }
+    };
+
+    const updateStatus = async (item, status) => {
+        try {
+            await updateDoc(doc(db, collectionName, item.id), {
+                status,
+                updatedAt: new Date().toISOString(),
+                updatedBy: currentUserName || 'Unknown'
+            });
+            addToast('Request updated');
+        } catch (error) {
+            console.error('Request update failed:', error);
+            addToast('Unable to update request', 'error');
+        }
+    };
+
+    const removeRequest = async (item) => {
+        if (!isStaff && item.authorUid !== currentUserUid && !(!item.authorUid && item.author === currentUserName)) return addToast('Only staff or the author can delete this', 'error');
+        try {
+            await deleteDoc(doc(db, collectionName, item.id));
+            await writeAuditLog('Team request deleted', item.title, currentUserName || 'Unknown');
+            addToast('Request removed');
+        } catch (error) {
+            console.error('Request delete failed:', error);
+            addToast('Unable to remove request', 'error');
+        }
+    };
+
+    const title = isMeetingMode ? 'Meetings' : isCoachMode ? 'Coach Requests' : 'Team Requests';
+    const kicker = isMeetingMode ? 'Meeting Queue' : isCoachMode ? 'Coach To Player' : 'Player To Staff';
+    const copy = isMeetingMode
+        ? 'Track coach/player meetings, VOD talks, role conversations, and follow-ups that need an actual time.'
+        : isCoachMode
+            ? 'Coaches can request a talk, review, meeting, availability update, or follow-up from one player or the full team.'
+            : 'Players can ask for help, flag schedule issues, request reviews, or send staff anything that should not get lost in chat.';
+
+    return (
+        <div className="animate-fade-in grid grid-cols-1 xl:grid-cols-[0.82fr_1.18fr] gap-6">
+            <Card>
+                <div className="text-[10px] uppercase tracking-[0.28em] text-red-400 font-black mb-3">{kicker}</div>
+                <h2 className="text-3xl font-black text-white uppercase italic mb-3">{title}</h2>
+                <p className="text-sm text-neutral-400 mb-6">{copy}</p>
+                <div className="space-y-4">
+                    <Select value={form.kind} onChange={e => setForm({ ...form, kind: e.target.value })}>
+                        {kindOptions.map(kind => <option key={kind}>{kind}</option>)}
+                    </Select>
+                    <Input value={form.title} onChange={e => setForm({ ...form, title: e.target.value })} placeholder="Short title" />
+                    {(isCoachMode || isMeetingMode) && (
+                        <Select value={form.player} onChange={e => setForm({ ...form, player: e.target.value })}>
+                            <option value="">Choose player</option>
+                            <option value="Full Team">Full Team</option>
+                            {members.map(member => <option key={member} value={member}>{member}</option>)}
+                        </Select>
+                    )}
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                        <Select value={form.priority} onChange={e => setForm({ ...form, priority: e.target.value })}>
+                            {['Low', 'Normal', 'High'].map(priority => <option key={priority}>{priority}</option>)}
+                        </Select>
+                        <Input type="date" value={form.date} onChange={e => setForm({ ...form, date: e.target.value })} className="[color-scheme:dark]" />
+                        <Input type="time" value={form.time} onChange={e => setForm({ ...form, time: e.target.value })} className="[color-scheme:dark]" />
+                    </div>
+                    <Input value={form.link} onChange={e => setForm({ ...form, link: e.target.value })} placeholder="Discord, VOD, calendar, or reference link" />
+                    <textarea value={form.notes} onChange={e => setForm({ ...form, notes: e.target.value })} placeholder="What needs to happen, and what should the other person know?" className="w-full h-40 bg-black/40 border border-neutral-800 rounded-xl p-3 text-white text-sm outline-none focus:border-red-600 placeholder-neutral-600 resize-y" />
+                    <ButtonPrimary onClick={createRequest} disabled={saving || ((isCoachMode || isMeetingMode) && !isStaff)} className="w-full py-3 text-xs">{saving ? 'Posting...' : `Post ${isMeetingMode ? 'Meeting' : 'Request'}`}</ButtonPrimary>
+                </div>
+            </Card>
+
+            <Card>
+                <div className="flex flex-col md:flex-row md:items-end md:justify-between gap-4 mb-5">
+                    <div>
+                        <div className="text-[10px] uppercase tracking-[0.28em] text-neutral-500 font-black mb-2">Request Queue</div>
+                        <h3 className="text-2xl font-black text-white uppercase italic">{title}</h3>
+                    </div>
+                    <Select value={filter} onChange={e => setFilter(e.target.value)} className="md:max-w-44">
+                        {['All', ...statusOptions].map(status => <option key={status}>{status}</option>)}
+                    </Select>
+                </div>
+                <div className="space-y-3 max-h-[78vh] overflow-y-auto pr-2 custom-scrollbar">
+                    {visibleRequests.length ? visibleRequests.map(item => (
+                        <div key={item.id} className="rounded-xl border border-white/10 bg-black/45 p-4">
+                            <div className="flex items-start justify-between gap-3">
+                                <div className="min-w-0">
+                                    <div className="flex flex-wrap gap-2 mb-2">
+                                        <span className="text-[9px] uppercase tracking-widest bg-red-950/25 border border-red-900/40 text-red-300 px-2 py-1 rounded">{item.kind}</span>
+                                        <span className="text-[9px] uppercase tracking-widest bg-white/5 border border-white/10 text-neutral-400 px-2 py-1 rounded">{item.priority || 'Normal'}</span>
+                                        <span className="text-[9px] uppercase tracking-widest bg-white/5 border border-white/10 text-neutral-400 px-2 py-1 rounded">{item.status || 'Open'}</span>
+                                    </div>
+                                    <div className="text-xl font-black text-white uppercase italic">{item.title}</div>
+                                    <div className="mt-1 text-[10px] uppercase tracking-widest text-neutral-500">{item.direction === 'staff_to_player' ? `For ${item.player || 'Player TBD'}` : `From ${item.author || 'Unknown'}`} / {item.createdAt ? new Date(item.createdAt).toLocaleDateString() : 'No date'}</div>
+                                </div>
+                                {(isStaff || item.authorUid === currentUserUid || (!item.authorUid && item.author === currentUserName)) && <button onClick={() => removeRequest(item)} className="text-neutral-600 hover:text-red-500 text-xl leading-none">×</button>}
+                            </div>
+                            {(item.date || item.time) && <div className="mt-3 text-xs text-neutral-400">{item.date || 'Date TBD'} {item.time ? `@ ${item.time}` : ''}</div>}
+                            {item.notes && <p className="mt-3 text-sm text-neutral-300 whitespace-pre-wrap leading-relaxed">{item.notes}</p>}
+                            <div className="mt-4 flex flex-wrap items-center gap-3">
+                                <Select value={item.status || 'Open'} onChange={e => updateStatus(item, e.target.value)} className="max-w-40 text-xs py-2">
+                                    {statusOptions.map(status => <option key={status}>{status}</option>)}
+                                </Select>
+                                {item.link && <a href={item.link} target="_blank" rel="noreferrer" className="text-[10px] font-black uppercase tracking-widest text-red-400 hover:text-white">Open Link</a>}
+                            </div>
+                        </div>
+                    )) : <div className="p-8 text-center text-sm text-neutral-500 border border-dashed border-neutral-800 rounded-xl">Nothing in this queue yet.</div>}
                 </div>
             </Card>
         </div>
@@ -5187,6 +5430,19 @@ function ScrimScheduler({ onSchedule, userTimezone }) {
     );
 }
 
+function AccessDenied({ activeLabel, accessLabel, onGoHome }) {
+    return (
+        <Card className="max-w-3xl mx-auto mt-10 border-red-900/30">
+            <div className="text-[10px] uppercase tracking-[0.28em] text-red-400 font-black mb-3">Restricted Area</div>
+            <h2 className="text-3xl md:text-4xl font-black text-white uppercase italic leading-tight">This page is staff-only</h2>
+            <p className="mt-4 text-sm text-neutral-400 leading-relaxed">
+                {activeLabel} is not available for your current access level. You are signed in as {accessLabel}, so the hub is only showing the sections that fit that role.
+            </p>
+            <ButtonPrimary onClick={onGoHome} className="mt-6 text-xs py-3">Back To Dashboard</ButtonPrimary>
+        </Card>
+    );
+}
+
 function SyrixDashboard({ onBack }) {
     const [currentUser, setCurrentUser] = useState(null);
     const [rosterName, setRosterName] = useState(null);
@@ -5209,6 +5465,7 @@ function SyrixDashboard({ onBack }) {
     const addToast = useToast();
     const [allRosterNames, setAllRosterNames] = useState([]);
     const [openTaskCount, setOpenTaskCount] = useState(0);
+    const [teamRequests, setTeamRequests] = useState([]);
 
     useEffect(() => { return onAuthStateChanged(auth, user => { setCurrentUser(user); setAuthLoading(false); }); }, []);
     const signIn = async () => { try { await signInWithPopup(auth, new OAuthProvider('oidc.discord')); } catch (e) { console.error(e); } };
@@ -5241,7 +5498,7 @@ function SyrixDashboard({ onBack }) {
                 setCurrentUserRole(profile.role || '');
                 setIsMember(true);
             } else {
-                setIsMember(ADMIN_UIDS.includes(currentUser.uid) || (adminAccess && ADMIN_ACCESS_ROLES.includes(adminAccess.role)));
+                setIsMember(ADMIN_UIDS.includes(currentUser.uid) || (adminAccess && STAFF_ACCESS_ROLES.includes(adminAccess.role)));
                 setRosterName(currentUser.displayName);
                 setCurrentUserRole('');
             }
@@ -5284,7 +5541,23 @@ function SyrixDashboard({ onBack }) {
             setOpenTaskCount(count);
         });
 
-        return () => { unsub1(); unsub2(); unsub3(); unsub4(); unsub5(); };
+        const normalizeDashboardRequest = (request = {}) => ({
+            ...request,
+            direction: request.direction || 'player_to_staff',
+            status: request.status || 'Open',
+            kind: request.kind || 'General Request',
+            player: request.player || request.assignedTo || '',
+            author: request.author || 'Unknown',
+            authorUid: request.authorUid || request.uid || ''
+        });
+
+        const unsub6 = onSnapshot(collection(db, 'team_requests'), (s) => {
+            const requests = [];
+            s.forEach(requestDoc => requests.push(normalizeDashboardRequest({ id: requestDoc.id, ...requestDoc.data() })));
+            setTeamRequests(requests);
+        });
+
+        return () => { unsub1(); unsub2(); unsub3(); unsub4(); unsub5(); unsub6(); };
     }, [currentUser, adminAccess]);
 
     // 3. UPDATE dynamicMembers TO USE THE ROSTER LIST
@@ -5349,9 +5622,11 @@ function SyrixDashboard({ onBack }) {
             await setDoc(doc(db, 'availabilities', finalName), {
                 name: finalName,
                 uid: currentUser.uid,
+                ownerUid: currentUser.uid,
                 slots: nextSlots,
                 lastUpdated: new Date().toISOString(),
-                timezone: userTimezone
+                timezone: userTimezone,
+                schemaVersion: 2
             }, { merge: true });
 
             addToast('Availability synced');
@@ -5369,15 +5644,28 @@ function SyrixDashboard({ onBack }) {
         await setDoc(doc(db, 'availabilities', finalName), {
             name: finalName,
             uid: currentUser.uid,
+            ownerUid: currentUser.uid,
             slots: old.filter(s => convertFromGMT(s.day, s.start, userTimezone).day !== day),
             lastUpdated: new Date().toISOString(),
-            timezone: userTimezone
+            timezone: userTimezone,
+            schemaVersion: 2
         }, { merge: true });
         setIsModalOpen(false);
         addToast(`Cleared ${day}`);
     };
-    const schedEvent = async (d) => { await addDoc(collection(db, 'events'), d); await writeAuditLog('Event scheduled', `${d.type || 'Event'} vs ${d.opponent || 'TBD'}`, currentMemberName); addToast('Event Scheduled'); };
-    const deleteEvent = async (id) => { await deleteDoc(doc(db, 'events', id)); await writeAuditLog('Event deleted', id, currentMemberName); setIsModalOpen(false); addToast('Event Deleted'); };
+    const schedEvent = async (d) => {
+        if (!isStaff) return addToast('Only staff can schedule events', 'error');
+        await addDoc(collection(db, 'events'), d);
+        await writeAuditLog('Event scheduled', `${d.type || 'Event'} vs ${d.opponent || 'TBD'}`, currentMemberName);
+        addToast('Event Scheduled');
+    };
+    const deleteEvent = async (id) => {
+        if (!isStaff) return addToast('Only staff can delete events', 'error');
+        await deleteDoc(doc(db, 'events', id));
+        await writeAuditLog('Event deleted', id, currentMemberName);
+        setIsModalOpen(false);
+        addToast('Event Deleted');
+    };
 
     if (authLoading) return <div className="fixed inset-0 bg-black flex items-center justify-center"><div className="w-8 h-8 border-4 border-red-600 border-t-transparent rounded-full animate-spin"></div></div>;
 
@@ -5398,20 +5686,82 @@ function SyrixDashboard({ onBack }) {
     const dbAdminRole = adminAccess?.active === false ? '' : adminAccess?.role;
     const isDbAdmin = ADMIN_ACCESS_ROLES.includes(dbAdminRole);
     const isAdmin = currentUser && (ADMIN_UIDS.includes(currentUser.uid) || isRosterManager || isDbAdmin);
+    const isCoachRole = ['Coach', 'Head Coach'].includes(currentUserRole) || ['Coach', 'Head Coach'].includes(dbAdminRole);
+    const isStaff = Boolean(isAdmin || isCoachRole);
     const accessLabel = ADMIN_UIDS.includes(currentUser.uid) ? 'Owner' : dbAdminRole || (isRosterManager ? 'Manager' : 'Member');
     const navGroups = [
-        { label: 'Command', items: [{ id: 'dashboard', label: 'Dashboard' }, { id: 'calendar', label: 'Calendar' }, { id: 'bulletins', label: 'Bulletin Board' }, { id: 'notifications', label: 'Notifications' }, { id: 'announcements', label: 'Announcements' }, { id: 'tasks', label: 'Tasks' }] },
-        { label: 'Team', items: [{ id: 'roster', label: 'Roster' }, { id: 'availability', label: 'Availability' }, { id: 'matches', label: 'Matches' }] },
-        { label: 'Coaching', items: [{ id: 'coachroom', label: 'Coach Room' }, { id: 'practice', label: 'Practice Plans' }, { id: 'prep', label: 'Match Prep' }, ...(isAdmin ? [{ id: 'playernotes', label: 'Player Notes' }] : [])] },
-        { label: 'Valorant', items: [{ id: 'strats', label: 'Stratbook' }, { id: 'stratlibrary', label: 'Strat Library' }, { id: 'comps', label: 'Comps' }, { id: 'mapveto', label: 'Map Veto' }] },
-        { label: 'Library', items: [{ id: 'lineups', label: 'Lineups' }, { id: 'playbook', label: 'Playbook' }] },
-        ...(isAdmin ? [{ label: 'Admin', items: [{ id: 'content', label: 'Content' }, { id: 'partners', label: 'Partners' }, { id: 'audit', label: 'Audit Log' }, { id: 'admin', label: 'Admin Panel' }] }] : [])
+        { label: 'Command', items: [{ id: 'dashboard', label: 'Dashboard' }, { id: 'calendar', label: 'Calendar' }, { id: 'bulletins', label: 'Bulletin Board' }, { id: 'notifications', label: 'Notifications' }, { id: 'tasks', label: 'Tasks' }] },
+        { label: 'Team', items: [{ id: 'availability', label: 'Availability' }, { id: 'matches', label: 'Matches' }, { id: 'teamrequests', label: 'Team Requests' }, { id: 'coachrequests', label: 'Coach Requests' }, { id: 'meetings', label: 'Meetings' }] },
+        { label: 'Strategy', items: [{ id: 'stratlibrary', label: 'Strat Library' }, { id: 'lineups', label: 'Lineups' }, { id: 'playbook', label: 'Playbook' }, { id: 'comps', label: 'Comps' }] },
+        ...(isStaff ? [{ label: 'Planning', items: [{ id: 'strats', label: 'Stratbook' }, { id: 'mapveto', label: 'Map Veto' }, { id: 'practice', label: 'Practice Plans' }, { id: 'prep', label: 'Match Prep' }] }] : []),
+        ...(isStaff ? [{ label: 'Coaching', items: [{ id: 'coachroom', label: 'Coach Room' }, ...(isAdmin ? [{ id: 'playernotes', label: 'Player Notes' }] : [])] }] : []),
+        ...(isAdmin ? [{ label: 'Operations', items: [{ id: 'announcements', label: 'Announcements' }, { id: 'content', label: 'Content' }, { id: 'partners', label: 'Partners' }] }] : []),
+        ...(isAdmin ? [{ label: 'Admin', items: [{ id: 'roster', label: 'Roster Manager' }, { id: 'audit', label: 'Audit Log' }, { id: 'admin', label: 'Admin Panel' }] }] : [])
     ];
     const flatNav = navGroups.flatMap(group => group.items);
-    const activeLabel = flatNav.find(item => item.id === activeTab)?.label || 'Dashboard';
+    const canAccessActiveTab = flatNav.some(item => item.id === activeTab);
+    const restrictedLabels = {
+        announcements: 'Announcements',
+        coachroom: 'Coach Room',
+        practice: 'Practice Plans',
+        prep: 'Match Prep',
+        playernotes: 'Player Notes',
+        strats: 'Stratbook',
+        mapveto: 'Map Veto',
+        roster: 'Roster Manager',
+        content: 'Content',
+        partners: 'Partners',
+        audit: 'Audit Log',
+        admin: 'Admin Panel'
+    };
+    const activeLabel = flatNav.find(item => item.id === activeTab)?.label || restrictedLabels[activeTab] || 'Dashboard';
     const nextEvent = events[0];
     const todayName = new Date().toLocaleDateString('en-US', { weekday: 'long', timeZone: userTimezone });
     const availableToday = dynamicMembers.filter(member => (displayAvail[member] || []).some(slot => slot.day === todayName)).length;
+    const visibleRequestItems = teamRequests.filter(item => {
+        if (isStaff) return true;
+        if (item.direction === 'player_to_staff') return item.authorUid === currentUser.uid || (!item.authorUid && item.author === currentMemberName);
+        return item.player === currentMemberName || item.player === 'Full Team';
+    });
+    const requestCountById = (id) => visibleRequestItems.filter(item => {
+        const kind = String(item.kind || '').toLowerCase();
+        const isMeeting = kind.includes('meeting') || ['Role Talk', 'Practice Follow-up', 'Availability Talk'].includes(item.kind);
+        const status = item.status || 'Open';
+        if (status === 'Done' || status === 'Archived') return false;
+        if (id === 'teamrequests') return item.direction === 'player_to_staff';
+        if (id === 'coachrequests') return item.direction === 'staff_to_player' && !isMeeting;
+        if (id === 'meetings') return item.direction === 'staff_to_player' && isMeeting;
+        return false;
+    }).length;
+    const roleDashboard = isAdmin
+        ? {
+            title: 'Operations Desk',
+            copy: 'Keep the team moving: approve work, update the roster, publish comms, and make sure the next block has a clear owner.',
+            primary: { id: 'admin', label: 'Admin Panel' }
+        }
+        : isStaff
+            ? {
+                title: 'Coach Desk',
+                copy: 'Plan practice, review requests, prep the next match, and keep player follow-ups from getting buried in chat.',
+                primary: { id: 'coachroom', label: 'Coach Room' }
+            }
+            : {
+                title: 'Player Desk',
+                copy: 'Check what is coming up, keep your availability current, and send requests or notes to staff before practice.',
+                primary: { id: 'availability', label: 'Update Availability' }
+            };
+    const quickActions = [
+        roleDashboard.primary,
+        { id: isStaff ? 'strats' : 'stratlibrary', label: isStaff ? 'Open Planner' : 'Strat Library' },
+        { id: 'teamrequests', label: 'Team Requests' },
+        { id: 'tasks', label: 'Tasks' }
+    ];
+    const attentionItems = [
+        { label: 'Open tasks', value: openTaskCount, tab: 'tasks' },
+        { label: 'Team requests', value: requestCountById('teamrequests'), tab: 'teamrequests' },
+        { label: 'Coach requests', value: requestCountById('coachrequests'), tab: 'coachrequests' },
+        { label: 'Meetings', value: requestCountById('meetings'), tab: 'meetings' }
+    ].filter(item => item.value > 0);
     const pageMeta = {
         dashboard: 'Overview, next operation, quick actions, and team status.',
         calendar: 'View upcoming scrims, officials, practices, and VOD reviews by month.',
@@ -5420,7 +5770,10 @@ function SyrixDashboard({ onBack }) {
         announcements: 'Post captain messages, urgent updates, and team-wide comms.',
         availability: 'Edit your weekly availability and inspect the team schedule.',
         matches: 'Record match results, reports, VODs, and performance context.',
-        roster: 'Manage member profiles, roles, ranks, and roster notes.',
+        teamrequests: 'Send staff requests, schedule issues, review asks, and anything that should not vanish in chat.',
+        coachrequests: 'Track coach-to-player requests, review asks, and follow-ups.',
+        meetings: 'Schedule and review player, coach, and team meetings.',
+        roster: 'Admin roster manager for member profiles, roles, ranks, and roster notes.',
         coachroom: 'Build detailed team or player-specific plans, review coach notes, and organize development work.',
         practice: 'Build practice blocks with maps, goals, drills, links, and assigned players.',
         playbook: 'Write map-specific protocols for attack and defense.',
@@ -5444,6 +5797,7 @@ function SyrixDashboard({ onBack }) {
         if (id === 'matches') return events.length ? String(events.length) : '';
         if (id === 'roster') return dynamicMembers.length ? String(dynamicMembers.length) : '';
         if (id === 'tasks') return openTaskCount ? String(openTaskCount) : '';
+        if (['teamrequests', 'coachrequests', 'meetings'].includes(id)) return requestCountById(id) ? String(requestCountById(id)) : '';
         return '';
     };
     const NavItem = ({ item, compact = false, collapsed = false }) => (
@@ -5539,38 +5893,76 @@ function SyrixDashboard({ onBack }) {
 
             <main className="flex-1 overflow-y-auto p-4 md:p-6 scrollbar-thin scrollbar-thumb-red-900/50 scrollbar-track-black/20">
                 <div className="max-w-[1920px] mx-auto min-h-screen flex flex-col">
-                    {activeTab === 'dashboard' && <div className="animate-fade-in space-y-6"><div className="grid grid-cols-1 xl:grid-cols-[1.25fr_0.75fr] gap-4"><div className="glass-panel rounded-xl p-6 border-white/10 overflow-hidden"><div className="text-[10px] uppercase tracking-[0.28em] text-red-400 font-black mb-3">Today Command</div><h2 className="text-4xl md:text-5xl font-black text-white uppercase italic leading-none">Ready Room</h2><p className="mt-4 text-sm text-neutral-400 max-w-2xl">Review the next operation, keep team notes current, and jump into planning before practice starts.</p><div className="mt-6 flex flex-wrap gap-2"><button onClick={() => setActiveTab('strats')} className="bg-red-600 hover:bg-red-500 text-white px-4 py-2 text-xs font-black uppercase tracking-widest">Open Planner</button><button onClick={() => setActiveTab('matches')} className="bg-white/10 hover:bg-white/15 border border-white/10 text-white px-4 py-2 text-xs font-black uppercase tracking-widest">Match Logs</button><button onClick={() => setActiveTab('tasks')} className="bg-white/10 hover:bg-white/15 border border-white/10 text-white px-4 py-2 text-xs font-black uppercase tracking-widest">Tasks</button><button onClick={() => setActiveTab('roster')} className="bg-white/10 hover:bg-white/15 border border-white/10 text-white px-4 py-2 text-xs font-black uppercase tracking-widest">Roster</button></div></div><div className="glass-panel rounded-xl p-6 border-white/10"><div className="text-[10px] uppercase tracking-[0.28em] text-neutral-500 font-black mb-4">Next Operation</div><div className="text-2xl font-black text-white uppercase italic leading-tight">{nextEvent ? `${nextEvent.type || 'Event'} vs ${nextEvent.opponent || 'TBD'}` : 'No Event Scheduled'}</div><div className="mt-3 text-sm text-neutral-400">{nextEvent ? `${nextEvent.date || 'Date TBD'} @ ${nextEvent.time || 'Time TBD'} ${nextEvent.timezone || ''}` : 'Use Event Operations to schedule the next practice, scrim, or official.'}</div><div className="mt-5 pt-4 border-t border-white/10 grid grid-cols-2 gap-3"><div><div className="text-3xl font-black text-white">{dynamicMembers.length}</div><div className="text-[10px] uppercase tracking-widest text-neutral-500 font-black">Members</div></div><div><div className="text-3xl font-black text-white">{events.length}</div><div className="text-[10px] uppercase tracking-widest text-neutral-500 font-black">Upcoming</div></div></div></div></div><div className="grid grid-cols-1 md:grid-cols-4 gap-4"><div className="glass-panel rounded-xl p-4 border-white/10"><div className="text-[10px] uppercase tracking-widest text-neutral-500 font-black">Members</div><div className="mt-2 text-3xl font-black text-white">{dynamicMembers.length}</div></div><div className="glass-panel rounded-xl p-4 border-white/10"><div className="text-[10px] uppercase tracking-widest text-neutral-500 font-black">Events</div><div className="mt-2 text-3xl font-black text-white">{events.length}</div></div><div className="glass-panel rounded-xl p-4 border-white/10"><div className="text-[10px] uppercase tracking-widest text-neutral-500 font-black">Timezone</div><div className="mt-2 text-sm font-bold text-white truncate">{userTimezone}</div></div><div className="glass-panel rounded-xl p-4 border-white/10"><div className="text-[10px] uppercase tracking-widest text-neutral-500 font-black">Access</div><div className="mt-2 text-sm font-bold text-white">{accessLabel}</div></div></div><div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
+                    {!canAccessActiveTab && <AccessDenied activeLabel={activeLabel} accessLabel={accessLabel} onGoHome={() => setActiveTab('dashboard')} />}
+                    {activeTab === 'dashboard' && <div className="animate-fade-in space-y-6">
+                        <div className="grid grid-cols-1 xl:grid-cols-[1.25fr_0.75fr] gap-4">
+                            <div className="glass-panel rounded-xl p-6 border-white/10 overflow-hidden">
+                                <div className="flex flex-wrap items-center gap-2 mb-4">
+                                    <span className="text-[10px] uppercase tracking-[0.28em] text-red-400 font-black">Today Command</span>
+                                    <span className="text-[10px] uppercase tracking-widest border border-white/10 bg-white/5 text-neutral-400 px-2 py-1 rounded">{accessLabel}</span>
+                                </div>
+                                <h2 className="text-4xl md:text-5xl font-black text-white uppercase italic leading-none">{roleDashboard.title}</h2>
+                                <p className="mt-4 text-sm text-neutral-400 max-w-2xl">{roleDashboard.copy}</p>
+                                <div className="mt-6 flex flex-wrap gap-2">
+                                    {quickActions.map((action, index) => (
+                                        <button key={action.id} onClick={() => setActiveTab(action.id)} className={`${index === 0 ? 'bg-red-600 hover:bg-red-500 text-white' : 'bg-white/10 hover:bg-white/15 border border-white/10 text-white'} px-4 py-2 text-xs font-black uppercase tracking-widest`}>
+                                            {action.label}
+                                        </button>
+                                    ))}
+                                </div>
+                            </div>
+                            <div className="glass-panel rounded-xl p-6 border-white/10">
+                                <div className="text-[10px] uppercase tracking-[0.28em] text-neutral-500 font-black mb-4">Next Operation</div>
+                                <div className="text-2xl font-black text-white uppercase italic leading-tight">{nextEvent ? `${nextEvent.type || 'Event'} vs ${nextEvent.opponent || 'TBD'}` : 'No Event Scheduled'}</div>
+                                <div className="mt-3 text-sm text-neutral-400">{nextEvent ? `${nextEvent.date || 'Date TBD'} @ ${nextEvent.time || 'Time TBD'} ${nextEvent.timezone || ''}` : isStaff ? 'Use Event Operations to schedule the next practice, scrim, or official.' : 'No team event has been posted yet.'}</div>
+                                <div className="mt-5 pt-4 border-t border-white/10 grid grid-cols-2 gap-3">
+                                    <div><div className="text-3xl font-black text-white">{dynamicMembers.length}</div><div className="text-[10px] uppercase tracking-widest text-neutral-500 font-black">Members</div></div>
+                                    <div><div className="text-3xl font-black text-white">{events.length}</div><div className="text-[10px] uppercase tracking-widest text-neutral-500 font-black">Upcoming</div></div>
+                                </div>
+                            </div>
+                        </div>
+                        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                            <button onClick={() => setActiveTab('availability')} className="glass-panel rounded-xl p-4 border-white/10 text-left hover:border-red-900/40 transition"><div className="text-[10px] uppercase tracking-widest text-neutral-500 font-black">Available Today</div><div className="mt-2 text-3xl font-black text-white">{availableToday}/{dynamicMembers.length}</div></button>
+                            <button onClick={() => setActiveTab('calendar')} className="glass-panel rounded-xl p-4 border-white/10 text-left hover:border-red-900/40 transition"><div className="text-[10px] uppercase tracking-widest text-neutral-500 font-black">Events</div><div className="mt-2 text-3xl font-black text-white">{events.length}</div></button>
+                            <button onClick={() => setActiveTab('teamrequests')} className="glass-panel rounded-xl p-4 border-white/10 text-left hover:border-red-900/40 transition"><div className="text-[10px] uppercase tracking-widest text-neutral-500 font-black">Open Requests</div><div className="mt-2 text-3xl font-black text-white">{visibleRequestItems.filter(item => !['Done', 'Archived'].includes(item.status || 'Open')).length}</div></button>
+                            <div className="glass-panel rounded-xl p-4 border-white/10"><div className="text-[10px] uppercase tracking-widest text-neutral-500 font-black">Timezone</div><div className="mt-2 text-sm font-bold text-white truncate">{userTimezone}</div></div>
+                        </div>
+                        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
                         <div className="lg:col-span-4 space-y-8">
                             <CaptainsMessage />
-                            <Card className="border-red-900/20"><div className="absolute top-0 left-0 w-1 h-full bg-red-600/50"></div><h2 className="text-xl font-bold text-white mb-6 uppercase tracking-wide">Event Operations</h2><ScrimScheduler onSchedule={schedEvent} userTimezone={userTimezone} /></Card>
+                            {isStaff ? <Card className="border-red-900/20"><div className="absolute top-0 left-0 w-1 h-full bg-red-600/50"></div><h2 className="text-xl font-bold text-white mb-6 uppercase tracking-wide">Event Operations</h2><ScrimScheduler onSchedule={schedEvent} userTimezone={userTimezone} /></Card> : <Card className="border-red-900/20"><div className="absolute top-0 left-0 w-1 h-full bg-red-600/50"></div><h2 className="text-xl font-bold text-white mb-3 uppercase tracking-wide">Player Check-In</h2><p className="text-sm text-neutral-400 leading-relaxed mb-5">Keep your availability current and send anything staff should know before practice starts.</p><div className="grid grid-cols-1 gap-2"><ButtonSecondary onClick={() => setActiveTab('availability')} className="w-full text-xs">Availability</ButtonSecondary><ButtonSecondary onClick={() => setActiveTab('teamrequests')} className="w-full text-xs">Send Request</ButtonSecondary></div></Card>}
                         </div>
                         <div className="lg:col-span-8 space-y-8">
-                            <Card><h2 className="text-lg font-bold text-white mb-4 flex justify-between items-center uppercase tracking-wide"><span>Upcoming Events</span><span className="text-[10px] bg-red-900/30 text-red-400 border border-red-900/50 px-2 py-1 rounded font-bold">{events.length} ACTIVE</span></h2><div className="space-y-3 max-h-64 overflow-y-auto pr-2 scrollbar-thin scrollbar-thumb-neutral-700">{events.length > 0 ? events.map(ev => (<div key={ev.id} className="p-3 bg-black/40 rounded-xl border border-neutral-800 flex justify-between items-center group hover:border-red-900/50 transition-colors"><div><div className="font-bold text-white text-sm group-hover:text-red-400 transition-colors">{ev.type} <span className="text-neutral-500">vs</span> {ev.opponent || 'TBD'}</div><div className="text-xs text-neutral-400 mt-1">{ev.date} @ <span className="text-white font-mono">{ev.time}</span></div></div><button onClick={() => openModal('Delete Event', 'Remove?', () => deleteEvent(ev.id))} className="text-neutral-600 hover:text-red-500">×</button></div>)) : <div className="p-6 text-center text-sm text-neutral-500 border border-dashed border-neutral-800 rounded-xl">No active events scheduled.</div>}</div></Card>
+                            <Card><h2 className="text-lg font-bold text-white mb-4 flex justify-between items-center uppercase tracking-wide"><span>Needs Attention</span><span className="text-[10px] bg-red-900/30 text-red-400 border border-red-900/50 px-2 py-1 rounded font-bold">{attentionItems.length} ACTIVE</span></h2><div className="grid grid-cols-1 md:grid-cols-2 gap-3">{attentionItems.length > 0 ? attentionItems.map(item => (<button key={item.label} onClick={() => setActiveTab(item.tab)} className="p-4 bg-black/40 rounded-xl border border-neutral-800 text-left hover:border-red-900/50 transition-colors"><div className="text-3xl font-black text-white">{item.value}</div><div className="mt-1 text-[10px] uppercase tracking-widest text-neutral-500 font-black">{item.label}</div></button>)) : <div className="md:col-span-2 p-6 text-center text-sm text-neutral-500 border border-dashed border-neutral-800 rounded-xl">Nothing urgent is waiting right now.</div>}</div></Card>
+                            <Card><h2 className="text-lg font-bold text-white mb-4 flex justify-between items-center uppercase tracking-wide"><span>Upcoming Events</span><span className="text-[10px] bg-red-900/30 text-red-400 border border-red-900/50 px-2 py-1 rounded font-bold">{events.length} ACTIVE</span></h2><div className="space-y-3 max-h-64 overflow-y-auto pr-2 scrollbar-thin scrollbar-thumb-neutral-700">{events.length > 0 ? events.map(ev => (<div key={ev.id} className="p-3 bg-black/40 rounded-xl border border-neutral-800 flex justify-between items-center group hover:border-red-900/50 transition-colors"><div><div className="font-bold text-white text-sm group-hover:text-red-400 transition-colors">{ev.type} <span className="text-neutral-500">vs</span> {ev.opponent || 'TBD'}</div><div className="text-xs text-neutral-400 mt-1">{ev.date} @ <span className="text-white font-mono">{ev.time}</span></div></div>{isStaff && <button onClick={() => openModal('Delete Event', 'Remove?', () => deleteEvent(ev.id))} className="text-neutral-600 hover:text-red-500">×</button>}</div>)) : <div className="p-6 text-center text-sm text-neutral-500 border border-dashed border-neutral-800 rounded-xl">No active events scheduled.</div>}</div></Card>
                             <PerformanceWidget events={events} />
                         </div>
                     </div></div>}
                     {activeTab === 'calendar' && <TeamCalendar events={events} />}
                     {activeTab === 'bulletins' && <TeamBulletinBoard currentUserName={rosterName || currentUser.displayName || 'Unknown'} currentUserUid={currentUser.uid} isAdmin={isAdmin} />}
                     {activeTab === 'notifications' && <NotificationCenter events={events} />}
-                    {activeTab === 'announcements' && <Announcements currentUserName={rosterName || currentUser.displayName || 'Unknown'} />}
+                    {activeTab === 'announcements' && isAdmin && <Announcements currentUserName={rosterName || currentUser.displayName || 'Unknown'} />}
+                    {activeTab === 'teamrequests' && <TeamRequestCenter mode="team" members={dynamicMembers} currentUserName={currentMemberName} currentUserUid={currentUser.uid} isStaff={isStaff} />}
+                    {activeTab === 'coachrequests' && <TeamRequestCenter mode="coach" members={dynamicMembers} currentUserName={currentMemberName} currentUserUid={currentUser.uid} isStaff={isStaff} />}
+                    {activeTab === 'meetings' && <TeamRequestCenter mode="meetings" members={dynamicMembers} currentUserName={currentMemberName} currentUserUid={currentUser.uid} isStaff={isStaff} />}
                     {activeTab === 'availability' && <div className="animate-fade-in space-y-6"><div className="grid grid-cols-1 xl:grid-cols-[0.7fr_1.3fr] gap-6"><div className="space-y-6"><Card className="border-red-900/20"><div className="absolute top-0 left-0 w-1 h-full bg-red-600/50"></div><div className="text-[10px] uppercase tracking-[0.28em] text-red-400 font-black mb-3">Your Week</div><h2 className="text-2xl font-black text-white uppercase italic mb-5">Availability Editor</h2><div className="space-y-4"><div><label className="text-[10px] font-black text-red-500 uppercase mb-1 block">Day</label><Select value={day} onChange={e => setDay(e.target.value)}>{DAYS.map(d => <option key={d} value={d}>{d}</option>)}</Select><div className="mt-2 text-[11px] text-neutral-500">Editing availability for <span className="text-neutral-300 font-bold">{currentMemberName}</span> in <span className="text-neutral-300 font-bold">{userTimezone}</span>.</div></div><div className="grid grid-cols-2 gap-3"><div><label className="text-[10px] font-black text-red-500 uppercase mb-1 block">Start</label><Input type="time" value={start} onChange={e => setStart(e.target.value)} className="[color-scheme:dark]" /></div><div><label className="text-[10px] font-black text-red-500 uppercase mb-1 block">End</label><Input type="time" value={end} onChange={e => setEnd(e.target.value)} className="[color-scheme:dark]" /></div></div><div><label className="text-[10px] font-black text-red-500 uppercase mb-1 block">Pref. Role</label><div className="flex gap-2 overflow-x-auto pb-2 scrollbar-hide">{ROLES.map(r => (<button key={r} onClick={() => setRole(r)} className={`px-3 py-2 rounded-lg text-xs font-black border transition-all whitespace-nowrap flex items-center justify-center ${role === r ? 'bg-red-600 text-white border-red-500' : 'bg-black/50 border-neutral-800 text-neutral-500 hover:text-white'}`}>{ROLE_ABBREVIATIONS[r] || r}</button>))}</div></div><div className="pt-2 flex gap-2"><ButtonPrimary onClick={saveAvail} disabled={saveStatus !== 'idle'} className="flex-1">{saveStatus === 'idle' ? 'Save Slot' : 'Saving...'}</ButtonPrimary><ButtonSecondary onClick={() => openModal('Clear Day', `Clear all for ${day}?`, clearDay)}>Clear</ButtonSecondary></div></div></Card><LeaveLogger members={dynamicMembers} rosterName={rosterName} /></div><div className="space-y-6"><div className="grid grid-cols-1 xl:grid-cols-2 gap-6"><Card><h2 className="text-lg font-bold text-white mb-4 uppercase tracking-wide">Team Heatmap</h2><AvailabilityHeatmap availabilities={displayAvail} members={dynamicMembers} /></Card><Card><div className="text-[10px] uppercase tracking-[0.28em] text-neutral-500 font-black mb-3">Today</div><div className="text-4xl font-black text-white">{availableToday}/{dynamicMembers.length}</div><div className="mt-2 text-sm text-neutral-400">members have availability logged for {todayName}.</div><div className="mt-5 pt-4 border-t border-white/10 text-xs text-neutral-500">Keep this current before scrims so captains can plan realistic blocks.</div></Card></div><Card><h2 className="text-xl font-bold text-white mb-6 uppercase tracking-wide">Weekly Timeline <span className="text-neutral-500 text-sm normal-case">({userTimezone})</span></h2><div className="overflow-x-auto scrollbar-thin scrollbar-thumb-neutral-700"><table className="w-full text-left border-collapse min-w-[600px]"><thead><tr className="border-b border-neutral-800"><th className="p-3 text-xs font-bold text-neutral-500 uppercase tracking-wider w-32">Team Member</th>{SHORT_DAYS.map(day => (<th key={day} className="p-3 text-xs font-bold text-red-600 uppercase tracking-wider text-center border-l border-neutral-800">{day}</th>))}</tr></thead><tbody className="divide-y divide-neutral-800/50">{dynamicMembers.map(member => (<tr key={member} className="hover:bg-neutral-800/30 transition-colors group"><td className="p-4 font-bold text-white text-sm flex items-center gap-2"><div className="w-2 h-2 rounded-full bg-red-500 shadow-red-500/50 shadow-sm"></div>{member}</td>{DAYS.map((day) => { const slots = (displayAvail[member] || []).filter(s => s.day === day); return (<td key={day} className="p-2 align-middle border-l border-neutral-800/50"><div className="flex flex-col gap-1 items-center justify-center">{slots.length > 0 ? slots.map((s, i) => (<div key={i} className="bg-gradient-to-br from-red-600 to-red-700 text-white text-[10px] font-bold px-2 py-1 rounded w-full text-center shadow-md whitespace-nowrap flex items-center justify-center gap-1">{s.start}-{s.end}<span className="opacity-75 ml-1 text-[9px] border border-white/20 px-1 rounded bg-black/20">{ROLE_ABBREVIATIONS[s.role] || s.role}</span></div>)) : <div className="h-1 w-4 bg-neutral-800 rounded-full"></div>}</div></td>); })}</tr>))}</tbody></table></div></Card></div></div></div>}
-                    {activeTab === 'coachroom' && <CoachRoom members={dynamicMembers} currentUserName={rosterName || currentUser.displayName || 'Coach'} />}
-                    {activeTab === 'practice' && <PracticePlanner members={dynamicMembers} currentUserName={rosterName || currentUser.displayName || 'Unknown'} />}
+                    {activeTab === 'coachroom' && isStaff && <CoachRoom members={dynamicMembers} currentUserName={rosterName || currentUser.displayName || 'Coach'} />}
+                    {activeTab === 'practice' && isStaff && <PracticePlanner members={dynamicMembers} currentUserName={rosterName || currentUser.displayName || 'Unknown'} />}
                     {activeTab === 'playbook' && <div className="animate-fade-in h-[80vh]"><Playbook /></div>}
                     {activeTab === 'comps' && <div className="animate-fade-in h-full"><TeamComps members={dynamicMembers} /></div>}
                     {activeTab === 'matches' && <div className="animate-fade-in"><MatchHistory currentUser={currentUser} members={dynamicMembers} /></div>}
-                    {activeTab === 'strats' && <div className="animate-fade-in h-[85vh]"><StratBook /></div>}
+                    {activeTab === 'strats' && isStaff && <div className="animate-fade-in h-[85vh]"><StratBook /></div>}
                     {activeTab === 'stratlibrary' && <StratLibrary />}
                     {activeTab === 'lineups' && <div className="animate-fade-in h-[85vh]"><LineupLibrary /></div>}
-                    {activeTab === 'roster' && <div className="animate-fade-in h-full flex-1 flex flex-col"><RosterManager members={dynamicMembers} events={events} canManageRoster={isAdmin} /></div>}
-                    {activeTab === 'prep' && <MatchPrep members={dynamicMembers} events={events} currentUserName={rosterName || currentUser.displayName || 'Unknown'} />}
+                    {activeTab === 'roster' && isAdmin && <div className="animate-fade-in h-full flex-1 flex flex-col"><RosterManager members={dynamicMembers} events={events} canManageRoster={isAdmin} /></div>}
+                    {activeTab === 'prep' && isStaff && <MatchPrep members={dynamicMembers} events={events} currentUserName={rosterName || currentUser.displayName || 'Unknown'} />}
                     {activeTab === 'tasks' && <ActionItems members={dynamicMembers} />}
                     {activeTab === 'playernotes' && isAdmin && <PlayerAdminNotes members={dynamicMembers} currentUserName={rosterName || currentUser.displayName || 'Admin'} />}
                     {activeTab === 'partners' && isAdmin && <div className="animate-fade-in h-full"><PartnerDirectory /></div>}
                     {activeTab === 'content' && isAdmin && <div className="animate-fade-in h-full"><ContentManager /></div>}
                     {activeTab === 'audit' && isAdmin && <AuditLog />}
                     {activeTab === 'admin' && isAdmin && <div className="animate-fade-in h-full"><AdminPanel /></div>}
-                    {activeTab === 'mapveto' && <div className="animate-fade-in h-[80vh]"><MapVeto /></div>}
+                    {activeTab === 'mapveto' && isStaff && <div className="animate-fade-in h-[80vh]"><MapVeto /></div>}
 
                 </div>
             </main>

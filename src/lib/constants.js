@@ -1,13 +1,14 @@
 export const ADMIN_UIDS = ["M9FzRywhRIdUveh5JKUfQgJtlIB3", "SiPLxB20VzVGBZL3rTM42FsgEy52", "pmXgTX5dxbVns0nnO54kl1BR07A3"];
 export const ADMIN_ROLES = ["Manager"];
 export const ADMIN_ACCESS_ROLES = ["Owner", "Admin", "Manager"];
+export const STAFF_ACCESS_ROLES = ["Owner", "Admin", "Manager", "Head Coach", "Coach"];
 export const DAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
 export const SHORT_DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 export const MAPS = ["Ascent", "Bind", "Breeze", "Fracture", "Haven", "Icebox", "Lotus", "Pearl", "Split", "Sunset", "Abyss", "Corrode"];
-export const ROLES = ["Flex", "Duelist", "Initiator", "Controller", "Sentinel", "Coach"];
+export const ROLES = ["Flex", "Duelist", "Initiator", "Controller", "Sentinel", "Coach", "Head Coach", "Manager"];
 export const RANKS = ["Unranked", "Iron", "Bronze", "Silver", "Gold", "Platinum", "Diamond", "Ascendant", "Immortal", "Radiant"];
 export const AGENT_NAMES = ["Jett", "Raze", "Reyna", "Yoru", "Phoenix", "Neon", "Iso", "Tejo", "Vyse", "Waylay", "Omen", "Astra", "Brimstone", "Viper", "Harbor", "Clove", "Sova", "Fade", "Skye", "Breach", "KAY/O", "Gekko", "Killjoy", "Cypher", "Sage", "Chamber", "Deadlock", "Miks", "Veto"];
-export const ROLE_ABBREVIATIONS = { Flex: "FLX", Duelist: "DUEL", Initiator: "INIT", Controller: "CTRL", Sentinel: "SENT", Coach: "HC" };
+export const ROLE_ABBREVIATIONS = { Flex: "FLX", Duelist: "DUEL", Initiator: "INIT", Controller: "CTRL", Sentinel: "SENT", Coach: "C", "Head Coach": "HC", Manager: "MGR" };
 export const TEAM_LOGO = "/syrix-logo.jpeg";
 
 export const UTILITY_TYPES = [
