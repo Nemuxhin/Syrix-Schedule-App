@@ -4356,6 +4356,511 @@ function TeamRequestCenter({ mode = 'team', members, currentUserName, currentUse
     );
 }
 
+function RoleHome({ type, members, events, requests, openTaskCount, availableToday, setActiveTab }) {
+    const isManager = type === 'manager';
+    const openRequests = requests.filter(item => !['Done', 'Archived'].includes(item.status || 'Open'));
+    const coachRequests = openRequests.filter(item => item.direction === 'staff_to_player');
+    const nextEvent = events[0];
+    const tiles = isManager
+        ? [
+            ['Roster', members.length, 'roster'],
+            ['Open Tasks', openTaskCount, 'tasks'],
+            ['Requests', openRequests.length, 'teamrequests'],
+            ['Events', events.length, 'calendar']
+        ]
+        : [
+            ['Players', members.length, 'profile'],
+            ['Coach Requests', coachRequests.length, 'coachrequests'],
+            ['Practice Plans', 'Open', 'coachroom'],
+            ['Reviews', 'Post', 'reviews']
+        ];
+    const actions = isManager
+        ? [
+            ['Roster Manager', 'Update roles, player details, and staff access.', 'roster'],
+            ['Announcements', 'Post important team updates.', 'announcements'],
+            ['Scrim Pipeline', 'Move leads through contact and review.', 'pipeline'],
+            ['Access & Roles', 'Check what each role can see and manage.', 'access']
+        ]
+        : [
+            ['Coach Room', 'Build in-depth player and team practice plans.', 'coachroom'],
+            ['Practice Review', 'Record what happened after a session.', 'reviews'],
+            ['Player Notes', 'Add private development feedback.', 'playernotes'],
+            ['Match Prep', 'Prepare opponent files and linked strategies.', 'prep']
+        ];
+
+    return (
+        <div className="animate-fade-in space-y-6">
+            <Card>
+                <div className="flex flex-col xl:flex-row xl:items-end xl:justify-between gap-5">
+                    <div>
+                        <div className="text-[10px] uppercase tracking-[0.28em] text-red-400 font-black mb-3">{isManager ? 'Manager Home' : 'Coach Home'}</div>
+                        <h2 className="text-3xl md:text-4xl font-black text-white uppercase italic leading-none">{isManager ? 'Operations Desk' : 'Coaching Desk'}</h2>
+                        <p className="mt-3 text-sm text-neutral-400 max-w-3xl">
+                            {isManager
+                                ? 'A cleaner home for the team operations work: roster, access, announcements, events, and open queues.'
+                                : 'A focused coaching view for practice planning, player follow-ups, session review, and next-match preparation.'}
+                        </p>
+                    </div>
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-3 min-w-[24rem]">
+                        {tiles.map(([label, value, tab]) => (
+                            <button key={label} onClick={() => setActiveTab(tab)} className="bg-black/40 border border-white/10 p-3 rounded-xl text-left hover:border-red-500/35 transition">
+                                <div className="text-[10px] uppercase tracking-widest text-neutral-500 font-black">{label}</div>
+                                <div className="mt-1 text-2xl font-black text-white">{value}</div>
+                            </button>
+                        ))}
+                    </div>
+                </div>
+            </Card>
+            <div className="grid grid-cols-1 xl:grid-cols-[0.75fr_1.25fr] gap-6">
+                <Card>
+                    <div className="text-[10px] uppercase tracking-[0.28em] text-neutral-500 font-black mb-3">Next Priority</div>
+                    <h3 className="text-2xl font-black text-white uppercase italic">{nextEvent ? `${nextEvent.type || 'Event'} vs ${nextEvent.opponent || 'TBD'}` : 'No Event Scheduled'}</h3>
+                    <p className="mt-3 text-sm text-neutral-400">
+                        {nextEvent ? `${nextEvent.date || 'Date TBD'} at ${nextEvent.time || 'Time TBD'} on ${nextEvent.map || 'map TBD'}.` : 'Schedule the next practice, scrim, or official so everyone has one shared point of truth.'}
+                    </p>
+                    <div className="mt-5 grid grid-cols-2 gap-3">
+                        <div className="rounded-xl border border-white/10 bg-white/5 p-3"><div className="text-[10px] uppercase tracking-widest text-neutral-500 font-black">Available Today</div><div className="mt-1 text-xl font-black text-white">{availableToday}/{members.length}</div></div>
+                        <div className="rounded-xl border border-white/10 bg-white/5 p-3"><div className="text-[10px] uppercase tracking-widest text-neutral-500 font-black">Needs Action</div><div className="mt-1 text-xl font-black text-white">{openRequests.length + openTaskCount}</div></div>
+                    </div>
+                </Card>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {actions.map(([title, copy, tab]) => (
+                        <button key={title} onClick={() => setActiveTab(tab)} className="glass-panel rounded-lg p-5 border-white/10 text-left hover:border-red-500/35 transition">
+                            <div className="text-[10px] uppercase tracking-[0.22em] text-red-400 font-black mb-3">{title}</div>
+                            <p className="text-sm text-neutral-400 leading-relaxed">{copy}</p>
+                        </button>
+                    ))}
+                </div>
+            </div>
+        </div>
+    );
+}
+
+function PlayerProfile({ members, currentMemberName, displayAvail, events, requests, isStaff }) {
+    const [profiles, setProfiles] = useState([]);
+    const [selected, setSelected] = useState(currentMemberName);
+    const [publicNotes, setPublicNotes] = useState([]);
+
+    useEffect(() => {
+        setSelected(prev => (isStaff ? prev || members[0] || currentMemberName : currentMemberName));
+    }, [currentMemberName, isStaff, members]);
+
+    useEffect(() => {
+        const unsubRoster = onSnapshot(collection(db, 'roster'), (snap) => {
+            const rows = [];
+            snap.forEach(d => rows.push({ id: d.id, ...d.data() }));
+            setProfiles(sortRosterByRole(rows));
+        });
+        const unsubNotes = onSnapshot(collection(db, 'admin_player_notes'), (snap) => {
+            const rows = [];
+            snap.forEach(d => rows.push({ id: d.id, ...d.data() }));
+            setPublicNotes(rows.filter(note => note.visibleToPlayer === true));
+        }, () => setPublicNotes([]));
+        return () => { unsubRoster(); unsubNotes(); };
+    }, []);
+
+    const profile = profiles.find(item => item.id === selected) || { id: selected };
+    const profileEvents = events.filter(event => !event.players || event.players?.includes(selected)).slice(0, 5);
+    const profileRequests = requests.filter(item => item.player === selected || item.author === selected || item.player === 'Full Team').slice(0, 6);
+    const notes = publicNotes.filter(note => note.player === selected).slice(0, 4);
+    const slots = displayAvail[selected] || [];
+    const agentList = Array.isArray(profile.agents) ? profile.agents : String(profile.agents || '').split(',').map(agent => agent.trim()).filter(Boolean);
+
+    return (
+        <div className="animate-fade-in space-y-6">
+            <Card>
+                <div className="flex flex-col md:flex-row md:items-end md:justify-between gap-4">
+                    <div>
+                        <div className="text-[10px] uppercase tracking-[0.28em] text-red-400 font-black mb-3">Player Profile</div>
+                        <h2 className="text-3xl md:text-4xl font-black text-white uppercase italic leading-none">{profile.id || selected}</h2>
+                        <p className="mt-3 text-sm text-neutral-400">A clean read-only snapshot for role, agents, availability, recent activity, and visible coach feedback.</p>
+                    </div>
+                    {isStaff && (
+                        <Select value={selected} onChange={e => setSelected(e.target.value)} className="md:max-w-64">
+                            {members.map(member => <option key={member} value={member}>{member}</option>)}
+                        </Select>
+                    )}
+                </div>
+            </Card>
+            <div className="grid grid-cols-1 xl:grid-cols-[0.8fr_1.2fr] gap-6">
+                <Card>
+                    <div className="grid grid-cols-2 gap-3">
+                        {[
+                            ['Role', profile.role || 'Player'],
+                            ['Rank', profile.rank || profile.currentRank || 'Unset'],
+                            ['Game ID', profile.gameId || profile.riotId || 'Unset'],
+                            ['Timezone', profile.timezone || 'Team default']
+                        ].map(([label, value]) => (
+                            <div key={label} className="rounded-xl border border-white/10 bg-black/35 p-3">
+                                <div className="text-[10px] uppercase tracking-widest text-neutral-500 font-black">{label}</div>
+                                <div className="mt-1 text-sm font-black text-white break-words">{value}</div>
+                            </div>
+                        ))}
+                    </div>
+                    <div className="mt-5">
+                        <div className="text-[10px] uppercase tracking-widest text-red-400 font-black mb-2">Agents</div>
+                        <div className="flex flex-wrap gap-2">
+                            {agentList.length ? agentList.map(agent => <span key={agent} className="rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-xs font-black text-white">{agent}</span>) : <span className="text-sm text-neutral-500">No agents listed.</span>}
+                        </div>
+                    </div>
+                    {profile.notes && <p className="mt-5 text-sm text-neutral-400 whitespace-pre-wrap leading-relaxed">{profile.notes}</p>}
+                </Card>
+                <div className="space-y-6">
+                    <Card>
+                        <div className="text-[10px] uppercase tracking-[0.24em] text-red-400 font-black mb-4">Weekly Availability</div>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                            {DAYS.map(dayName => {
+                                const daySlots = slots.filter(slot => slot.day === dayName);
+                                return (
+                                    <div key={dayName} className="rounded-lg border border-white/10 bg-black/35 p-3">
+                                        <div className="text-[10px] uppercase tracking-widest text-neutral-500 font-black">{dayName}</div>
+                                        <div className="mt-1 text-sm text-white">{daySlots.length ? daySlots.map(slot => `${slot.start}-${slot.end}`).join(', ') : 'Unavailable'}</div>
+                                    </div>
+                                );
+                            })}
+                        </div>
+                    </Card>
+                    <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+                        <Card className="lg:col-span-1">
+                            <div className="text-[10px] uppercase tracking-[0.24em] text-red-400 font-black mb-3">Recent Events</div>
+                            <div className="space-y-2">{profileEvents.length ? profileEvents.map(event => <div key={event.id} className="rounded-lg border border-white/10 bg-white/5 p-3 text-xs text-neutral-300">{event.date} / {event.type || 'Event'} vs {event.opponent || 'TBD'}</div>) : <div className="text-sm text-neutral-500">No recent events.</div>}</div>
+                        </Card>
+                        <Card className="lg:col-span-1">
+                            <div className="text-[10px] uppercase tracking-[0.24em] text-red-400 font-black mb-3">Requests</div>
+                            <div className="space-y-2">{profileRequests.length ? profileRequests.map(item => <div key={item.id} className="rounded-lg border border-white/10 bg-white/5 p-3 text-xs text-neutral-300">{item.kind || 'Request'} / {item.status || 'Open'}</div>) : <div className="text-sm text-neutral-500">No requests.</div>}</div>
+                        </Card>
+                        <Card className="lg:col-span-1">
+                            <div className="text-[10px] uppercase tracking-[0.24em] text-red-400 font-black mb-3">Visible Notes</div>
+                            <div className="space-y-2">{notes.length ? notes.map(note => <div key={note.id} className="rounded-lg border border-white/10 bg-white/5 p-3 text-xs text-neutral-300 whitespace-pre-wrap">{note.improvement || note.notes || 'Coach feedback'}</div>) : <div className="text-sm text-neutral-500">No player-visible notes.</div>}</div>
+                        </Card>
+                    </div>
+                </div>
+            </div>
+        </div>
+    );
+}
+
+function PracticeReview({ members, currentUserName }) {
+    const [reviews, setReviews] = useState([]);
+    const [saving, setSaving] = useState(false);
+    const [form, setForm] = useState({ title: '', date: new Date().toISOString().split('T')[0], map: MAPS[0], rating: '7', attendees: [], happened: '', improved: '', needsWork: '', nextFocus: '', vod: '' });
+    const addToast = useToast();
+
+    useEffect(() => {
+        const unsub = onSnapshot(collection(db, 'practice_reviews'), (snap) => {
+            const rows = [];
+            snap.forEach(d => rows.push({ id: d.id, ...d.data() }));
+            setReviews(rows.sort((a, b) => new Date(b.date || b.createdAt || 0) - new Date(a.date || a.createdAt || 0)));
+        });
+        return () => unsub();
+    }, []);
+
+    const toggleAttendee = (member) => setForm(prev => ({ ...prev, attendees: prev.attendees.includes(member) ? prev.attendees.filter(name => name !== member) : [...prev.attendees, member] }));
+    const saveReview = async () => {
+        if (!form.title.trim()) return addToast('Review title is required', 'error');
+        setSaving(true);
+        try {
+            await addDoc(collection(db, 'practice_reviews'), {
+                ...form,
+                title: form.title.trim(),
+                rating: Number(form.rating) || 0,
+                createdBy: currentUserName || 'Coach',
+                createdAt: new Date().toISOString(),
+                updatedAt: new Date().toISOString()
+            });
+            await writeAuditLog('Practice review added', form.title.trim(), currentUserName || 'Coach');
+            setForm({ title: '', date: new Date().toISOString().split('T')[0], map: MAPS[0], rating: '7', attendees: [], happened: '', improved: '', needsWork: '', nextFocus: '', vod: '' });
+            addToast('Practice review saved');
+        } catch (error) {
+            console.error('Practice review failed:', error);
+            addToast('Unable to save review', 'error');
+        } finally {
+            setSaving(false);
+        }
+    };
+
+    const removeReview = async (review) => {
+        await deleteDoc(doc(db, 'practice_reviews', review.id));
+        await writeAuditLog('Practice review deleted', review.title, currentUserName || 'Coach');
+        addToast('Practice review removed');
+    };
+
+    return (
+        <div className="animate-fade-in grid grid-cols-1 xl:grid-cols-[0.85fr_1.15fr] gap-6">
+            <Card>
+                <div className="text-[10px] uppercase tracking-[0.28em] text-red-400 font-black mb-3">Post Session</div>
+                <h2 className="text-3xl font-black text-white uppercase italic mb-5">Practice Review</h2>
+                <div className="space-y-4">
+                    <Input value={form.title} onChange={e => setForm({ ...form, title: e.target.value })} placeholder="Practice review title" />
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                        <Input type="date" value={form.date} onChange={e => setForm({ ...form, date: e.target.value })} className="[color-scheme:dark]" />
+                        <Select value={form.map} onChange={e => setForm({ ...form, map: e.target.value })}>{MAPS.map(map => <option key={map}>{map}</option>)}</Select>
+                        <Input type="number" min="1" max="10" value={form.rating} onChange={e => setForm({ ...form, rating: e.target.value })} placeholder="Rating 1-10" />
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                        {members.map(member => <button key={member} onClick={() => toggleAttendee(member)} className={`px-3 py-2 rounded-lg border text-[10px] font-black uppercase tracking-widest ${form.attendees.includes(member) ? 'bg-red-600 border-red-500 text-white' : 'bg-black/40 border-white/10 text-neutral-500 hover:text-white'}`}>{member}</button>)}
+                    </div>
+                    {['happened', 'improved', 'needsWork', 'nextFocus'].map(key => (
+                        <textarea key={key} value={form[key]} onChange={e => setForm({ ...form, [key]: e.target.value })} placeholder={key === 'happened' ? 'What actually happened?' : key === 'improved' ? 'What improved?' : key === 'needsWork' ? 'What needs work next?' : 'Next focus / homework...'} className="w-full h-24 bg-black/40 border border-neutral-800 rounded-xl p-3 text-white text-sm outline-none focus:border-red-600 placeholder-neutral-600 resize-y" />
+                    ))}
+                    <Input value={form.vod} onChange={e => setForm({ ...form, vod: e.target.value })} placeholder="VOD, notes, or reference link" />
+                    <ButtonPrimary onClick={saveReview} disabled={saving} className="w-full py-3 text-xs">{saving ? 'Saving...' : 'Save Review'}</ButtonPrimary>
+                </div>
+            </Card>
+            <Card>
+                <div className="text-[10px] uppercase tracking-[0.28em] text-neutral-500 font-black mb-3">Review History</div>
+                <div className="space-y-3 max-h-[78vh] overflow-y-auto pr-2 custom-scrollbar">
+                    {reviews.length ? reviews.map(review => (
+                        <div key={review.id} className="rounded-xl border border-white/10 bg-black/45 p-4">
+                            <div className="flex items-start justify-between gap-3">
+                                <div>
+                                    <div className="flex flex-wrap gap-2 mb-2">
+                                        <span className="text-[9px] uppercase tracking-widest bg-red-950/25 border border-red-900/40 text-red-300 px-2 py-1 rounded">{review.map}</span>
+                                        <span className="text-[9px] uppercase tracking-widest bg-white/5 border border-white/10 text-neutral-400 px-2 py-1 rounded">{review.rating}/10</span>
+                                    </div>
+                                    <div className="text-xl font-black text-white uppercase italic">{review.title}</div>
+                                    <div className="mt-1 text-[10px] uppercase tracking-widest text-neutral-500">{review.date || 'Date TBD'} / {(review.attendees || []).length} attended</div>
+                                </div>
+                                <button onClick={() => removeReview(review)} className="text-neutral-600 hover:text-red-500 text-xl leading-none">×</button>
+                            </div>
+                            {['happened', 'improved', 'needsWork', 'nextFocus'].map(key => review[key] && <p key={key} className="mt-3 text-sm text-neutral-300 whitespace-pre-wrap"><span className="text-neutral-500 font-black uppercase">{key.replace(/([A-Z])/g, ' $1')}: </span>{review[key]}</p>)}
+                            {review.vod && <a href={review.vod} target="_blank" rel="noreferrer" className="mt-3 inline-flex text-[10px] font-black uppercase tracking-widest text-red-400 hover:text-white">Open Link</a>}
+                        </div>
+                    )) : <div className="p-8 text-center text-sm text-neutral-500 border border-dashed border-neutral-800 rounded-xl">No practice reviews yet.</div>}
+                </div>
+            </Card>
+        </div>
+    );
+}
+
+function ScrimPipeline({ currentUserName }) {
+    const stages = ['Requested', 'Contacted', 'Confirmed', 'Completed', 'Reviewed'];
+    const [items, setItems] = useState([]);
+    const [form, setForm] = useState({ opponent: '', date: '', time: '', map: 'TBD', contact: '', notes: '' });
+    const [saving, setSaving] = useState(false);
+    const addToast = useToast();
+
+    useEffect(() => {
+        const unsub = onSnapshot(collection(db, 'scrim_pipeline'), (snap) => {
+            const rows = [];
+            snap.forEach(d => rows.push({ id: d.id, ...d.data() }));
+            setItems(rows.sort((a, b) => new Date(a.date || '2999-12-31') - new Date(b.date || '2999-12-31')));
+        });
+        return () => unsub();
+    }, []);
+
+    const createLead = async () => {
+        if (!form.opponent.trim()) return addToast('Opponent is required', 'error');
+        setSaving(true);
+        try {
+            await addDoc(collection(db, 'scrim_pipeline'), { ...form, opponent: form.opponent.trim(), stage: 'Requested', createdBy: currentUserName || 'Staff', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() });
+            await writeAuditLog('Scrim lead added', form.opponent.trim(), currentUserName || 'Staff');
+            setForm({ opponent: '', date: '', time: '', map: 'TBD', contact: '', notes: '' });
+            addToast('Scrim lead added');
+        } catch (error) {
+            console.error('Scrim lead failed:', error);
+            addToast('Unable to add scrim lead', 'error');
+        } finally {
+            setSaving(false);
+        }
+    };
+
+    const updateStage = async (item, stage) => {
+        await updateDoc(doc(db, 'scrim_pipeline', item.id), { stage, updatedAt: new Date().toISOString(), updatedBy: currentUserName || 'Staff' });
+        addToast('Pipeline updated');
+    };
+
+    const removeLead = async (item) => {
+        await deleteDoc(doc(db, 'scrim_pipeline', item.id));
+        await writeAuditLog('Scrim lead deleted', item.opponent, currentUserName || 'Staff');
+        addToast('Scrim lead removed');
+    };
+
+    return (
+        <div className="animate-fade-in space-y-6">
+            <Card>
+                <div className="grid grid-cols-1 xl:grid-cols-[0.7fr_1.3fr] gap-6">
+                    <div>
+                        <div className="text-[10px] uppercase tracking-[0.28em] text-red-400 font-black mb-3">Scrim / Tryout</div>
+                        <h2 className="text-3xl font-black text-white uppercase italic mb-4">Pipeline</h2>
+                        <div className="space-y-3">
+                            <Input value={form.opponent} onChange={e => setForm({ ...form, opponent: e.target.value })} placeholder="Opponent / team name" />
+                            <div className="grid grid-cols-2 gap-3"><Input type="date" value={form.date} onChange={e => setForm({ ...form, date: e.target.value })} className="[color-scheme:dark]" /><Input type="time" value={form.time} onChange={e => setForm({ ...form, time: e.target.value })} className="[color-scheme:dark]" /></div>
+                            <Select value={form.map} onChange={e => setForm({ ...form, map: e.target.value })}><option>TBD</option>{MAPS.map(map => <option key={map}>{map}</option>)}</Select>
+                            <Input value={form.contact} onChange={e => setForm({ ...form, contact: e.target.value })} placeholder="Contact link / Discord" />
+                            <textarea value={form.notes} onChange={e => setForm({ ...form, notes: e.target.value })} placeholder="Notes, rules, tryout context..." className="w-full h-28 bg-black/40 border border-neutral-800 rounded-xl p-3 text-white text-sm outline-none focus:border-red-600 placeholder-neutral-600 resize-y" />
+                            <ButtonPrimary onClick={createLead} disabled={saving} className="w-full py-3 text-xs">{saving ? 'Adding...' : 'Add Lead'}</ButtonPrimary>
+                        </div>
+                    </div>
+                    <div className="grid grid-cols-1 md:grid-cols-5 gap-3">
+                        {stages.map(stage => (
+                            <div key={stage} className="rounded-xl border border-white/10 bg-black/30 p-3 min-h-64">
+                                <div className="text-[10px] uppercase tracking-widest text-red-400 font-black mb-3">{stage}</div>
+                                <div className="space-y-3">
+                                    {items.filter(item => (item.stage || 'Requested') === stage).map(item => (
+                                        <div key={item.id} className="rounded-lg border border-white/10 bg-white/5 p-3">
+                                            <div className="text-sm font-black text-white">{item.opponent}</div>
+                                            <div className="mt-1 text-[10px] text-neutral-500">{item.date || 'Date TBD'} {item.time || ''}</div>
+                                            <div className="mt-1 text-[10px] text-neutral-500">{item.map || 'TBD'}</div>
+                                            {item.notes && <p className="mt-2 text-xs text-neutral-400 line-clamp-3">{item.notes}</p>}
+                                            <Select value={item.stage || 'Requested'} onChange={e => updateStage(item, e.target.value)} className="mt-3 text-[10px] py-2">{stages.map(option => <option key={option}>{option}</option>)}</Select>
+                                            <button onClick={() => removeLead(item)} className="mt-2 text-[10px] font-black uppercase tracking-widest text-neutral-600 hover:text-red-400">Delete</button>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            </Card>
+        </div>
+    );
+}
+
+function AccessRolesGuide({ accessLabel }) {
+    const roles = [
+        ['Owner', 'Full control. Can delete admin access, manage rules-sensitive settings, and recover the team hub.'],
+        ['Admin', 'Runs the site day to day: roster manager, content, partners, announcements, audit, and player notes.'],
+        ['Manager', 'Admin-level operational access for roster, events, comms, and team management.'],
+        ['Head Coach / Coach', 'Staff access for strategy, planning, match prep, coach requests, practice reports, and reviews.'],
+        ['Player', 'Team access for availability, profile, requests, bulletins, matches, strategy library, and tasks.']
+    ];
+    return (
+        <div className="animate-fade-in space-y-6">
+            <Card>
+                <div className="text-[10px] uppercase tracking-[0.28em] text-red-400 font-black mb-3">Access Clarity</div>
+                <h2 className="text-3xl md:text-4xl font-black text-white uppercase italic leading-none">Access & Roles</h2>
+                <p className="mt-3 text-sm text-neutral-400">You are currently signed in with <span className="text-white font-black">{accessLabel}</span> access. This page explains what each role is meant to handle.</p>
+            </Card>
+            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+                {roles.map(([role, copy]) => (
+                    <Card key={role}>
+                        <div className="text-[10px] uppercase tracking-[0.24em] text-red-400 font-black mb-3">{role}</div>
+                        <p className="text-sm text-neutral-400 leading-relaxed">{copy}</p>
+                    </Card>
+                ))}
+            </div>
+        </div>
+    );
+}
+
+function GlobalSearch({ isAdmin, setActiveTab }) {
+    const [queryText, setQueryText] = useState('');
+    const [rows, setRows] = useState([]);
+    const searchableCollections = useMemo(() => [
+        ['roster', 'Player', 'profile'],
+        ['strats', 'Strat', 'stratlibrary'],
+        ['external_strats', 'Uploaded Strat', 'stratlibrary'],
+        ['team_bulletins', 'Bulletin', 'bulletins'],
+        ['events', 'Event', 'calendar'],
+        ['playbooks', 'Playbook', 'playbook'],
+        ['tasks', 'Task', 'tasks'],
+        ...(isAdmin ? [['admin_player_notes', 'Player Note', 'playernotes']] : [])
+    ], [isAdmin]);
+
+    useEffect(() => {
+        const unsubs = searchableCollections.map(([name, label, tab]) => onSnapshot(collection(db, name), (snap) => {
+            setRows(prev => {
+                const withoutCollection = prev.filter(item => item.collection !== name);
+                const next = [];
+                snap.forEach(d => {
+                    const data = d.data();
+                    const title = data.title || data.name || data.opponent || data.player || d.id;
+                    const body = [data.notes, data.body, data.goals, data.drills, data.kind, data.map, data.role, data.status].filter(Boolean).join(' ');
+                    next.push({ id: `${name}-${d.id}`, collection: name, label, tab, title, body });
+                });
+                return [...withoutCollection, ...next];
+            });
+        }, () => {}));
+        return () => unsubs.forEach(unsub => unsub());
+    }, [searchableCollections]);
+
+    const results = rows.filter(item => `${item.title} ${item.body} ${item.label}`.toLowerCase().includes(queryText.toLowerCase())).slice(0, 60);
+
+    return (
+        <div className="animate-fade-in space-y-6">
+            <Card>
+                <div className="text-[10px] uppercase tracking-[0.28em] text-red-400 font-black mb-3">Quick Find</div>
+                <h2 className="text-3xl md:text-4xl font-black text-white uppercase italic leading-none mb-5">Search Hub</h2>
+                <Input value={queryText} onChange={e => setQueryText(e.target.value)} placeholder="Search players, strats, bulletins, events, tasks, notes..." className="text-lg py-4" />
+            </Card>
+            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+                {queryText && results.length ? results.map(item => (
+                    <button key={item.id} onClick={() => setActiveTab(item.tab)} className="glass-panel rounded-lg p-4 border-white/10 text-left hover:border-red-500/35 transition">
+                        <div className="text-[10px] uppercase tracking-[0.24em] text-red-400 font-black mb-2">{item.label}</div>
+                        <div className="text-lg font-black text-white truncate">{item.title}</div>
+                        {item.body && <p className="mt-2 text-xs text-neutral-500 line-clamp-2">{item.body}</p>}
+                    </button>
+                )) : <Card className="md:col-span-2 xl:col-span-3"><div className="p-8 text-center text-sm text-neutral-500">{queryText ? 'No matches found.' : 'Start typing to search the hub.'}</div></Card>}
+            </div>
+        </div>
+    );
+}
+
+function ArchiveHistory({ isStaff, isAdmin }) {
+    const [rows, setRows] = useState([]);
+    const [filter, setFilter] = useState('All');
+    const sources = useMemo(() => [
+        ['tasks', 'Task'],
+        ['team_requests', 'Request'],
+        ['team_bulletins', 'Bulletin'],
+        ...(isStaff ? [['practice_sessions', 'Practice'], ['practice_reviews', 'Review'], ['scrim_pipeline', 'Scrim']] : []),
+        ...(isAdmin ? [['announcements', 'Announcement']] : [])
+    ], [isAdmin, isStaff]);
+
+    useEffect(() => {
+        const unsubs = sources.map(([name, label]) => onSnapshot(collection(db, name), (snap) => {
+            setRows(prev => {
+                const withoutCollection = prev.filter(item => item.collection !== name);
+                const next = [];
+                snap.forEach(d => {
+                    const data = d.data();
+                    const status = data.status || (data.done ? 'Done' : '');
+                    const archived = ['Done', 'Complete', 'Completed', 'Reviewed', 'Archived'].includes(status) || data.done === true;
+                    if (archived) next.push({ id: `${name}-${d.id}`, collection: name, label, title: data.title || data.opponent || data.kind || d.id, status, date: data.completedAt || data.updatedAt || data.date || data.createdAt || '', body: data.notes || data.body || data.nextFocus || '' });
+                });
+                return [...withoutCollection, ...next].sort((a, b) => new Date(b.date || 0) - new Date(a.date || 0));
+            });
+        }, () => {}));
+        return () => unsubs.forEach(unsub => unsub());
+    }, [sources]);
+
+    const types = ['All', ...new Set(rows.map(row => row.label))];
+    const visible = rows.filter(row => filter === 'All' || row.label === filter);
+
+    return (
+        <div className="animate-fade-in space-y-6">
+            <Card>
+                <div className="flex flex-col md:flex-row md:items-end md:justify-between gap-4">
+                    <div>
+                        <div className="text-[10px] uppercase tracking-[0.28em] text-red-400 font-black mb-3">History</div>
+                        <h2 className="text-3xl md:text-4xl font-black text-white uppercase italic leading-none">Archive</h2>
+                        <p className="mt-3 text-sm text-neutral-400">Completed tasks, old requests, reviewed scrims, closed bulletins, and past practice work without cluttering active pages.</p>
+                    </div>
+                    <Select value={filter} onChange={e => setFilter(e.target.value)} className="md:max-w-52">{types.map(type => <option key={type}>{type}</option>)}</Select>
+                </div>
+            </Card>
+            <div className="space-y-3">
+                {visible.length ? visible.map(item => (
+                    <Card key={item.id} className="p-4">
+                        <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-3">
+                            <div>
+                                <div className="flex flex-wrap gap-2 mb-2">
+                                    <span className="text-[9px] uppercase tracking-widest bg-red-950/25 border border-red-900/40 text-red-300 px-2 py-1 rounded">{item.label}</span>
+                                    <span className="text-[9px] uppercase tracking-widest bg-white/5 border border-white/10 text-neutral-400 px-2 py-1 rounded">{item.status || 'Closed'}</span>
+                                </div>
+                                <div className="text-lg font-black text-white">{item.title}</div>
+                                {item.body && <p className="mt-2 text-sm text-neutral-400 whitespace-pre-wrap">{item.body}</p>}
+                            </div>
+                            <div className="text-[10px] uppercase tracking-widest text-neutral-500">{item.date ? new Date(item.date).toLocaleDateString() : 'No date'}</div>
+                        </div>
+                    </Card>
+                )) : <Card><div className="p-8 text-center text-sm text-neutral-500">No archived items yet.</div></Card>}
+            </div>
+        </div>
+    );
+}
+
 function Announcements({ currentUserName }) {
     const [announcements, setAnnouncements] = useState([]);
     const [form, setForm] = useState({ title: '', body: '', level: 'Team', pinned: false });
@@ -4439,7 +4944,7 @@ function Announcements({ currentUserName }) {
     );
 }
 
-function NotificationCenter({ events }) {
+function NotificationCenter({ events, requests = [], setActiveTab }) {
     const [tasks, setTasks] = useState([]);
     const [announcements, setAnnouncements] = useState([]);
 
@@ -4461,10 +4966,17 @@ function NotificationCenter({ events }) {
     const upcomingEvents = events.filter(event => event.date && new Date(`${event.date}T${event.time || '00:00'}`).getTime() <= now + 1000 * 60 * 60 * 24 * 7);
     const dueTasks = tasks.filter(task => !task.done && task.due && new Date(task.due).getTime() <= now + 1000 * 60 * 60 * 24 * 3);
     const pinned = announcements.filter(item => item.pinned);
+    const openRequests = requests.filter(item => !['Done', 'Archived'].includes(item.status || 'Open'));
     const alerts = [
-        ...upcomingEvents.map(event => ({ id: `event-${event.id}`, type: 'Event', title: `${event.type || 'Event'} vs ${event.opponent || 'TBD'}`, meta: `${event.date} @ ${event.time || 'TBD'}` })),
-        ...dueTasks.map(task => ({ id: `task-${task.id}`, type: 'Task', title: task.title, meta: task.due ? `Due ${task.due}` : 'No due date' })),
-        ...pinned.map(item => ({ id: `announcement-${item.id}`, type: 'Pinned', title: item.title, meta: item.level || 'Announcement' }))
+        ...upcomingEvents.map(event => ({ id: `event-${event.id}`, type: 'Event', title: `${event.type || 'Event'} vs ${event.opponent || 'TBD'}`, meta: `${event.date} @ ${event.time || 'TBD'}`, tab: 'calendar', action: 'View Calendar' })),
+        ...dueTasks.map(task => ({ id: `task-${task.id}`, type: 'Task', title: task.title, meta: task.due ? `Due ${task.due}` : 'No due date', tab: 'tasks', action: task.owner ? 'Review Task' : 'Assign Owner' })),
+        ...openRequests.map(item => {
+            const kind = String(item.kind || '').toLowerCase();
+            const isMeeting = kind.includes('meeting') || ['Role Talk', 'Practice Follow-up', 'Availability Talk'].includes(item.kind);
+            const tab = item.direction === 'staff_to_player' ? (isMeeting ? 'meetings' : 'coachrequests') : 'teamrequests';
+            return { id: `request-${item.id}`, type: 'Request', title: item.title || item.kind || 'Open request', meta: `${item.status || 'Open'} / ${item.player || item.author || 'Team'}`, tab, action: 'Respond' };
+        }),
+        ...pinned.map(item => ({ id: `announcement-${item.id}`, type: 'Pinned', title: item.title, meta: item.level || 'Announcement', tab: 'notifications', action: 'Read' }))
     ];
 
     return (
@@ -4479,7 +4991,7 @@ function NotificationCenter({ events }) {
                     <div className="grid grid-cols-3 gap-3 min-w-[18rem]">
                         <div className="bg-black/40 border border-white/10 p-3 rounded-xl"><div className="text-[10px] uppercase tracking-widest text-neutral-500 font-black">Events</div><div className="mt-1 text-2xl font-black text-white">{upcomingEvents.length}</div></div>
                         <div className="bg-black/40 border border-white/10 p-3 rounded-xl"><div className="text-[10px] uppercase tracking-widest text-neutral-500 font-black">Tasks</div><div className="mt-1 text-2xl font-black text-white">{dueTasks.length}</div></div>
-                        <div className="bg-black/40 border border-white/10 p-3 rounded-xl"><div className="text-[10px] uppercase tracking-widest text-neutral-500 font-black">Pinned</div><div className="mt-1 text-2xl font-black text-white">{pinned.length}</div></div>
+                        <div className="bg-black/40 border border-white/10 p-3 rounded-xl"><div className="text-[10px] uppercase tracking-widest text-neutral-500 font-black">Requests</div><div className="mt-1 text-2xl font-black text-white">{openRequests.length}</div></div>
                     </div>
                 </div>
                 <div className="grid grid-cols-1 xl:grid-cols-3 gap-3">
@@ -4488,6 +5000,7 @@ function NotificationCenter({ events }) {
                             <div className="text-[9px] uppercase tracking-widest text-red-400 font-black mb-2">{alert.type}</div>
                             <div className="text-lg font-black text-white">{alert.title}</div>
                             <div className="mt-2 text-xs text-neutral-500">{alert.meta}</div>
+                            <button onClick={() => setActiveTab(alert.tab)} className="mt-4 rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-[10px] font-black uppercase tracking-widest text-neutral-300 hover:border-red-500/40 hover:text-white transition">{alert.action}</button>
                         </div>
                     )) : <div className="xl:col-span-3 p-8 text-center text-sm text-neutral-500 border border-dashed border-neutral-800 rounded-xl">No urgent notifications right now.</div>}
                 </div>
@@ -5690,20 +6203,24 @@ function SyrixDashboard({ onBack }) {
     const isStaff = Boolean(isAdmin || isCoachRole);
     const accessLabel = ADMIN_UIDS.includes(currentUser.uid) ? 'Owner' : dbAdminRole || (isRosterManager ? 'Manager' : 'Member');
     const navGroups = [
-        { label: 'Command', items: [{ id: 'dashboard', label: 'Dashboard' }, { id: 'calendar', label: 'Calendar' }, { id: 'bulletins', label: 'Bulletin Board' }, { id: 'notifications', label: 'Notifications' }, { id: 'tasks', label: 'Tasks' }] },
-        { label: 'Team', items: [{ id: 'availability', label: 'Availability' }, { id: 'matches', label: 'Matches' }, { id: 'teamrequests', label: 'Team Requests' }, { id: 'coachrequests', label: 'Coach Requests' }, { id: 'meetings', label: 'Meetings' }] },
+        { label: 'Command', items: [{ id: 'dashboard', label: 'Dashboard' }, { id: 'search', label: 'Search' }, { id: 'calendar', label: 'Calendar' }, { id: 'bulletins', label: 'Bulletin Board' }, { id: 'notifications', label: 'Notifications' }, { id: 'archive', label: 'Archive' }, { id: 'tasks', label: 'Tasks' }, { id: 'access', label: 'Access & Roles' }] },
+        { label: 'Team', items: [{ id: 'profile', label: 'Player Profile' }, { id: 'availability', label: 'Availability' }, { id: 'matches', label: 'Matches' }, { id: 'teamrequests', label: 'Team Requests' }, { id: 'coachrequests', label: 'Coach Requests' }, { id: 'meetings', label: 'Meetings' }] },
         { label: 'Strategy', items: [{ id: 'stratlibrary', label: 'Strat Library' }, { id: 'lineups', label: 'Lineups' }, { id: 'playbook', label: 'Playbook' }, { id: 'comps', label: 'Comps' }] },
-        ...(isStaff ? [{ label: 'Planning', items: [{ id: 'strats', label: 'Stratbook' }, { id: 'mapveto', label: 'Map Veto' }, { id: 'practice', label: 'Practice Plans' }, { id: 'prep', label: 'Match Prep' }] }] : []),
-        ...(isStaff ? [{ label: 'Coaching', items: [{ id: 'coachroom', label: 'Coach Room' }, ...(isAdmin ? [{ id: 'playernotes', label: 'Player Notes' }] : [])] }] : []),
-        ...(isAdmin ? [{ label: 'Operations', items: [{ id: 'announcements', label: 'Announcements' }, { id: 'content', label: 'Content' }, { id: 'partners', label: 'Partners' }] }] : []),
+        ...(isStaff ? [{ label: 'Planning', items: [{ id: 'strats', label: 'Stratbook' }, { id: 'mapveto', label: 'Map Veto' }, { id: 'practice', label: 'Practice Plans' }, { id: 'reviews', label: 'Practice Review' }, { id: 'prep', label: 'Match Prep' }, { id: 'pipeline', label: 'Scrim Pipeline' }] }] : []),
+        ...(isStaff ? [{ label: 'Coaching', items: [{ id: 'coachhome', label: 'Coach Home' }, { id: 'coachroom', label: 'Coach Room' }, ...(isAdmin ? [{ id: 'playernotes', label: 'Player Notes' }] : [])] }] : []),
+        ...(isAdmin ? [{ label: 'Operations', items: [{ id: 'managerhome', label: 'Manager Home' }, { id: 'announcements', label: 'Announcements' }, { id: 'content', label: 'Content' }, { id: 'partners', label: 'Partners' }] }] : []),
         ...(isAdmin ? [{ label: 'Admin', items: [{ id: 'roster', label: 'Roster Manager' }, { id: 'audit', label: 'Audit Log' }, { id: 'admin', label: 'Admin Panel' }] }] : [])
     ];
     const flatNav = navGroups.flatMap(group => group.items);
     const canAccessActiveTab = flatNav.some(item => item.id === activeTab);
     const restrictedLabels = {
+        managerhome: 'Manager Home',
+        coachhome: 'Coach Home',
         announcements: 'Announcements',
         coachroom: 'Coach Room',
         practice: 'Practice Plans',
+        reviews: 'Practice Review',
+        pipeline: 'Scrim Pipeline',
         prep: 'Match Prep',
         playernotes: 'Player Notes',
         strats: 'Stratbook',
@@ -5737,13 +6254,13 @@ function SyrixDashboard({ onBack }) {
         ? {
             title: 'Operations',
             copy: 'Keep the team moving: approve work, update the roster, publish comms, and make sure the next block has a clear owner.',
-            primary: { id: 'admin', label: 'Admin Panel' }
+            primary: { id: 'managerhome', label: 'Manager Home' }
         }
         : isStaff
             ? {
                 title: 'Coaching',
                 copy: 'Plan practice, review requests, prep the next match, and keep player follow-ups from getting buried in chat.',
-                primary: { id: 'coachroom', label: 'Coach Room' }
+                primary: { id: 'coachhome', label: 'Coach Home' }
             }
             : {
                 title: 'Player Home',
@@ -5764,9 +6281,15 @@ function SyrixDashboard({ onBack }) {
     ].filter(item => item.value > 0);
     const pageMeta = {
         dashboard: 'Your role-aware home for the next event, requests, tasks, and quick actions.',
+        search: 'Find players, strats, requests, bulletins, matches, tasks, and notes quickly.',
+        archive: 'Review completed tasks, closed requests, old bulletins, and past practice work.',
+        access: 'Understand what each hub role can see and manage.',
         calendar: 'View upcoming scrims, officials, practices, and VOD reviews by month.',
         bulletins: 'Player-submitted scrim requests, tournament leads, training ideas, and team info.',
-        notifications: 'Track upcoming events, due tasks, and pinned announcements.',
+        notifications: 'Actionable reminders for events, tasks, requests, and pinned announcements.',
+        profile: 'Read-only player profile with role, agents, availability, activity, and visible coach notes.',
+        managerhome: 'A dedicated operations home for managers and admins.',
+        coachhome: 'A dedicated coaching home for plans, reviews, requests, and player development.',
         announcements: 'Post captain messages, urgent updates, and team-wide comms.',
         availability: 'Edit your weekly availability and inspect the team schedule.',
         matches: 'Record match results, reports, VODs, and performance context.',
@@ -5776,6 +6299,7 @@ function SyrixDashboard({ onBack }) {
         roster: 'Admin roster manager for member profiles, roles, ranks, and roster notes.',
         coachroom: 'Build detailed team or player-specific plans, review coach notes, and organize development work.',
         practice: 'Build practice blocks with maps, goals, drills, links, and assigned players.',
+        reviews: 'Record attendance, progress, issues, and next focus after practice.',
         playbook: 'Write map-specific protocols for attack and defense.',
         comps: 'Build and save team compositions by map.',
         strats: 'Plan rounds visually with agents, utility, paths, and saved strats.',
@@ -5783,6 +6307,7 @@ function SyrixDashboard({ onBack }) {
         lineups: 'Store lineup media and map pins for fast review.',
         mapveto: 'Track pick, ban, and comfort status for the active map pool.',
         prep: 'Create opponent files with veto plans, comps, win conditions, and review notes.',
+        pipeline: 'Track scrim and tryout leads from request through review.',
         tasks: 'Assign and clear team action items for practice, matchday, and admin work.',
         playernotes: 'Private coaching notes, player ratings, and improvement plans.',
         content: 'Manage public site news, merch, achievements, and media.',
@@ -5938,9 +6463,15 @@ function SyrixDashboard({ onBack }) {
                             <PerformanceWidget events={events} />
                         </div>
                     </div></div>}
+                    {activeTab === 'search' && <GlobalSearch isAdmin={isAdmin} setActiveTab={setActiveTab} />}
+                    {activeTab === 'archive' && <ArchiveHistory isStaff={isStaff} isAdmin={isAdmin} />}
+                    {activeTab === 'access' && <AccessRolesGuide accessLabel={accessLabel} />}
+                    {activeTab === 'managerhome' && isAdmin && <RoleHome type="manager" members={dynamicMembers} events={events} requests={visibleRequestItems} openTaskCount={openTaskCount} availableToday={availableToday} setActiveTab={setActiveTab} />}
+                    {activeTab === 'coachhome' && isStaff && <RoleHome type="coach" members={dynamicMembers} events={events} requests={visibleRequestItems} openTaskCount={openTaskCount} availableToday={availableToday} setActiveTab={setActiveTab} />}
+                    {activeTab === 'profile' && <PlayerProfile members={dynamicMembers} currentMemberName={currentMemberName} displayAvail={displayAvail} events={events} requests={visibleRequestItems} isStaff={isStaff} />}
                     {activeTab === 'calendar' && <TeamCalendar events={events} />}
                     {activeTab === 'bulletins' && <TeamBulletinBoard currentUserName={rosterName || currentUser.displayName || 'Unknown'} currentUserUid={currentUser.uid} isAdmin={isAdmin} />}
-                    {activeTab === 'notifications' && <NotificationCenter events={events} />}
+                    {activeTab === 'notifications' && <NotificationCenter events={events} requests={visibleRequestItems} setActiveTab={setActiveTab} />}
                     {activeTab === 'announcements' && isAdmin && <Announcements currentUserName={rosterName || currentUser.displayName || 'Unknown'} />}
                     {activeTab === 'teamrequests' && <TeamRequestCenter mode="team" members={dynamicMembers} currentUserName={currentMemberName} currentUserUid={currentUser.uid} isStaff={isStaff} />}
                     {activeTab === 'coachrequests' && <TeamRequestCenter mode="coach" members={dynamicMembers} currentUserName={currentMemberName} currentUserUid={currentUser.uid} isStaff={isStaff} />}
@@ -5948,6 +6479,7 @@ function SyrixDashboard({ onBack }) {
                     {activeTab === 'availability' && <div className="animate-fade-in space-y-6"><div className="grid grid-cols-1 xl:grid-cols-[0.7fr_1.3fr] gap-6"><div className="space-y-6"><Card className="border-red-900/20"><div className="absolute top-0 left-0 w-1 h-full bg-red-600/50"></div><div className="text-[10px] uppercase tracking-[0.28em] text-red-400 font-black mb-3">Your Week</div><h2 className="text-2xl font-black text-white uppercase italic mb-5">Availability Editor</h2><div className="space-y-4"><div><label className="text-[10px] font-black text-red-500 uppercase mb-1 block">Day</label><Select value={day} onChange={e => setDay(e.target.value)}>{DAYS.map(d => <option key={d} value={d}>{d}</option>)}</Select><div className="mt-2 text-[11px] text-neutral-500">Editing availability for <span className="text-neutral-300 font-bold">{currentMemberName}</span> in <span className="text-neutral-300 font-bold">{userTimezone}</span>.</div></div><div className="grid grid-cols-2 gap-3"><div><label className="text-[10px] font-black text-red-500 uppercase mb-1 block">Start</label><Input type="time" value={start} onChange={e => setStart(e.target.value)} className="[color-scheme:dark]" /></div><div><label className="text-[10px] font-black text-red-500 uppercase mb-1 block">End</label><Input type="time" value={end} onChange={e => setEnd(e.target.value)} className="[color-scheme:dark]" /></div></div><div><label className="text-[10px] font-black text-red-500 uppercase mb-1 block">Pref. Role</label><div className="flex gap-2 overflow-x-auto pb-2 scrollbar-hide">{ROLES.map(r => (<button key={r} onClick={() => setRole(r)} className={`px-3 py-2 rounded-lg text-xs font-black border transition-all whitespace-nowrap flex items-center justify-center ${role === r ? 'bg-red-600 text-white border-red-500' : 'bg-black/50 border-neutral-800 text-neutral-500 hover:text-white'}`}>{ROLE_ABBREVIATIONS[r] || r}</button>))}</div></div><div className="pt-2 flex gap-2"><ButtonPrimary onClick={saveAvail} disabled={saveStatus !== 'idle'} className="flex-1">{saveStatus === 'idle' ? 'Save Slot' : 'Saving...'}</ButtonPrimary><ButtonSecondary onClick={() => openModal('Clear Day', `Clear all for ${day}?`, clearDay)}>Clear</ButtonSecondary></div></div></Card><LeaveLogger members={dynamicMembers} rosterName={rosterName} /></div><div className="space-y-6"><div className="grid grid-cols-1 xl:grid-cols-2 gap-6"><Card><h2 className="text-lg font-bold text-white mb-4 uppercase tracking-wide">Team Heatmap</h2><AvailabilityHeatmap availabilities={displayAvail} members={dynamicMembers} /></Card><Card><div className="text-[10px] uppercase tracking-[0.28em] text-neutral-500 font-black mb-3">Today</div><div className="text-4xl font-black text-white">{availableToday}/{dynamicMembers.length}</div><div className="mt-2 text-sm text-neutral-400">members have availability logged for {todayName}.</div><div className="mt-5 pt-4 border-t border-white/10 text-xs text-neutral-500">Keep this current before scrims so captains can plan realistic blocks.</div></Card></div><Card><h2 className="text-xl font-bold text-white mb-6 uppercase tracking-wide">Weekly Timeline <span className="text-neutral-500 text-sm normal-case">({userTimezone})</span></h2><div className="overflow-x-auto scrollbar-thin scrollbar-thumb-neutral-700"><table className="w-full text-left border-collapse min-w-[600px]"><thead><tr className="border-b border-neutral-800"><th className="p-3 text-xs font-bold text-neutral-500 uppercase tracking-wider w-32">Team Member</th>{SHORT_DAYS.map(day => (<th key={day} className="p-3 text-xs font-bold text-red-600 uppercase tracking-wider text-center border-l border-neutral-800">{day}</th>))}</tr></thead><tbody className="divide-y divide-neutral-800/50">{dynamicMembers.map(member => (<tr key={member} className="hover:bg-neutral-800/30 transition-colors group"><td className="p-4 font-bold text-white text-sm flex items-center gap-2"><div className="w-2 h-2 rounded-full bg-red-500 shadow-red-500/50 shadow-sm"></div>{member}</td>{DAYS.map((day) => { const slots = (displayAvail[member] || []).filter(s => s.day === day); return (<td key={day} className="p-2 align-middle border-l border-neutral-800/50"><div className="flex flex-col gap-1 items-center justify-center">{slots.length > 0 ? slots.map((s, i) => (<div key={i} className="bg-gradient-to-br from-red-600 to-red-700 text-white text-[10px] font-bold px-2 py-1 rounded w-full text-center shadow-md whitespace-nowrap flex items-center justify-center gap-1">{s.start}-{s.end}<span className="opacity-75 ml-1 text-[9px] border border-white/20 px-1 rounded bg-black/20">{ROLE_ABBREVIATIONS[s.role] || s.role}</span></div>)) : <div className="h-1 w-4 bg-neutral-800 rounded-full"></div>}</div></td>); })}</tr>))}</tbody></table></div></Card></div></div></div>}
                     {activeTab === 'coachroom' && isStaff && <CoachRoom members={dynamicMembers} currentUserName={rosterName || currentUser.displayName || 'Coach'} />}
                     {activeTab === 'practice' && isStaff && <PracticePlanner members={dynamicMembers} currentUserName={rosterName || currentUser.displayName || 'Unknown'} />}
+                    {activeTab === 'reviews' && isStaff && <PracticeReview members={dynamicMembers} currentUserName={rosterName || currentUser.displayName || 'Coach'} />}
                     {activeTab === 'playbook' && <div className="animate-fade-in h-[80vh]"><Playbook /></div>}
                     {activeTab === 'comps' && <div className="animate-fade-in h-full"><TeamComps members={dynamicMembers} /></div>}
                     {activeTab === 'matches' && <div className="animate-fade-in"><MatchHistory currentUser={currentUser} members={dynamicMembers} /></div>}
@@ -5956,6 +6488,7 @@ function SyrixDashboard({ onBack }) {
                     {activeTab === 'lineups' && <div className="animate-fade-in h-[85vh]"><LineupLibrary /></div>}
                     {activeTab === 'roster' && isAdmin && <div className="animate-fade-in h-full flex-1 flex flex-col"><RosterManager members={dynamicMembers} events={events} canManageRoster={isAdmin} /></div>}
                     {activeTab === 'prep' && isStaff && <MatchPrep members={dynamicMembers} events={events} currentUserName={rosterName || currentUser.displayName || 'Unknown'} />}
+                    {activeTab === 'pipeline' && isStaff && <ScrimPipeline currentUserName={rosterName || currentUser.displayName || 'Staff'} />}
                     {activeTab === 'tasks' && <ActionItems members={dynamicMembers} />}
                     {activeTab === 'playernotes' && isAdmin && <PlayerAdminNotes members={dynamicMembers} currentUserName={rosterName || currentUser.displayName || 'Admin'} />}
                     {activeTab === 'partners' && isAdmin && <div className="animate-fade-in h-full"><PartnerDirectory /></div>}
