@@ -3747,6 +3747,191 @@ function MatchPrep({ members, events, currentUserName }) {
     );
 }
 
+function CoachRoom({ members, currentUserName }) {
+    const [plans, setPlans] = useState([]);
+    const [saving, setSaving] = useState(false);
+    const [form, setForm] = useState({
+        title: '',
+        date: new Date().toISOString().split('T')[0],
+        scope: 'Team',
+        player: '',
+        map: MAPS[0],
+        duration: '90',
+        mainFocus: 'Team fundamentals',
+        warmup: '',
+        blockOne: '',
+        blockTwo: '',
+        blockThree: '',
+        review: '',
+        homework: '',
+        successCriteria: '',
+        vod: ''
+    });
+    const addToast = useToast();
+
+    useEffect(() => {
+        const unsub = onSnapshot(collection(db, 'coach_practice_plans'), (snap) => {
+            const rows = [];
+            snap.forEach(d => rows.push({ id: d.id, ...d.data() }));
+            setPlans(rows.sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0)));
+        });
+        return () => unsub();
+    }, []);
+
+    useEffect(() => {
+        if (!form.player && members.length) setForm(prev => ({ ...prev, player: members[0] }));
+    }, [form.player, members]);
+
+    const savePlan = async () => {
+        if (!form.title.trim()) return addToast('Plan title is required', 'error');
+        if (form.scope === 'Player' && !form.player) return addToast('Select a player for individual plans', 'error');
+        setSaving(true);
+        try {
+            await addDoc(collection(db, 'coach_practice_plans'), {
+                ...form,
+                title: form.title.trim(),
+                createdAt: new Date().toISOString(),
+                updatedAt: new Date().toISOString(),
+                createdBy: currentUserName || 'Coach'
+            });
+            await writeAuditLog('Coach plan created', form.title.trim(), currentUserName || 'Coach');
+            setForm(prev => ({
+                ...prev,
+                title: '',
+                warmup: '',
+                blockOne: '',
+                blockTwo: '',
+                blockThree: '',
+                review: '',
+                homework: '',
+                successCriteria: '',
+                vod: ''
+            }));
+            addToast('Coach plan saved');
+        } catch (error) {
+            console.error('Coach plan save failed:', error);
+            addToast('Unable to save coach plan', 'error');
+        } finally {
+            setSaving(false);
+        }
+    };
+
+    const removePlan = async (plan) => {
+        try {
+            await deleteDoc(doc(db, 'coach_practice_plans', plan.id));
+            await writeAuditLog('Coach plan deleted', plan.title, currentUserName || 'Coach');
+            addToast('Coach plan removed');
+        } catch (error) {
+            console.error('Coach plan delete failed:', error);
+            addToast('Unable to remove coach plan', 'error');
+        }
+    };
+
+    const planBlocks = [
+        ['warmup', 'Warmup / Reset'],
+        ['blockOne', 'Block 1'],
+        ['blockTwo', 'Block 2'],
+        ['blockThree', 'Block 3'],
+        ['review', 'Review Notes'],
+        ['homework', 'Player Homework'],
+        ['successCriteria', 'What Good Looks Like']
+    ];
+
+    return (
+        <div className="animate-fade-in space-y-6">
+            <div className="grid grid-cols-1 xl:grid-cols-[0.9fr_1.1fr] gap-6">
+                <Card>
+                    <div className="text-[10px] uppercase tracking-[0.28em] text-red-400 font-black mb-3">Coaching Room</div>
+                    <h2 className="text-3xl font-black text-white uppercase italic mb-3">Practice Plan Maker</h2>
+                    <p className="text-sm text-neutral-400 mb-6">Build a full team session or an individual player plan with clear blocks, review goals, and follow-up work.</p>
+                    <div className="space-y-4">
+                        <Input placeholder="Plan title" value={form.title} onChange={e => setForm({ ...form, title: e.target.value })} />
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                            <Input type="date" value={form.date} onChange={e => setForm({ ...form, date: e.target.value })} className="[color-scheme:dark]" />
+                            <Select value={form.scope} onChange={e => setForm({ ...form, scope: e.target.value })}>
+                                {['Team', 'Player'].map(scope => <option key={scope}>{scope}</option>)}
+                            </Select>
+                            <Input type="number" min="15" step="5" value={form.duration} onChange={e => setForm({ ...form, duration: e.target.value })} placeholder="Minutes" />
+                        </div>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                            <Select value={form.map} onChange={e => setForm({ ...form, map: e.target.value })}>
+                                {MAPS.map(map => <option key={map}>{map}</option>)}
+                            </Select>
+                            <Select value={form.player} onChange={e => setForm({ ...form, player: e.target.value })} disabled={form.scope !== 'Player'}>
+                                <option value="">Player focus</option>
+                                {members.map(member => <option key={member} value={member}>{member}</option>)}
+                            </Select>
+                        </div>
+                        <Select value={form.mainFocus} onChange={e => setForm({ ...form, mainFocus: e.target.value })}>
+                            {['Team fundamentals', 'Defaults', 'Spacing/trading', 'Utility timing', 'Mid-rounding', 'Retakes', 'Post-plants', 'Communication', 'Mental reset', 'Individual role work'].map(item => <option key={item}>{item}</option>)}
+                        </Select>
+                        {planBlocks.map(([key, label]) => (
+                            <div key={key}>
+                                <label className="text-[10px] font-black text-red-500 uppercase mb-1 block">{label}</label>
+                                <textarea value={form[key]} onChange={e => setForm({ ...form, [key]: e.target.value })} placeholder={`${label} details...`} className="w-full h-24 bg-black/40 border border-neutral-800 rounded-xl p-3 text-white text-sm outline-none focus:border-red-600 placeholder-neutral-600 resize-y" />
+                            </div>
+                        ))}
+                        <Input placeholder="VOD, doc, or server reference link" value={form.vod} onChange={e => setForm({ ...form, vod: e.target.value })} />
+                        <ButtonPrimary onClick={savePlan} disabled={saving} className="w-full py-3 text-xs">{saving ? 'Saving...' : 'Save Coach Plan'}</ButtonPrimary>
+                    </div>
+                </Card>
+
+                <Card>
+                    <div className="flex flex-col md:flex-row md:items-end md:justify-between gap-4 mb-5">
+                        <div>
+                            <div className="text-[10px] uppercase tracking-[0.28em] text-neutral-500 font-black mb-2">Saved Plans</div>
+                            <h3 className="text-2xl font-black text-white uppercase italic">Coach Library</h3>
+                        </div>
+                        <div className="text-xs text-neutral-500">{plans.length} plans</div>
+                    </div>
+                    <div className="space-y-3 max-h-[78vh] overflow-y-auto pr-2 custom-scrollbar">
+                        {plans.length ? plans.map(plan => (
+                            <div key={plan.id} className="rounded-xl border border-white/10 bg-black/45 p-4">
+                                <div className="flex items-start justify-between gap-3">
+                                    <div className="min-w-0">
+                                        <div className="flex flex-wrap gap-2 mb-2">
+                                            <span className="text-[9px] uppercase tracking-widest bg-red-950/25 border border-red-900/40 text-red-300 px-2 py-1 rounded">{plan.scope}</span>
+                                            <span className="text-[9px] uppercase tracking-widest bg-white/5 border border-white/10 text-neutral-400 px-2 py-1 rounded">{plan.map}</span>
+                                            <span className="text-[9px] uppercase tracking-widest bg-white/5 border border-white/10 text-neutral-400 px-2 py-1 rounded">{plan.duration} min</span>
+                                        </div>
+                                        <div className="text-xl font-black text-white uppercase italic truncate">{plan.title}</div>
+                                        <div className="mt-1 text-[10px] uppercase tracking-widest text-neutral-500">{plan.date || 'Date TBD'} / {plan.scope === 'Player' ? plan.player || 'Player TBD' : plan.mainFocus}</div>
+                                    </div>
+                                    <button onClick={() => removePlan(plan)} className="text-neutral-600 hover:text-red-500 text-xl leading-none">×</button>
+                                </div>
+                                <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-3">
+                                    {planBlocks.filter(([key]) => plan[key]).slice(0, 6).map(([key, label]) => (
+                                        <div key={key} className="rounded-lg border border-white/10 bg-white/5 p-3">
+                                            <div className="text-[9px] uppercase tracking-widest text-neutral-500 font-black mb-1">{label}</div>
+                                            <p className="text-xs text-neutral-300 whitespace-pre-wrap leading-relaxed">{plan[key]}</p>
+                                        </div>
+                                    ))}
+                                </div>
+                                {plan.vod && <a href={plan.vod} target="_blank" rel="noreferrer" className="mt-3 inline-flex text-[10px] font-black uppercase tracking-widest text-red-400 hover:text-white">Open Reference</a>}
+                            </div>
+                        )) : <div className="p-8 text-center text-sm text-neutral-500 border border-dashed border-neutral-800 rounded-xl">No coach plans saved yet.</div>}
+                    </div>
+                </Card>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <Card className="p-4">
+                    <div className="text-[10px] uppercase tracking-widest text-red-400 font-black mb-2">Practice</div>
+                    <p className="text-sm text-neutral-400">Use the existing Practice page for shorter session blocks and player attendance.</p>
+                </Card>
+                <Card className="p-4">
+                    <div className="text-[10px] uppercase tracking-widest text-red-400 font-black mb-2">Player Notes</div>
+                    <p className="text-sm text-neutral-400">Private notes belong in Coaching because they are feedback and development tools.</p>
+                </Card>
+                <Card className="p-4">
+                    <div className="text-[10px] uppercase tracking-widest text-red-400 font-black mb-2">Match Prep</div>
+                    <p className="text-sm text-neutral-400">Opponent files also fit coaching work, so they now sit in the Coaching group.</p>
+                </Card>
+            </div>
+        </div>
+    );
+}
+
 function Announcements({ currentUserName }) {
     const [announcements, setAnnouncements] = useState([]);
     const [form, setForm] = useState({ title: '', body: '', level: 'Team', pinned: false });
@@ -5036,9 +5221,10 @@ function SyrixDashboard({ onBack }) {
     const navGroups = [
         { label: 'Command', items: [{ id: 'dashboard', label: 'Dashboard' }, { id: 'calendar', label: 'Calendar' }, { id: 'notifications', label: 'Notifications' }, { id: 'announcements', label: 'Announcements' }, { id: 'tasks', label: 'Tasks' }] },
         { label: 'Team', items: [{ id: 'roster', label: 'Roster' }, { id: 'availability', label: 'Availability' }, { id: 'matches', label: 'Matches' }] },
-        { label: 'Valorant', items: [{ id: 'practice', label: 'Practice' }, { id: 'strats', label: 'Stratbook' }, { id: 'stratlibrary', label: 'Strat Library' }, { id: 'comps', label: 'Comps' }, { id: 'prep', label: 'Match Prep' }, { id: 'mapveto', label: 'Map Veto' }] },
+        { label: 'Coaching', items: [{ id: 'coachroom', label: 'Coach Room' }, { id: 'practice', label: 'Practice Plans' }, { id: 'prep', label: 'Match Prep' }, ...(isAdmin ? [{ id: 'playernotes', label: 'Player Notes' }] : [])] },
+        { label: 'Valorant', items: [{ id: 'strats', label: 'Stratbook' }, { id: 'stratlibrary', label: 'Strat Library' }, { id: 'comps', label: 'Comps' }, { id: 'mapveto', label: 'Map Veto' }] },
         { label: 'Library', items: [{ id: 'lineups', label: 'Lineups' }, { id: 'playbook', label: 'Playbook' }] },
-        ...(isAdmin ? [{ label: 'Admin', items: [{ id: 'playernotes', label: 'Player Notes' }, { id: 'content', label: 'Content' }, { id: 'partners', label: 'Partners' }, { id: 'audit', label: 'Audit Log' }, { id: 'admin', label: 'Admin Panel' }] }] : [])
+        ...(isAdmin ? [{ label: 'Admin', items: [{ id: 'content', label: 'Content' }, { id: 'partners', label: 'Partners' }, { id: 'audit', label: 'Audit Log' }, { id: 'admin', label: 'Admin Panel' }] }] : [])
     ];
     const flatNav = navGroups.flatMap(group => group.items);
     const activeLabel = flatNav.find(item => item.id === activeTab)?.label || 'Dashboard';
@@ -5053,6 +5239,7 @@ function SyrixDashboard({ onBack }) {
         availability: 'Edit your weekly availability and inspect the team schedule.',
         matches: 'Record match results, reports, VODs, and performance context.',
         roster: 'Manage member profiles, roles, ranks, and roster notes.',
+        coachroom: 'Build detailed team or player-specific plans, review coach notes, and organize development work.',
         practice: 'Build practice blocks with maps, goals, drills, links, and assigned players.',
         playbook: 'Write map-specific protocols for attack and defense.',
         comps: 'Build and save team compositions by map.',
@@ -5184,6 +5371,7 @@ function SyrixDashboard({ onBack }) {
                     {activeTab === 'notifications' && <NotificationCenter events={events} />}
                     {activeTab === 'announcements' && <Announcements currentUserName={rosterName || currentUser.displayName || 'Unknown'} />}
                     {activeTab === 'availability' && <div className="animate-fade-in space-y-6"><div className="grid grid-cols-1 xl:grid-cols-[0.7fr_1.3fr] gap-6"><div className="space-y-6"><Card className="border-red-900/20"><div className="absolute top-0 left-0 w-1 h-full bg-red-600/50"></div><div className="text-[10px] uppercase tracking-[0.28em] text-red-400 font-black mb-3">Your Week</div><h2 className="text-2xl font-black text-white uppercase italic mb-5">Availability Editor</h2><div className="space-y-4"><div><label className="text-[10px] font-black text-red-500 uppercase mb-1 block">Day</label><Select value={day} onChange={e => setDay(e.target.value)}>{DAYS.map(d => <option key={d} value={d}>{d}</option>)}</Select><div className="mt-2 text-[11px] text-neutral-500">Editing availability for <span className="text-neutral-300 font-bold">{currentMemberName}</span> in <span className="text-neutral-300 font-bold">{userTimezone}</span>.</div></div><div className="grid grid-cols-2 gap-3"><div><label className="text-[10px] font-black text-red-500 uppercase mb-1 block">Start</label><Input type="time" value={start} onChange={e => setStart(e.target.value)} className="[color-scheme:dark]" /></div><div><label className="text-[10px] font-black text-red-500 uppercase mb-1 block">End</label><Input type="time" value={end} onChange={e => setEnd(e.target.value)} className="[color-scheme:dark]" /></div></div><div><label className="text-[10px] font-black text-red-500 uppercase mb-1 block">Pref. Role</label><div className="flex gap-2 overflow-x-auto pb-2 scrollbar-hide">{ROLES.map(r => (<button key={r} onClick={() => setRole(r)} className={`px-3 py-2 rounded-lg text-xs font-black border transition-all whitespace-nowrap flex items-center justify-center ${role === r ? 'bg-red-600 text-white border-red-500' : 'bg-black/50 border-neutral-800 text-neutral-500 hover:text-white'}`}>{ROLE_ABBREVIATIONS[r] || r}</button>))}</div></div><div className="pt-2 flex gap-2"><ButtonPrimary onClick={saveAvail} disabled={saveStatus !== 'idle'} className="flex-1">{saveStatus === 'idle' ? 'Save Slot' : 'Saving...'}</ButtonPrimary><ButtonSecondary onClick={() => openModal('Clear Day', `Clear all for ${day}?`, clearDay)}>Clear</ButtonSecondary></div></div></Card><LeaveLogger members={dynamicMembers} rosterName={rosterName} /></div><div className="space-y-6"><div className="grid grid-cols-1 xl:grid-cols-2 gap-6"><Card><h2 className="text-lg font-bold text-white mb-4 uppercase tracking-wide">Team Heatmap</h2><AvailabilityHeatmap availabilities={displayAvail} members={dynamicMembers} /></Card><Card><div className="text-[10px] uppercase tracking-[0.28em] text-neutral-500 font-black mb-3">Today</div><div className="text-4xl font-black text-white">{availableToday}/{dynamicMembers.length}</div><div className="mt-2 text-sm text-neutral-400">members have availability logged for {todayName}.</div><div className="mt-5 pt-4 border-t border-white/10 text-xs text-neutral-500">Keep this current before scrims so captains can plan realistic blocks.</div></Card></div><Card><h2 className="text-xl font-bold text-white mb-6 uppercase tracking-wide">Weekly Timeline <span className="text-neutral-500 text-sm normal-case">({userTimezone})</span></h2><div className="overflow-x-auto scrollbar-thin scrollbar-thumb-neutral-700"><table className="w-full text-left border-collapse min-w-[600px]"><thead><tr className="border-b border-neutral-800"><th className="p-3 text-xs font-bold text-neutral-500 uppercase tracking-wider w-32">Team Member</th>{SHORT_DAYS.map(day => (<th key={day} className="p-3 text-xs font-bold text-red-600 uppercase tracking-wider text-center border-l border-neutral-800">{day}</th>))}</tr></thead><tbody className="divide-y divide-neutral-800/50">{dynamicMembers.map(member => (<tr key={member} className="hover:bg-neutral-800/30 transition-colors group"><td className="p-4 font-bold text-white text-sm flex items-center gap-2"><div className="w-2 h-2 rounded-full bg-red-500 shadow-red-500/50 shadow-sm"></div>{member}</td>{DAYS.map((day) => { const slots = (displayAvail[member] || []).filter(s => s.day === day); return (<td key={day} className="p-2 align-middle border-l border-neutral-800/50"><div className="flex flex-col gap-1 items-center justify-center">{slots.length > 0 ? slots.map((s, i) => (<div key={i} className="bg-gradient-to-br from-red-600 to-red-700 text-white text-[10px] font-bold px-2 py-1 rounded w-full text-center shadow-md whitespace-nowrap flex items-center justify-center gap-1">{s.start}-{s.end}<span className="opacity-75 ml-1 text-[9px] border border-white/20 px-1 rounded bg-black/20">{ROLE_ABBREVIATIONS[s.role] || s.role}</span></div>)) : <div className="h-1 w-4 bg-neutral-800 rounded-full"></div>}</div></td>); })}</tr>))}</tbody></table></div></Card></div></div></div>}
+                    {activeTab === 'coachroom' && <CoachRoom members={dynamicMembers} currentUserName={rosterName || currentUser.displayName || 'Coach'} />}
                     {activeTab === 'practice' && <PracticePlanner members={dynamicMembers} currentUserName={rosterName || currentUser.displayName || 'Unknown'} />}
                     {activeTab === 'playbook' && <div className="animate-fade-in h-[80vh]"><Playbook /></div>}
                     {activeTab === 'comps' && <div className="animate-fade-in h-full"><TeamComps members={dynamicMembers} /></div>}
