@@ -1257,10 +1257,13 @@ function StratBook() {
     const [dragging, setDragging] = useState(null);
     const [draft, setDraft] = useState(null);
     const [stratName, setStratName] = useState('');
+    const [stratStatus, setStratStatus] = useState('Draft');
+    const [stratTags, setStratTags] = useState('');
     const [loadingSave, setLoadingSave] = useState(false);
     const [paletteDrag, setPaletteDrag] = useState(null);
     const [pendingTextPoint, setPendingTextPoint] = useState(null);
     const [textDraft, setTextDraft] = useState('');
+    const [compactMode, setCompactMode] = useState(false);
 
     const tools = [
         { id: 'select', label: 'Select', hint: 'Move and edit placed items' },
@@ -1819,11 +1822,14 @@ function StratBook() {
                 name: stratName.trim() || `${selectedMap} ${side} strat`,
                 map: selectedMap,
                 side,
+                status: stratStatus,
+                tags: stratTags.split(',').map(tag => tag.trim()).filter(Boolean),
                 objects,
                 date: new Date().toISOString(),
                 updatedAt: new Date().toISOString()
             });
             setStratName('');
+            setStratTags('');
             addToast('Strategy saved');
         } catch (error) {
             console.error('Save strat failed:', error);
@@ -1834,7 +1840,7 @@ function StratBook() {
     };
 
     const exportJson = () => {
-        const payload = JSON.stringify({ name: stratName || `${selectedMap}-${side}`, map: selectedMap, side, objects }, null, 2);
+        const payload = JSON.stringify({ name: stratName || `${selectedMap}-${side}`, map: selectedMap, side, status: stratStatus, tags: stratTags.split(',').map(tag => tag.trim()).filter(Boolean), objects }, null, 2);
         const blob = new Blob([payload], { type: 'application/json' });
         const url = URL.createObjectURL(blob);
         const link = document.createElement('a');
@@ -1972,10 +1978,14 @@ function StratBook() {
     };
 
     const allObjects = draft ? [...objects, draft] : objects;
+    const plannerGridClass = compactMode
+        ? 'h-full min-h-[760px] grid grid-cols-1 bg-[#070b0f] border border-white/10 rounded-xl overflow-hidden shadow-2xl'
+        : 'h-full min-h-[760px] grid grid-cols-1 xl:grid-cols-[280px_minmax(420px,1fr)_320px] bg-[#070b0f] border border-white/10 rounded-xl overflow-hidden shadow-2xl';
+    const boardMaxClass = compactMode ? 'max-w-[min(88vh,1120px)]' : 'max-w-[min(78vh,920px)]';
 
     return (
-        <div className="h-full min-h-[760px] grid grid-cols-1 xl:grid-cols-[280px_minmax(420px,1fr)_320px] bg-[#070b0f] border border-white/10 rounded-xl overflow-hidden shadow-2xl">
-            <aside className="border-b xl:border-b-0 xl:border-r border-white/10 bg-black/40 overflow-y-auto custom-scrollbar">
+        <div className={plannerGridClass}>
+            {!compactMode && <aside className="border-b xl:border-b-0 xl:border-r border-white/10 bg-black/40 overflow-y-auto custom-scrollbar">
                 <div className="p-4 border-b border-white/10">
                     <div className="text-2xl font-black text-white italic tracking-tighter"><span className="text-red-600">/</span> STRAT PLANNER</div>
                     <div className="text-[10px] text-neutral-500 font-bold uppercase tracking-widest mt-1">Valo-style tactical board</div>
@@ -2023,17 +2033,28 @@ function StratBook() {
                     </div>
                     <ButtonSecondary onClick={clearBoard} className="w-full text-xs">Clear Board</ButtonSecondary>
                 </div>
-            </aside>
+            </aside>}
 
             <section className="relative min-h-[540px] bg-[#0b1116] overflow-hidden flex items-center justify-center p-4 md:p-8">
                 <div className="absolute top-4 left-4 right-4 z-20 flex flex-wrap items-center gap-2 pointer-events-none">
                     <div className="px-3 py-2 rounded-lg bg-black/70 border border-white/10 text-xs font-black uppercase text-white pointer-events-auto">{selectedMap} / {side} / {tool}</div>
                     <div className="ml-auto px-3 py-2 rounded-lg bg-black/70 border border-white/10 text-xs font-bold text-neutral-400 pointer-events-auto">{objects.length} items</div>
+                    <button onClick={() => setCompactMode(!compactMode)} className="px-3 py-2 rounded-lg bg-red-600 hover:bg-red-500 border border-red-500/50 text-[10px] font-black uppercase tracking-widest text-white pointer-events-auto">
+                        {compactMode ? 'Show Panels' : 'Focus Mode'}
+                    </button>
                 </div>
+
+                {compactMode && (
+                    <div className="absolute bottom-4 left-4 right-4 z-20 flex flex-wrap items-center justify-center gap-2 pointer-events-none">
+                        {tools.map(item => <button key={item.id} title={item.hint} onClick={() => setTool(item.id)} className={`h-9 px-3 rounded-lg border text-[10px] font-black uppercase pointer-events-auto ${tool === item.id ? 'bg-red-700 text-white border-red-500' : 'bg-black/75 text-neutral-300 border-white/10 hover:text-white'}`}>{item.label}</button>)}
+                        <ButtonSecondary onClick={undo} className="text-[10px] h-9 py-0 pointer-events-auto" disabled={historyStep === 0}>Undo</ButtonSecondary>
+                        <ButtonSecondary onClick={redo} className="text-[10px] h-9 py-0 pointer-events-auto" disabled={historyStep === history.length - 1}>Redo</ButtonSecondary>
+                    </div>
+                )}
 
                 <div
                     ref={boardRef}
-                    className="relative aspect-square w-full max-w-[min(78vh,920px)] rounded-xl overflow-hidden border border-white/10 bg-neutral-950 shadow-2xl touch-none"
+                    className={`relative aspect-square w-full ${boardMaxClass} rounded-xl overflow-hidden border border-white/10 bg-neutral-950 shadow-2xl touch-none`}
                     onPointerDown={handleBoardPointerDown}
                     onPointerMove={handleBoardPointerMove}
                     onPointerUp={finishBoardAction}
@@ -2053,7 +2074,7 @@ function StratBook() {
                 </div>
             </section>
 
-            <aside className="border-t xl:border-t-0 xl:border-l border-white/10 bg-black/40 overflow-y-auto custom-scrollbar">
+            {!compactMode && <aside className="border-t xl:border-t-0 xl:border-l border-white/10 bg-black/40 overflow-y-auto custom-scrollbar">
                 <div className="p-4 border-b border-white/10">
                     <label className="text-[10px] font-black text-red-500 uppercase mb-2 block">Agent</label>
                     <Select value={selectedAgent} onChange={e => { setSelectedAgent(e.target.value); setSelectedAbility(null); }}>
@@ -2115,6 +2136,10 @@ function StratBook() {
                 <div className="p-4 border-b border-white/10 space-y-3">
                     <label className="text-[10px] font-black text-red-500 uppercase block">Save Strategy</label>
                     <Input value={stratName} onChange={e => setStratName(e.target.value)} placeholder="Strategy name" />
+                    <Select value={stratStatus} onChange={e => setStratStatus(e.target.value)}>
+                        {['Draft', 'Reviewed', 'Match Ready', 'Archived'].map(status => <option key={status}>{status}</option>)}
+                    </Select>
+                    <Input value={stratTags} onChange={e => setStratTags(e.target.value)} placeholder="Tags: pistol, anti-eco, retake" />
                     <div className="grid grid-cols-2 gap-2">
                         <ButtonPrimary onClick={saveStrat} disabled={loadingSave} className="text-xs py-2">{loadingSave ? 'Saving...' : 'Save'}</ButtonPrimary>
                         <ButtonSecondary onClick={exportJson} className="text-xs">Export</ButtonSecondary>
@@ -2123,7 +2148,7 @@ function StratBook() {
                 <div className="p-4 text-xs text-neutral-500 leading-relaxed">
                     Saved strategies now live in the Strat Library tab, where app-made plans and uploaded ValoPlant images are grouped by map and side.
                 </div>
-            </aside>
+            </aside>}
             <Modal isOpen={Boolean(pendingTextPoint)} onClose={() => { setPendingTextPoint(null); setTextDraft(''); }} onConfirm={addTextObject} title="Add Text">
                 <div className="space-y-3">
                     <textarea
@@ -2252,6 +2277,9 @@ function StratPreviewBoard({ strat, mapImage, className = '' }) {
     );
 }
 
+const STRAT_STATUSES = ['All', 'Draft', 'Reviewed', 'Match Ready', 'Archived'];
+const COMMON_STRAT_TAGS = ['pistol', 'anti-eco', 'bonus', 'exec', 'default', 'retake', 'post-plant', 'mid control', 'fake'];
+
 function StratLibrary() {
     const { mapImages } = useValorantData();
     const addToast = useToast();
@@ -2259,10 +2287,13 @@ function StratLibrary() {
     const MAX_UPLOAD_SIZE_BYTES = MAX_UPLOAD_SIZE_MB * 1024 * 1024;
     const [selectedMap, setSelectedMap] = useState(MAPS[0]);
     const [side, setSide] = useState('Attack');
+    const [statusFilter, setStatusFilter] = useState('All');
+    const [tagFilter, setTagFilter] = useState('All');
+    const [searchTerm, setSearchTerm] = useState('');
     const [appStrats, setAppStrats] = useState([]);
     const [externalStrats, setExternalStrats] = useState([]);
     const [fullscreenStrat, setFullscreenStrat] = useState(null);
-    const [uploadForm, setUploadForm] = useState({ title: '', notes: '', imageUrl: '' });
+    const [uploadForm, setUploadForm] = useState({ title: '', notes: '', imageUrl: '', status: 'Draft', tags: '' });
     const [uploadFile, setUploadFile] = useState(null);
     const [uploading, setUploading] = useState(false);
 
@@ -2298,8 +2329,22 @@ function StratLibrary() {
         return () => unsub();
     }, [selectedMap]);
 
-    const filteredAppStrats = appStrats.filter(strat => (strat.side || 'Attack') === side);
-    const filteredExternalStrats = externalStrats.filter(strat => (strat.side || 'Attack') === side);
+    const normalizeTags = (tags) => Array.isArray(tags) ? tags.filter(Boolean) : String(tags || '').split(',').map(tag => tag.trim()).filter(Boolean);
+    const allTags = useMemo(() => {
+        const found = new Set(COMMON_STRAT_TAGS);
+        [...appStrats, ...externalStrats].forEach(strat => normalizeTags(strat.tags).forEach(tag => found.add(tag)));
+        return ['All', ...Array.from(found).sort((a, b) => a.localeCompare(b))];
+    }, [appStrats, externalStrats]);
+    const stratMatchesFilters = (strat) => {
+        const tags = normalizeTags(strat.tags);
+        const haystack = `${strat.name || ''} ${strat.title || ''} ${strat.notes || ''} ${tags.join(' ')}`.toLowerCase();
+        return (strat.side || 'Attack') === side
+            && (statusFilter === 'All' || (strat.status || 'Draft') === statusFilter)
+            && (tagFilter === 'All' || tags.map(tag => tag.toLowerCase()).includes(tagFilter.toLowerCase()))
+            && (!searchTerm.trim() || haystack.includes(searchTerm.trim().toLowerCase()));
+    };
+    const filteredAppStrats = appStrats.filter(stratMatchesFilters);
+    const filteredExternalStrats = externalStrats.filter(stratMatchesFilters);
 
     useEffect(() => {
         if (!fullscreenStrat) return undefined;
@@ -2347,17 +2392,39 @@ function StratLibrary() {
                 storagePath,
                 map: selectedMap,
                 side,
+                status: uploadForm.status,
+                tags: normalizeTags(uploadForm.tags),
                 source: uploadFile ? 'Uploaded Image' : 'ValoPlant',
                 createdAt: new Date().toISOString()
             });
-            setUploadForm({ title: '', notes: '', imageUrl: '' });
+            setUploadForm({ title: '', notes: '', imageUrl: '', status: 'Draft', tags: '' });
             setUploadFile(null);
             addToast('Uploaded strategy saved');
         } catch (error) {
             console.error('Upload strat save failed:', error);
-            addToast('Unable to save uploaded strategy', 'error');
+            const code = error?.code || '';
+            if (code.includes('storage/unauthorized') || code.includes('storage/unknown')) {
+                addToast('Storage upload is blocked. Paste an image URL instead, or enable Storage on your Firebase plan.', 'error');
+            } else if (code.includes('permission-denied')) {
+                addToast('Firestore rules blocked this strategy save', 'error');
+            } else {
+                addToast('Unable to save uploaded strategy', 'error');
+            }
         } finally {
             setUploading(false);
+        }
+    };
+
+    const updateStratStatus = async (collectionName, strat, status) => {
+        try {
+            await updateDoc(doc(db, collectionName, strat.id), {
+                status,
+                updatedAt: new Date().toISOString()
+            });
+            addToast('Strategy status updated');
+        } catch (error) {
+            console.error('Status update failed:', error);
+            addToast('Unable to update status', 'error');
         }
     };
 
@@ -2389,6 +2456,8 @@ function StratLibrary() {
             name: strat.name || strat.title || 'Untitled strategy',
             map: strat.map,
             side: strat.side,
+            status: strat.status || 'Draft',
+            tags: normalizeTags(strat.tags),
             objects: strat.objects || []
         }, null, 2);
         const blob = new Blob([payload], { type: 'application/json' });
@@ -2474,6 +2543,16 @@ function StratLibrary() {
                     </div>
                 </div>
 
+                <div className="mb-6 grid grid-cols-1 md:grid-cols-[1fr_12rem_12rem] gap-3">
+                    <Input value={searchTerm} onChange={e => setSearchTerm(e.target.value)} placeholder="Search strategy name, notes, or tags" />
+                    <Select value={statusFilter} onChange={e => setStatusFilter(e.target.value)}>
+                        {STRAT_STATUSES.map(status => <option key={status}>{status}</option>)}
+                    </Select>
+                    <Select value={tagFilter} onChange={e => setTagFilter(e.target.value)}>
+                        {allTags.map(tag => <option key={tag}>{tag}</option>)}
+                    </Select>
+                </div>
+
                 <div className="grid grid-cols-1 xl:grid-cols-[0.74fr_1.26fr] gap-6">
                     <div className="space-y-6">
                         <div className="rounded-xl border border-white/10 bg-black/35 overflow-hidden">
@@ -2497,6 +2576,10 @@ function StratLibrary() {
                             <div className="text-[10px] uppercase tracking-[0.24em] text-red-400 font-black">Upload External Image</div>
                             <Input value={uploadForm.title} onChange={e => setUploadForm({ ...uploadForm, title: e.target.value })} placeholder="Strategy title" />
                             <Input value={uploadForm.imageUrl} onChange={e => { setUploadForm({ ...uploadForm, imageUrl: e.target.value }); if (e.target.value.trim()) setUploadFile(null); }} placeholder="Image URL or upload below" />
+                            <Select value={uploadForm.status} onChange={e => setUploadForm({ ...uploadForm, status: e.target.value })}>
+                                {STRAT_STATUSES.filter(status => status !== 'All').map(status => <option key={status}>{status}</option>)}
+                            </Select>
+                            <Input value={uploadForm.tags} onChange={e => setUploadForm({ ...uploadForm, tags: e.target.value })} placeholder="Tags: pistol, anti-eco, retake" />
                             <input type="file" accept="image/*" onChange={handleImageFile} className="block w-full text-xs text-neutral-500 file:mr-3 file:rounded-lg file:border-0 file:bg-white/10 file:px-3 file:py-2 file:text-xs file:font-black file:uppercase file:text-white hover:file:bg-red-600" />
                             {uploadFile && <div className="rounded-lg border border-white/10 bg-black/40 px-3 py-2 text-xs text-neutral-400"><span className="font-black text-white">Selected:</span> {uploadFile.name} <span className="text-neutral-600">({(uploadFile.size / (1024 * 1024)).toFixed(2)}MB)</span></div>}
                             <textarea value={uploadForm.notes} onChange={e => setUploadForm({ ...uploadForm, notes: e.target.value })} placeholder="Optional notes, callouts, or source link..." className="w-full h-24 bg-black/40 border border-neutral-800 rounded-xl p-3 text-white text-sm outline-none focus:border-red-600 placeholder-neutral-600 resize-y" />
@@ -2527,7 +2610,14 @@ function StratLibrary() {
                                             </div>
                                             <button onClick={() => deleteAppStrat(strat.id)} className="text-neutral-600 hover:text-red-500 text-xl leading-none">×</button>
                                         </div>
+                                        <div className="mt-3 flex flex-wrap gap-2">
+                                            <span className="rounded-md border border-red-900/40 bg-red-950/25 px-2 py-1 text-[9px] font-black uppercase tracking-widest text-red-200">{strat.status || 'Draft'}</span>
+                                            {normalizeTags(strat.tags).map(tag => <span key={tag} className="rounded-md border border-white/10 bg-white/5 px-2 py-1 text-[9px] font-black uppercase tracking-widest text-neutral-400">{tag}</span>)}
+                                        </div>
                                         <div className="mt-4 flex flex-wrap gap-2">
+                                            <Select value={strat.status || 'Draft'} onChange={e => updateStratStatus('strats', strat, e.target.value)} className="max-w-40 text-xs py-2">
+                                                {STRAT_STATUSES.filter(status => status !== 'All').map(status => <option key={status}>{status}</option>)}
+                                            </Select>
                                             <ButtonSecondary onClick={() => setFullscreenStrat({ ...strat, kind: 'app', title: strat.name || strat.title || 'Untitled strategy' })} className="text-[10px] py-2">Fullscreen</ButtonSecondary>
                                             <ButtonSecondary onClick={() => exportAppStrat(strat)} className="text-[10px] py-2">Export JSON</ButtonSecondary>
                                         </div>
@@ -2559,8 +2649,15 @@ function StratLibrary() {
                                                 </div>
                                                 <button onClick={() => deleteUploadedStrat(strat)} className="text-neutral-600 hover:text-red-500 text-xl leading-none">×</button>
                                             </div>
+                                            <div className="mt-3 flex flex-wrap gap-2">
+                                                <span className="rounded-md border border-red-900/40 bg-red-950/25 px-2 py-1 text-[9px] font-black uppercase tracking-widest text-red-200">{strat.status || 'Draft'}</span>
+                                                {normalizeTags(strat.tags).map(tag => <span key={tag} className="rounded-md border border-white/10 bg-white/5 px-2 py-1 text-[9px] font-black uppercase tracking-widest text-neutral-400">{tag}</span>)}
+                                            </div>
                                             {strat.notes && <p className="mt-3 text-sm text-neutral-400 whitespace-pre-wrap">{strat.notes}</p>}
                                             <div className="mt-3 flex flex-wrap gap-3">
+                                                <Select value={strat.status || 'Draft'} onChange={e => updateStratStatus('external_strats', strat, e.target.value)} className="max-w-40 text-xs py-2">
+                                                    {STRAT_STATUSES.filter(status => status !== 'All').map(status => <option key={status}>{status}</option>)}
+                                                </Select>
                                                 <button onClick={() => setFullscreenStrat({ ...strat, kind: 'external' })} className="text-[10px] font-black uppercase tracking-widest text-red-400 hover:text-white">Fullscreen</button>
                                                 {String(strat.imageUrl || '').startsWith('http') && <a href={strat.imageUrl} target="_blank" rel="noreferrer" className="text-[10px] font-black uppercase tracking-widest text-neutral-500 hover:text-white">Open Image</a>}
                                             </div>
@@ -3405,7 +3502,9 @@ function PracticePlanner({ members, currentUserName }) {
 
 function MatchPrep({ members, events, currentUserName }) {
     const [preps, setPreps] = useState([]);
-    const [form, setForm] = useState({ opponent: '', eventId: '', map: MAPS[0], status: 'Scouting', comp: '', veto: '', winConditions: '', threats: '', playerNotes: '', links: '' });
+    const [appStrats, setAppStrats] = useState([]);
+    const [externalStrats, setExternalStrats] = useState([]);
+    const [form, setForm] = useState({ opponent: '', eventId: '', map: MAPS[0], status: 'Scouting', comp: '', veto: '', winConditions: '', threats: '', playerNotes: '', links: '', linkedStrats: [], checklist: { comp: false, veto: false, strats: false, vod: false } });
     const [saving, setSaving] = useState(false);
     const addToast = useToast();
 
@@ -3418,10 +3517,56 @@ function MatchPrep({ members, events, currentUserName }) {
         return () => unsub();
     }, []);
 
+    useEffect(() => {
+        const unsubStrats = onSnapshot(collection(db, 'strats'), (snap) => {
+            const rows = [];
+            snap.forEach(d => rows.push({ id: d.id, kind: 'app', title: d.data().name || d.data().title || 'Untitled strategy', ...d.data() }));
+            setAppStrats(rows);
+        });
+        const unsubExternal = onSnapshot(collection(db, 'external_strats'), (snap) => {
+            const rows = [];
+            snap.forEach(d => rows.push({ id: d.id, kind: 'external', title: d.data().title || 'Uploaded plan', ...d.data() }));
+            setExternalStrats(rows);
+        });
+        return () => { unsubStrats(); unsubExternal(); };
+    }, []);
+
     const selectedEvent = events.find(event => event.id === form.eventId);
     useEffect(() => {
         if (selectedEvent) setForm(prev => ({ ...prev, opponent: selectedEvent.opponent || prev.opponent, map: selectedEvent.map && selectedEvent.map !== 'TBD' ? selectedEvent.map : prev.map }));
     }, [selectedEvent]);
+
+    const availableStrats = useMemo(() => {
+        return [...appStrats, ...externalStrats]
+            .filter(strat => strat.map === form.map && (strat.status || 'Draft') !== 'Archived')
+            .sort((a, b) => {
+                const readyScore = (strat) => strat.status === 'Match Ready' ? 0 : strat.status === 'Reviewed' ? 1 : 2;
+                return readyScore(a) - readyScore(b) || String(a.title || a.name).localeCompare(String(b.title || b.name));
+            });
+    }, [appStrats, externalStrats, form.map]);
+
+    const toggleLinkedStrat = (strat) => {
+        const key = `${strat.kind}:${strat.id}`;
+        const exists = form.linkedStrats.some(item => item.key === key);
+        setForm({
+            ...form,
+            linkedStrats: exists
+                ? form.linkedStrats.filter(item => item.key !== key)
+                : [...form.linkedStrats, {
+                    key,
+                    id: strat.id,
+                    kind: strat.kind,
+                    title: strat.title || strat.name || 'Untitled strategy',
+                    map: strat.map,
+                    side: strat.side || 'Attack',
+                    status: strat.status || 'Draft'
+                }]
+        });
+    };
+
+    const toggleChecklist = (key) => {
+        setForm({ ...form, checklist: { ...form.checklist, [key]: !form.checklist[key] } });
+    };
 
     const savePrep = async () => {
         if (!form.opponent.trim()) return addToast('Opponent is required', 'error');
@@ -3435,7 +3580,7 @@ function MatchPrep({ members, events, currentUserName }) {
                 createdBy: currentUserName || 'Unknown'
             });
             await writeAuditLog('Match prep created', form.opponent.trim(), currentUserName);
-            setForm({ opponent: '', eventId: '', map: MAPS[0], status: 'Scouting', comp: '', veto: '', winConditions: '', threats: '', playerNotes: '', links: '' });
+            setForm({ opponent: '', eventId: '', map: MAPS[0], status: 'Scouting', comp: '', veto: '', winConditions: '', threats: '', playerNotes: '', links: '', linkedStrats: [], checklist: { comp: false, veto: false, strats: false, vod: false } });
             addToast('Match prep saved');
         } catch (error) {
             console.error('Match prep failed:', error);
@@ -3474,6 +3619,38 @@ function MatchPrep({ members, events, currentUserName }) {
                     <textarea value={form.threats} onChange={e => setForm({ ...form, threats: e.target.value })} placeholder="Opponent threats / habits..." className="w-full h-24 bg-black/40 border border-neutral-800 rounded-xl p-3 text-white text-sm outline-none focus:border-red-600 placeholder-neutral-600 resize-y" />
                     <textarea value={form.playerNotes} onChange={e => setForm({ ...form, playerNotes: e.target.value })} placeholder={`Player assignments (${members.slice(0, 5).join(', ')})...`} className="w-full h-24 bg-black/40 border border-neutral-800 rounded-xl p-3 text-white text-sm outline-none focus:border-red-600 placeholder-neutral-600 resize-y" />
                     <Input placeholder="VOD / tracker / sheet links" value={form.links} onChange={e => setForm({ ...form, links: e.target.value })} />
+                    <div className="rounded-xl border border-white/10 bg-black/30 p-3">
+                        <div className="text-[10px] uppercase tracking-[0.24em] text-red-400 font-black mb-3">Packet Checklist</div>
+                        <div className="grid grid-cols-2 gap-2">
+                            {[['comp', 'Comp locked'], ['veto', 'Veto plan'], ['strats', 'Strats linked'], ['vod', 'VOD reviewed']].map(([key, label]) => (
+                                <label key={key} className="flex items-center gap-2 rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-xs font-bold uppercase text-neutral-300">
+                                    <input type="checkbox" checked={Boolean(form.checklist[key])} onChange={() => toggleChecklist(key)} className="accent-red-600" />
+                                    {label}
+                                </label>
+                            ))}
+                        </div>
+                    </div>
+                    <div className="rounded-xl border border-white/10 bg-black/30 p-3">
+                        <div className="flex items-center justify-between gap-3 mb-3">
+                            <div className="text-[10px] uppercase tracking-[0.24em] text-red-400 font-black">Linked Strats</div>
+                            <div className="text-[10px] uppercase tracking-widest text-neutral-500">{form.linkedStrats.length} selected</div>
+                        </div>
+                        <div className="max-h-44 overflow-y-auto custom-scrollbar space-y-2 pr-1">
+                            {availableStrats.length ? availableStrats.map(strat => {
+                                const key = `${strat.kind}:${strat.id}`;
+                                const checked = form.linkedStrats.some(item => item.key === key);
+                                return (
+                                    <label key={key} className={`flex items-center justify-between gap-3 rounded-lg border px-3 py-2 text-xs ${checked ? 'border-red-500 bg-red-950/30 text-white' : 'border-white/10 bg-white/5 text-neutral-400'}`}>
+                                        <span className="min-w-0">
+                                            <span className="block truncate font-black uppercase">{strat.title || strat.name}</span>
+                                            <span className="text-[10px] uppercase tracking-widest text-neutral-500">{strat.side || 'Attack'} / {strat.status || 'Draft'} / {strat.kind === 'app' ? 'Stratbook' : 'Upload'}</span>
+                                        </span>
+                                        <input type="checkbox" checked={checked} onChange={() => toggleLinkedStrat(strat)} className="accent-red-600" />
+                                    </label>
+                                );
+                            }) : <div className="rounded-lg border border-dashed border-neutral-800 p-4 text-center text-xs text-neutral-500">No saved strats for {form.map}. Mark plans as reviewed or match ready in Strat Library.</div>}
+                        </div>
+                    </div>
                     <ButtonPrimary onClick={savePrep} disabled={saving} className="w-full py-3 text-xs">{saving ? 'Saving...' : 'Save Prep'}</ButtonPrimary>
                 </div>
             </Card>
@@ -3504,6 +3681,26 @@ function MatchPrep({ members, events, currentUserName }) {
                                     <p className="text-sm text-neutral-300 whitespace-pre-wrap">{prep[key]}</p>
                                 </div>
                             ))}
+                            {prep.linkedStrats?.length > 0 && (
+                                <div className="mt-3 border-t border-white/10 pt-3">
+                                    <div className="text-[9px] uppercase tracking-widest text-neutral-500 font-black mb-2">Linked Strats</div>
+                                    <div className="flex flex-wrap gap-2">
+                                        {prep.linkedStrats.map(item => (
+                                            <span key={item.key} className="rounded-md border border-red-900/40 bg-red-950/25 px-2 py-1 text-[9px] font-black uppercase tracking-widest text-red-200">{item.title} / {item.side}</span>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
+                            {prep.checklist && (
+                                <div className="mt-3 border-t border-white/10 pt-3">
+                                    <div className="text-[9px] uppercase tracking-widest text-neutral-500 font-black mb-2">Readiness</div>
+                                    <div className="grid grid-cols-2 gap-2">
+                                        {[['comp', 'Comp'], ['veto', 'Veto'], ['strats', 'Strats'], ['vod', 'VOD']].map(([key, label]) => (
+                                            <span key={key} className={`rounded-md border px-2 py-1 text-[9px] font-black uppercase tracking-widest ${prep.checklist[key] ? 'border-green-800/50 bg-green-950/20 text-green-300' : 'border-white/10 bg-white/5 text-neutral-500'}`}>{label}</span>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
                             {prep.links && <a href={prep.links} target="_blank" rel="noreferrer" className="mt-3 inline-flex text-[10px] font-black uppercase tracking-widest text-red-400 hover:text-white">Open Link</a>}
                         </div>
                     )) : <div className="p-8 text-center text-sm text-neutral-500 border border-dashed border-neutral-800 rounded-xl">No match prep saved.</div>}
