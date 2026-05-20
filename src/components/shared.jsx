@@ -17,10 +17,10 @@ export const GlobalStyles = () => (
             overflow-x: hidden;
         }
 
-        .glass-panel { background: rgba(12, 14, 18, 0.86); backdrop-filter: blur(14px); border: 1px solid rgba(255,255,255,0.10); box-shadow: 0 14px 40px rgba(0, 0, 0, 0.36); }
-        .card-shine:hover { border-color: rgba(239, 68, 68, 0.34); background: rgba(17, 20, 26, 0.94); box-shadow: 0 18px 44px rgba(0,0,0,0.4); }
-        .section-kicker { color: #ef4444; font-size: 0.72rem; font-weight: 900; letter-spacing: 0.24em; text-transform: uppercase; }
-        .section-title { color: #fff; font-size: clamp(1.9rem, 4.2vw, 3.25rem); line-height: 0.95; font-weight: 900; letter-spacing: 0; font-style: italic; text-transform: uppercase; }
+        .glass-panel { background: rgba(10, 12, 16, 0.92); backdrop-filter: blur(12px); border: 1px solid rgba(255,255,255,0.08); box-shadow: 0 12px 32px rgba(0, 0, 0, 0.28); }
+        .card-shine:hover { border-color: rgba(239, 68, 68, 0.26); background: rgba(15, 18, 24, 0.96); box-shadow: 0 16px 36px rgba(0,0,0,0.34); }
+        .section-kicker { color: #ef4444; font-size: 0.7rem; font-weight: 900; letter-spacing: 0.18em; text-transform: uppercase; }
+        .section-title { color: #fff; font-size: clamp(1.9rem, 4vw, 3.05rem); line-height: 1; font-weight: 900; letter-spacing: 0; text-transform: uppercase; }
         .surface-band { background: rgba(9, 11, 15, 0.74); border-block: 1px solid rgba(255,255,255,0.06); }
         @keyframes slideIn { from { transform: translateX(100%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
         .animate-slide-in { animation: slideIn 0.3s cubic-bezier(0.2, 0.8, 0.2, 1); }
@@ -93,12 +93,12 @@ export const Modal = ({ isOpen, onClose, onConfirm, title, children }) => {
     if (!isOpen) return null;
     return (
         <div className="fixed inset-0 bg-black/95 z-[150] flex justify-center items-center backdrop-blur-sm p-4 overflow-y-auto">
-            <div className="bg-neutral-900 rounded-xl shadow-2xl shadow-red-900/20 p-6 w-full max-w-md border border-red-900/40 animate-fade-in relative">
-                <h3 className="text-2xl font-black text-white mb-4 border-b pb-2 border-red-900/50 uppercase tracking-wider italic">{title}</h3>
+            <div className="bg-neutral-900 rounded-lg shadow-2xl shadow-red-900/20 p-6 w-full max-w-md border border-red-900/40 animate-fade-in relative">
+                <h3 className="text-2xl font-black text-white mb-4 border-b pb-2 border-red-900/50 uppercase tracking-wide">{title}</h3>
                 <div className="text-neutral-300 mb-8">{children}</div>
                 <div className="flex justify-end gap-4">
-                    <button onClick={onClose} className="bg-black/40 hover:bg-neutral-900 border border-neutral-800 text-neutral-400 py-2 px-4 rounded-xl">Cancel</button>
-                    {onConfirm && <button onClick={onConfirm} className="bg-red-700 hover:bg-red-600 text-white font-bold py-2 px-6 rounded-xl">Confirm</button>}
+                    <button onClick={onClose} className="bg-black/40 hover:bg-neutral-900 border border-neutral-800 text-neutral-400 py-2 px-4 rounded-lg">Cancel</button>
+                    {onConfirm && <button onClick={onConfirm} className="bg-red-700 hover:bg-red-600 text-white font-bold py-2 px-6 rounded-lg">Confirm</button>}
                 </div>
             </div>
         </div>
@@ -106,29 +106,29 @@ export const Modal = ({ isOpen, onClose, onConfirm, title, children }) => {
 };
 
 export const Input = ({ className = '', ...props }) => (
-    <input {...props} className={`w-full bg-black/40 border border-neutral-800 rounded-xl p-3 text-white text-sm outline-none focus:border-red-600 focus:ring-1 focus:ring-red-600 transition-all placeholder-neutral-600 shadow-inner hover:border-neutral-700 ${className}`} />
+    <input {...props} className={`w-full bg-black/40 border border-neutral-800 rounded-lg p-3 text-white text-sm outline-none focus:border-red-600 focus:ring-1 focus:ring-red-600 transition-all placeholder-neutral-600 shadow-inner hover:border-neutral-700 ${className}`} />
 );
 
 export const Select = ({ className = '', children, ...props }) => (
-    <select {...props} className={`w-full bg-black/40 border border-neutral-800 rounded-xl p-3 text-white text-sm outline-none focus:border-red-600 focus:ring-1 focus:ring-red-600 transition-all shadow-inner hover:border-neutral-700 ${className}`}>
+    <select {...props} className={`w-full bg-black/40 border border-neutral-800 rounded-lg p-3 text-white text-sm outline-none focus:border-red-600 focus:ring-1 focus:ring-red-600 transition-all shadow-inner hover:border-neutral-700 ${className}`}>
         {children}
     </select>
 );
 
 export const ButtonPrimary = ({ children, onClick, disabled, className = "" }) => (
-    <button onClick={onClick} disabled={disabled} className={`bg-gradient-to-r from-red-800 to-red-600 hover:from-red-700 hover:to-red-500 text-white font-black uppercase tracking-widest py-3 px-6 rounded-xl shadow-lg shadow-red-900/20 transition-all transform active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed ${className}`}>
+    <button onClick={onClick} disabled={disabled} className={`bg-red-600 hover:bg-red-500 text-white font-black uppercase tracking-[0.12em] py-3 px-6 rounded-lg shadow-lg shadow-red-950/20 transition-all transform active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed ${className}`}>
         {children}
     </button>
 );
 
 export const ButtonSecondary = ({ children, onClick, disabled, className = "" }) => (
-    <button onClick={onClick} disabled={disabled} className={`bg-black/40 hover:bg-neutral-900 border border-neutral-800 hover:border-red-900/50 text-neutral-400 hover:text-white font-bold uppercase tracking-wider py-2 px-4 rounded-xl transition-all disabled:opacity-50 disabled:cursor-not-allowed ${className}`}>
+    <button onClick={onClick} disabled={disabled} className={`bg-black/40 hover:bg-neutral-900 border border-neutral-800 hover:border-red-900/50 text-neutral-400 hover:text-white font-bold uppercase tracking-[0.1em] py-2 px-4 rounded-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed ${className}`}>
         {children}
     </button>
 );
 
 export const Card = ({ children, className = "" }) => (
-    <div className={`glass-panel rounded-xl p-6 relative overflow-hidden group card-shine transition-all duration-300 ${className}`}>
+    <div className={`glass-panel rounded-lg p-6 relative overflow-hidden group card-shine transition-all duration-300 ${className}`}>
         {children}
     </div>
 );

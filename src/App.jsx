@@ -5735,18 +5735,18 @@ function SyrixDashboard({ onBack }) {
     }).length;
     const roleDashboard = isAdmin
         ? {
-            title: 'Operations Desk',
+            title: 'Operations',
             copy: 'Keep the team moving: approve work, update the roster, publish comms, and make sure the next block has a clear owner.',
             primary: { id: 'admin', label: 'Admin Panel' }
         }
         : isStaff
             ? {
-                title: 'Coach Desk',
+                title: 'Coaching',
                 copy: 'Plan practice, review requests, prep the next match, and keep player follow-ups from getting buried in chat.',
                 primary: { id: 'coachroom', label: 'Coach Room' }
             }
             : {
-                title: 'Player Desk',
+                title: 'Player Home',
                 copy: 'Check what is coming up, keep your availability current, and send requests or notes to staff before practice.',
                 primary: { id: 'availability', label: 'Update Availability' }
             };
@@ -5763,7 +5763,7 @@ function SyrixDashboard({ onBack }) {
         { label: 'Meetings', value: requestCountById('meetings'), tab: 'meetings' }
     ].filter(item => item.value > 0);
     const pageMeta = {
-        dashboard: 'Overview, next operation, quick actions, and team status.',
+        dashboard: 'Your role-aware home for the next event, requests, tasks, and quick actions.',
         calendar: 'View upcoming scrims, officials, practices, and VOD reviews by month.',
         bulletins: 'Player-submitted scrim requests, tournament leads, training ideas, and team info.',
         notifications: 'Track upcoming events, due tasks, and pinned announcements.',
@@ -5804,7 +5804,7 @@ function SyrixDashboard({ onBack }) {
         <button
             onClick={() => setActiveTab(item.id)}
             title={item.label}
-            className={`${compact ? 'px-3 py-2 text-[10px]' : collapsed ? 'w-full px-2 py-2.5 text-[10px] justify-center' : 'w-full px-3 py-2.5 text-xs'} text-left font-black uppercase tracking-[0.16em] transition-all border flex items-center ${collapsed ? 'justify-center' : 'justify-between'} gap-3 ${activeTab === item.id ? 'bg-red-600 text-white border-red-500' : 'bg-transparent text-neutral-500 border-transparent hover:text-white hover:bg-white/5 hover:border-white/10'}`}
+            className={`${compact ? 'px-3 py-2 text-[10px]' : collapsed ? 'w-full px-2 py-2.5 text-[10px] justify-center' : 'w-full px-3 py-2.5 text-xs'} text-left font-black uppercase tracking-[0.1em] transition-all border flex items-center ${collapsed ? 'justify-center' : 'justify-between'} gap-3 ${activeTab === item.id ? 'bg-red-600 text-white border-red-500' : 'bg-transparent text-neutral-500 border-transparent hover:text-white hover:bg-white/5 hover:border-white/10'}`}
         >
             <span>{collapsed ? item.label.slice(0, 2) : item.label}</span>
             {!collapsed && navBadge(item.id) && <span className={`text-[9px] px-1.5 py-0.5 border ${activeTab === item.id ? 'border-white/30 bg-black/20 text-white' : 'border-white/10 bg-white/5 text-neutral-400'}`}>{navBadge(item.id)}</span>}
@@ -5896,24 +5896,24 @@ function SyrixDashboard({ onBack }) {
                     {!canAccessActiveTab && <AccessDenied activeLabel={activeLabel} accessLabel={accessLabel} onGoHome={() => setActiveTab('dashboard')} />}
                     {activeTab === 'dashboard' && <div className="animate-fade-in space-y-6">
                         <div className="grid grid-cols-1 xl:grid-cols-[1.25fr_0.75fr] gap-4">
-                            <div className="glass-panel rounded-xl p-6 border-white/10 overflow-hidden">
+                            <div className="glass-panel rounded-lg p-6 border-white/10 overflow-hidden">
                                 <div className="flex flex-wrap items-center gap-2 mb-4">
-                                    <span className="text-[10px] uppercase tracking-[0.28em] text-red-400 font-black">Today Command</span>
-                                    <span className="text-[10px] uppercase tracking-widest border border-white/10 bg-white/5 text-neutral-400 px-2 py-1 rounded">{accessLabel}</span>
+                                    <span className="text-[10px] uppercase tracking-[0.18em] text-red-400 font-black">Today</span>
+                                    <span className="text-[10px] uppercase tracking-[0.1em] border border-white/10 bg-white/5 text-neutral-400 px-2 py-1 rounded">{accessLabel}</span>
                                 </div>
-                                <h2 className="text-4xl md:text-5xl font-black text-white uppercase italic leading-none">{roleDashboard.title}</h2>
+                                <h2 className="text-3xl md:text-4xl font-black text-white uppercase leading-tight">{roleDashboard.title}</h2>
                                 <p className="mt-4 text-sm text-neutral-400 max-w-2xl">{roleDashboard.copy}</p>
                                 <div className="mt-6 flex flex-wrap gap-2">
                                     {quickActions.map((action, index) => (
-                                        <button key={action.id} onClick={() => setActiveTab(action.id)} className={`${index === 0 ? 'bg-red-600 hover:bg-red-500 text-white' : 'bg-white/10 hover:bg-white/15 border border-white/10 text-white'} px-4 py-2 text-xs font-black uppercase tracking-widest`}>
+                                        <button key={action.id} onClick={() => setActiveTab(action.id)} className={`${index === 0 ? 'bg-red-600 hover:bg-red-500 text-white' : 'bg-white/10 hover:bg-white/15 border border-white/10 text-white'} px-4 py-2 text-xs font-black uppercase tracking-[0.12em] rounded-lg`}>
                                             {action.label}
                                         </button>
                                     ))}
                                 </div>
                             </div>
-                            <div className="glass-panel rounded-xl p-6 border-white/10">
-                                <div className="text-[10px] uppercase tracking-[0.28em] text-neutral-500 font-black mb-4">Next Operation</div>
-                                <div className="text-2xl font-black text-white uppercase italic leading-tight">{nextEvent ? `${nextEvent.type || 'Event'} vs ${nextEvent.opponent || 'TBD'}` : 'No Event Scheduled'}</div>
+                            <div className="glass-panel rounded-lg p-6 border-white/10">
+                                <div className="text-[10px] uppercase tracking-[0.18em] text-neutral-500 font-black mb-4">Next Operation</div>
+                                <div className="text-2xl font-black text-white uppercase leading-tight">{nextEvent ? `${nextEvent.type || 'Event'} vs ${nextEvent.opponent || 'TBD'}` : 'No Event Scheduled'}</div>
                                 <div className="mt-3 text-sm text-neutral-400">{nextEvent ? `${nextEvent.date || 'Date TBD'} @ ${nextEvent.time || 'Time TBD'} ${nextEvent.timezone || ''}` : isStaff ? 'Use Event Operations to schedule the next practice, scrim, or official.' : 'No team event has been posted yet.'}</div>
                                 <div className="mt-5 pt-4 border-t border-white/10 grid grid-cols-2 gap-3">
                                     <div><div className="text-3xl font-black text-white">{dynamicMembers.length}</div><div className="text-[10px] uppercase tracking-widest text-neutral-500 font-black">Members</div></div>
@@ -5922,10 +5922,10 @@ function SyrixDashboard({ onBack }) {
                             </div>
                         </div>
                         <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                            <button onClick={() => setActiveTab('availability')} className="glass-panel rounded-xl p-4 border-white/10 text-left hover:border-red-900/40 transition"><div className="text-[10px] uppercase tracking-widest text-neutral-500 font-black">Available Today</div><div className="mt-2 text-3xl font-black text-white">{availableToday}/{dynamicMembers.length}</div></button>
-                            <button onClick={() => setActiveTab('calendar')} className="glass-panel rounded-xl p-4 border-white/10 text-left hover:border-red-900/40 transition"><div className="text-[10px] uppercase tracking-widest text-neutral-500 font-black">Events</div><div className="mt-2 text-3xl font-black text-white">{events.length}</div></button>
-                            <button onClick={() => setActiveTab('teamrequests')} className="glass-panel rounded-xl p-4 border-white/10 text-left hover:border-red-900/40 transition"><div className="text-[10px] uppercase tracking-widest text-neutral-500 font-black">Open Requests</div><div className="mt-2 text-3xl font-black text-white">{visibleRequestItems.filter(item => !['Done', 'Archived'].includes(item.status || 'Open')).length}</div></button>
-                            <div className="glass-panel rounded-xl p-4 border-white/10"><div className="text-[10px] uppercase tracking-widest text-neutral-500 font-black">Timezone</div><div className="mt-2 text-sm font-bold text-white truncate">{userTimezone}</div></div>
+                            <button onClick={() => setActiveTab('availability')} className="glass-panel rounded-lg p-4 border-white/10 text-left hover:border-red-900/40 transition"><div className="text-[10px] uppercase tracking-[0.12em] text-neutral-500 font-black">Available Today</div><div className="mt-2 text-3xl font-black text-white">{availableToday}/{dynamicMembers.length}</div></button>
+                            <button onClick={() => setActiveTab('calendar')} className="glass-panel rounded-lg p-4 border-white/10 text-left hover:border-red-900/40 transition"><div className="text-[10px] uppercase tracking-[0.12em] text-neutral-500 font-black">Events</div><div className="mt-2 text-3xl font-black text-white">{events.length}</div></button>
+                            <button onClick={() => setActiveTab('teamrequests')} className="glass-panel rounded-lg p-4 border-white/10 text-left hover:border-red-900/40 transition"><div className="text-[10px] uppercase tracking-[0.12em] text-neutral-500 font-black">Open Requests</div><div className="mt-2 text-3xl font-black text-white">{visibleRequestItems.filter(item => !['Done', 'Archived'].includes(item.status || 'Open')).length}</div></button>
+                            <div className="glass-panel rounded-lg p-4 border-white/10"><div className="text-[10px] uppercase tracking-[0.12em] text-neutral-500 font-black">Timezone</div><div className="mt-2 text-sm font-bold text-white truncate">{userTimezone}</div></div>
                         </div>
                         <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
                         <div className="lg:col-span-4 space-y-8">
