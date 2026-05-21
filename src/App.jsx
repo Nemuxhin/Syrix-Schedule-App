@@ -2291,7 +2291,7 @@ function StratPreviewBoard({ strat, mapImage, className = '' }) {
     );
 }
 
-const STRAT_STATUSES = ['All', 'Draft', 'Reviewed', 'Match Ready', 'Archived'];
+const STRAT_STATUSES = ['All', 'Draft', 'Needs Review', 'Reviewed', 'Match Ready', 'Archived'];
 const COMMON_STRAT_TAGS = ['pistol', 'anti-eco', 'bonus', 'exec', 'default', 'retake', 'post-plant', 'mid control', 'fake'];
 const BULLETIN_TYPES = ['All', 'Scrim Request', 'Tournament Lead', 'Training Idea', 'Availability Note', 'Team Info', 'General'];
 const BULLETIN_PRIORITIES = ['Low', 'Normal', 'High'];
@@ -2308,6 +2308,11 @@ const normalizeAppStrat = (strat = {}) => ({
     name: strat.name || strat.title || 'Untitled strategy',
     side: strat.side || 'Attack',
     status: strat.status || 'Draft',
+    reviewRequestedAt: strat.reviewRequestedAt || '',
+    reviewedAt: strat.reviewedAt || '',
+    reviewedByName: strat.reviewedByName || '',
+    approvedAt: strat.approvedAt || '',
+    approvedByName: strat.approvedByName || '',
     tags: normalizeStratTags(strat.tags),
     objects: Array.isArray(strat.objects) ? strat.objects : [],
     createdAt: strat.createdAt || strat.date || strat.updatedAt || '',
@@ -2321,6 +2326,11 @@ const normalizeExternalStrat = (strat = {}) => ({
     title: strat.title || strat.name || 'External strategy',
     side: strat.side || 'Attack',
     status: strat.status || 'Draft',
+    reviewRequestedAt: strat.reviewRequestedAt || '',
+    reviewedAt: strat.reviewedAt || '',
+    reviewedByName: strat.reviewedByName || '',
+    approvedAt: strat.approvedAt || '',
+    approvedByName: strat.approvedByName || '',
     tags: normalizeStratTags(strat.tags),
     imageUrl: strat.imageUrl || strat.url || '',
     source: strat.source || 'Image URL',
@@ -2446,15 +2456,47 @@ function StratLibrary() {
 
     const updateStratStatus = async (collectionName, strat, status) => {
         try {
-            await updateDoc(doc(db, collectionName, strat.id), {
+            const identity = currentAuthIdentity();
+            const patch = {
                 status,
-                updatedAt: new Date().toISOString()
+                updatedAt: new Date().toISOString(),
+                updatedBy: identity.uid,
+                updatedByName: identity.name
+            };
+            if (status === 'Needs Review') {
+                patch.reviewRequestedAt = new Date().toISOString();
+                patch.reviewRequestedBy = identity.uid;
+                patch.reviewRequestedByName = identity.name;
+            }
+            if (status === 'Reviewed') {
+                patch.reviewedAt = new Date().toISOString();
+                patch.reviewedBy = identity.uid;
+                patch.reviewedByName = identity.name;
+            }
+            if (status === 'Match Ready') {
+                patch.reviewedAt = strat.reviewedAt || new Date().toISOString();
+                patch.reviewedBy = strat.reviewedBy || identity.uid;
+                patch.reviewedByName = strat.reviewedByName || identity.name;
+                patch.approvedAt = new Date().toISOString();
+                patch.approvedBy = identity.uid;
+                patch.approvedByName = identity.name;
+            }
+            await updateDoc(doc(db, collectionName, strat.id), {
+                ...patch
             });
             addToast('Strategy status updated');
         } catch (error) {
             console.error('Status update failed:', error);
             addToast('Unable to update status', 'error');
         }
+    };
+
+    const approvalCopy = (strat) => {
+        if (strat.status === 'Match Ready') return strat.approvedByName ? `Approved by ${strat.approvedByName}` : 'Approved for matches';
+        if (strat.status === 'Reviewed') return strat.reviewedByName ? `Reviewed by ${strat.reviewedByName}` : 'Reviewed by staff';
+        if (strat.status === 'Needs Review') return 'Waiting for review';
+        if (strat.status === 'Archived') return 'Archived';
+        return 'Draft';
     };
 
     const deleteUploadedStrat = async (strat) => {
@@ -2539,6 +2581,10 @@ function StratLibrary() {
                                     <div className="text-[10px] uppercase tracking-widest text-neutral-500 font-black">Saved</div>
                                     <div className="mt-1 text-sm font-black text-white">{fullscreenStrat.createdAt || fullscreenStrat.updatedAt || fullscreenStrat.date ? new Date(fullscreenStrat.createdAt || fullscreenStrat.updatedAt || fullscreenStrat.date).toLocaleDateString() : 'No date'}</div>
                                 </div>
+                            </div>
+                            <div className="mt-3 rounded-xl border border-white/10 bg-black/40 p-3">
+                                <div className="text-[10px] uppercase tracking-widest text-neutral-500 font-black">Approval</div>
+                                <div className="mt-1 text-sm font-black text-white">{approvalCopy(fullscreenStrat)}</div>
                             </div>
                             {fullscreenStrat.kind === 'app' && (
                                 <div className="mt-3 rounded-xl border border-white/10 bg-black/40 p-3">
@@ -2631,6 +2677,7 @@ function StratLibrary() {
                                             <div className="min-w-0">
                                                 <div className="text-lg font-black text-white truncate">{strat.name || strat.title || 'Untitled strategy'}</div>
                                                 <div className="mt-1 text-[10px] uppercase tracking-widest text-neutral-500">{strat.side || 'Attack'} / {strat.objects?.length || 0} items / {strat.updatedAt ? new Date(strat.updatedAt).toLocaleDateString() : 'No date'}</div>
+                                                <div className="mt-1 text-[10px] uppercase tracking-widest text-red-300">{approvalCopy(strat)}</div>
                                             </div>
                                             <button onClick={() => deleteAppStrat(strat.id)} className="text-neutral-600 hover:text-red-500 text-xl leading-none">×</button>
                                         </div>
@@ -2642,6 +2689,8 @@ function StratLibrary() {
                                             <Select value={strat.status || 'Draft'} onChange={e => updateStratStatus('strats', strat, e.target.value)} className="max-w-40 text-xs py-2">
                                                 {STRAT_STATUSES.filter(status => status !== 'All').map(status => <option key={status}>{status}</option>)}
                                             </Select>
+                                            <ButtonSecondary onClick={() => updateStratStatus('strats', strat, 'Needs Review')} className="text-[10px] py-2">Request Review</ButtonSecondary>
+                                            <ButtonSecondary onClick={() => updateStratStatus('strats', strat, 'Match Ready')} className="text-[10px] py-2">Approve</ButtonSecondary>
                                             <ButtonSecondary onClick={() => setFullscreenStrat({ ...strat, kind: 'app', title: strat.name || strat.title || 'Untitled strategy' })} className="text-[10px] py-2">Fullscreen</ButtonSecondary>
                                             <ButtonSecondary onClick={() => exportAppStrat(strat)} className="text-[10px] py-2">Export JSON</ButtonSecondary>
                                         </div>
@@ -2670,6 +2719,7 @@ function StratLibrary() {
                                                 <div className="min-w-0">
                                                     <div className="text-lg font-black text-white truncate">{strat.title}</div>
                                                     <div className="mt-1 text-[10px] uppercase tracking-widest text-neutral-500">{strat.source || 'External'} / {strat.createdAt ? new Date(strat.createdAt).toLocaleDateString() : 'No date'}</div>
+                                                    <div className="mt-1 text-[10px] uppercase tracking-widest text-red-300">{approvalCopy(strat)}</div>
                                                 </div>
                                                 <button onClick={() => deleteUploadedStrat(strat)} className="text-neutral-600 hover:text-red-500 text-xl leading-none">×</button>
                                             </div>
@@ -2682,6 +2732,8 @@ function StratLibrary() {
                                                 <Select value={strat.status || 'Draft'} onChange={e => updateStratStatus('external_strats', strat, e.target.value)} className="max-w-40 text-xs py-2">
                                                     {STRAT_STATUSES.filter(status => status !== 'All').map(status => <option key={status}>{status}</option>)}
                                                 </Select>
+                                                <button onClick={() => updateStratStatus('external_strats', strat, 'Needs Review')} className="text-[10px] font-black uppercase tracking-widest text-neutral-400 hover:text-white">Request Review</button>
+                                                <button onClick={() => updateStratStatus('external_strats', strat, 'Match Ready')} className="text-[10px] font-black uppercase tracking-widest text-green-400 hover:text-white">Approve</button>
                                                 <button onClick={() => setFullscreenStrat({ ...strat, kind: 'external' })} className="text-[10px] font-black uppercase tracking-widest text-red-400 hover:text-white">Fullscreen</button>
                                                 {String(strat.imageUrl || '').startsWith('http') && <a href={strat.imageUrl} target="_blank" rel="noreferrer" className="text-[10px] font-black uppercase tracking-widest text-neutral-500 hover:text-white">Open Image</a>}
                                             </div>
@@ -3340,7 +3392,8 @@ function ActionItems({ members }) {
     );
 }
 
-function TeamCalendar({ events }) {
+function TeamCalendar({ events, currentUserName, currentUserUid, isStaff }) {
+    const addToast = useToast();
     const formatDateKey = (date) => {
         const year = date.getFullYear();
         const month = String(date.getMonth() + 1).padStart(2, '0');
@@ -3387,6 +3440,37 @@ function TeamCalendar({ events }) {
         setCursor(prev => new Date(prev.getFullYear(), prev.getMonth() + amount, 1));
     };
 
+    const setRsvp = async (event, status) => {
+        if (!currentUserUid) return addToast('Sign in required for RSVP', 'error');
+        try {
+            await setDoc(doc(db, 'events', event.id), {
+                rsvps: {
+                    ...(event.rsvps || {}),
+                    [currentUserUid]: {
+                        uid: currentUserUid,
+                        name: currentUserName || 'Unknown',
+                        status,
+                        updatedAt: new Date().toISOString()
+                    }
+                },
+                updatedAt: new Date().toISOString()
+            }, { merge: true });
+            addToast(`RSVP marked as ${status}`);
+        } catch (error) {
+            console.error('RSVP failed:', error);
+            addToast('Unable to update RSVP. Check Firestore rules for events.rsvps.', 'error');
+        }
+    };
+
+    const rsvpCounts = (event) => {
+        const rows = Object.values(event.rsvps || {});
+        return {
+            yes: rows.filter(row => row.status === 'Going').length,
+            maybe: rows.filter(row => row.status === 'Maybe').length,
+            no: rows.filter(row => row.status === 'Unavailable').length
+        };
+    };
+
     return (
         <div className="animate-fade-in space-y-6">
             <Card className="border-white/10">
@@ -3422,6 +3506,55 @@ function TeamCalendar({ events }) {
                             </>}
                         </div>
                     ))}
+                </div>
+            </Card>
+            <Card>
+                <div className="flex flex-col md:flex-row md:items-end md:justify-between gap-4 mb-5">
+                    <div>
+                        <div className="text-[10px] uppercase tracking-[0.28em] text-red-400 font-black mb-3">Event RSVP</div>
+                        <h3 className="text-2xl font-black text-white uppercase italic">Confirm Attendance</h3>
+                        <p className="mt-2 text-sm text-neutral-400">Players can confirm, maybe, or decline upcoming events so staff know what the lineup actually looks like.</p>
+                    </div>
+                    <div className="text-xs text-neutral-500">{events.length} upcoming</div>
+                </div>
+                <div className="grid grid-cols-1 xl:grid-cols-2 gap-3">
+                    {events.length ? events.map(event => {
+                        const counts = rsvpCounts(event);
+                        const myStatus = event.rsvps?.[currentUserUid]?.status || '';
+                        return (
+                            <div key={event.id} className="rounded-xl border border-white/10 bg-black/45 p-4">
+                                <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-3">
+                                    <div>
+                                        <div className="flex flex-wrap gap-2 mb-2">
+                                            <span className="text-[9px] uppercase tracking-widest bg-red-950/25 border border-red-900/40 text-red-300 px-2 py-1 rounded">{event.type || 'Event'}</span>
+                                            <span className="text-[9px] uppercase tracking-widest bg-white/5 border border-white/10 text-neutral-400 px-2 py-1 rounded">{event.map || 'Map TBD'}</span>
+                                            {myStatus && <span className="text-[9px] uppercase tracking-widest bg-green-950/25 border border-green-900/40 text-green-300 px-2 py-1 rounded">You: {myStatus}</span>}
+                                        </div>
+                                        <div className="text-lg font-black text-white">{event.opponent ? `SYRIX vs ${event.opponent}` : event.type || 'Team Event'}</div>
+                                        <div className="mt-1 text-xs text-neutral-500">{event.date || 'Date TBD'} @ {event.time || 'Time TBD'} {event.timezone || ''}</div>
+                                    </div>
+                                    <div className="grid grid-cols-3 gap-2 min-w-44">
+                                        <div className="rounded-lg border border-green-900/30 bg-green-950/15 p-2 text-center"><div className="text-lg font-black text-white">{counts.yes}</div><div className="text-[9px] uppercase tracking-widest text-green-300">Going</div></div>
+                                        <div className="rounded-lg border border-yellow-900/30 bg-yellow-950/15 p-2 text-center"><div className="text-lg font-black text-white">{counts.maybe}</div><div className="text-[9px] uppercase tracking-widest text-yellow-300">Maybe</div></div>
+                                        <div className="rounded-lg border border-red-900/30 bg-red-950/15 p-2 text-center"><div className="text-lg font-black text-white">{counts.no}</div><div className="text-[9px] uppercase tracking-widest text-red-300">Out</div></div>
+                                    </div>
+                                </div>
+                                <div className="mt-4 flex flex-wrap gap-2">
+                                    {['Going', 'Maybe', 'Unavailable'].map(status => (
+                                        <button key={status} onClick={() => setRsvp(event, status)} className={`rounded-lg border px-3 py-2 text-[10px] font-black uppercase tracking-widest ${myStatus === status ? 'bg-red-600 border-red-500 text-white' : 'bg-white/5 border-white/10 text-neutral-400 hover:text-white'}`}>{status}</button>
+                                    ))}
+                                </div>
+                                {isStaff && event.rsvps && (
+                                    <div className="mt-4 border-t border-white/10 pt-3">
+                                        <div className="text-[9px] uppercase tracking-widest text-neutral-500 font-black mb-2">Responses</div>
+                                        <div className="flex flex-wrap gap-2">
+                                            {Object.values(event.rsvps).map(row => <span key={row.uid || row.name} className="rounded-md border border-white/10 bg-white/5 px-2 py-1 text-[10px] text-neutral-300">{row.name}: {row.status}</span>)}
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+                        );
+                    }) : <div className="xl:col-span-2 p-8 text-center text-sm text-neutral-500 border border-dashed border-neutral-800 rounded-xl">No upcoming events to confirm.</div>}
                 </div>
             </Card>
         </div>
@@ -4627,6 +4760,176 @@ function PracticeReview({ members, currentUserName }) {
                             {review.vod && <a href={review.vod} target="_blank" rel="noreferrer" className="mt-3 inline-flex text-[10px] font-black uppercase tracking-widest text-red-400 hover:text-white">Open Link</a>}
                         </div>
                     )) : <div className="p-8 text-center text-sm text-neutral-500 border border-dashed border-neutral-800 rounded-xl">No practice reviews yet.</div>}
+                </div>
+            </Card>
+        </div>
+    );
+}
+
+function PlayerGoals({ members, currentUserName, currentUserUid, isStaff }) {
+    const [goals, setGoals] = useState([]);
+    const [filter, setFilter] = useState(isStaff ? 'All' : currentUserName);
+    const [saving, setSaving] = useState(false);
+    const [form, setForm] = useState({
+        player: isStaff ? members[0] || currentUserName : currentUserName,
+        title: '',
+        area: 'Communication',
+        priority: 'Normal',
+        due: '',
+        target: '',
+        progress: '0'
+    });
+    const addToast = useToast();
+
+    useEffect(() => {
+        const unsub = onSnapshot(collection(db, 'player_goals'), (snap) => {
+            const rows = [];
+            snap.forEach(d => rows.push({ id: d.id, ...d.data() }));
+            setGoals(rows.sort((a, b) => {
+                const statusWeight = (goal) => goal.status === 'Active' ? 0 : goal.status === 'Review' ? 1 : goal.status === 'Complete' ? 2 : 3;
+                return statusWeight(a) - statusWeight(b) || new Date(a.due || '2999-12-31') - new Date(b.due || '2999-12-31');
+            }));
+        });
+        return () => unsub();
+    }, []);
+
+    useEffect(() => {
+        if (!isStaff) {
+            setFilter(currentUserName);
+            setForm(prev => ({ ...prev, player: currentUserName }));
+        } else if (!form.player && members.length) {
+            setForm(prev => ({ ...prev, player: members[0] }));
+        }
+    }, [currentUserName, form.player, isStaff, members]);
+
+    const visibleGoals = goals.filter(goal => {
+        if (!isStaff && goal.player !== currentUserName) return false;
+        return filter === 'All' || goal.player === filter;
+    });
+
+    const saveGoal = async () => {
+        if (!form.title.trim()) return addToast('Goal title is required', 'error');
+        if (!form.player) return addToast('Choose a player', 'error');
+        setSaving(true);
+        try {
+            await addDoc(collection(db, 'player_goals'), {
+                ...form,
+                title: form.title.trim(),
+                target: form.target.trim(),
+                progress: Number(form.progress) || 0,
+                status: 'Active',
+                createdBy: currentUserName || 'Unknown',
+                createdByUid: currentUserUid || '',
+                createdAt: new Date().toISOString(),
+                updatedAt: new Date().toISOString(),
+                updates: []
+            });
+            await writeAuditLog('Player goal created', `${form.player}: ${form.title.trim()}`, currentUserName || 'Unknown');
+            setForm(prev => ({ ...prev, title: '', target: '', progress: '0', due: '' }));
+            addToast('Player goal saved');
+        } catch (error) {
+            console.error('Goal save failed:', error);
+            addToast('Unable to save player goal', 'error');
+        } finally {
+            setSaving(false);
+        }
+    };
+
+    const updateGoal = async (goal, patch) => {
+        try {
+            await updateDoc(doc(db, 'player_goals', goal.id), {
+                ...patch,
+                updatedAt: new Date().toISOString(),
+                updatedBy: currentUserName || 'Unknown'
+            });
+            addToast('Goal updated');
+        } catch (error) {
+            console.error('Goal update failed:', error);
+            addToast('Unable to update goal', 'error');
+        }
+    };
+
+    const removeGoal = async (goal) => {
+        try {
+            await deleteDoc(doc(db, 'player_goals', goal.id));
+            await writeAuditLog('Player goal deleted', `${goal.player}: ${goal.title}`, currentUserName || 'Unknown');
+            addToast('Goal removed');
+        } catch (error) {
+            console.error('Goal delete failed:', error);
+            addToast('Unable to delete goal', 'error');
+        }
+    };
+
+    const statusClass = (status) => {
+        if (status === 'Complete') return 'border-green-900/40 bg-green-950/20 text-green-300';
+        if (status === 'Review') return 'border-yellow-900/40 bg-yellow-950/20 text-yellow-300';
+        if (status === 'Archived') return 'border-white/10 bg-white/5 text-neutral-500';
+        return 'border-red-900/40 bg-red-950/25 text-red-200';
+    };
+
+    return (
+        <div className="animate-fade-in grid grid-cols-1 xl:grid-cols-[0.8fr_1.2fr] gap-6">
+            <Card>
+                <div className="text-[10px] uppercase tracking-[0.28em] text-red-400 font-black mb-3">Development</div>
+                <h2 className="text-3xl font-black text-white uppercase italic mb-5">Player Goals</h2>
+                <div className="space-y-4">
+                    <Select value={form.player} onChange={e => setForm({ ...form, player: e.target.value })} disabled={!isStaff}>
+                        {members.map(member => <option key={member} value={member}>{member}</option>)}
+                    </Select>
+                    <Input value={form.title} onChange={e => setForm({ ...form, title: e.target.value })} placeholder="Goal title, e.g. cleaner mid-round calls" />
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                        <Select value={form.area} onChange={e => setForm({ ...form, area: e.target.value })}>
+                            {['Communication', 'Playstyle', 'Utility', 'Role Discipline', 'Aim', 'Mental', 'VOD Review', 'Teamwork'].map(area => <option key={area}>{area}</option>)}
+                        </Select>
+                        <Select value={form.priority} onChange={e => setForm({ ...form, priority: e.target.value })}>
+                            {['Low', 'Normal', 'High'].map(priority => <option key={priority}>{priority}</option>)}
+                        </Select>
+                        <Input type="date" value={form.due} onChange={e => setForm({ ...form, due: e.target.value })} className="[color-scheme:dark]" />
+                    </div>
+                    <textarea value={form.target} onChange={e => setForm({ ...form, target: e.target.value })} placeholder="What should improve? What does good look like?" className="w-full h-32 bg-black/40 border border-neutral-800 rounded-xl p-3 text-white text-sm outline-none focus:border-red-600 placeholder-neutral-600 resize-y" />
+                    <div>
+                        <label className="text-[10px] font-black text-red-500 uppercase mb-1 block">Starting Progress</label>
+                        <input type="range" min="0" max="100" value={form.progress} onChange={e => setForm({ ...form, progress: e.target.value })} className="w-full accent-red-600" />
+                        <div className="mt-1 text-xs text-neutral-500">{form.progress}%</div>
+                    </div>
+                    <ButtonPrimary onClick={saveGoal} disabled={saving} className="w-full py-3 text-xs">{saving ? 'Saving...' : 'Create Goal'}</ButtonPrimary>
+                </div>
+            </Card>
+            <Card>
+                <div className="flex flex-col md:flex-row md:items-end md:justify-between gap-4 mb-5">
+                    <div>
+                        <div className="text-[10px] uppercase tracking-[0.28em] text-neutral-500 font-black mb-2">Goal Board</div>
+                        <h3 className="text-2xl font-black text-white uppercase italic">Active Development</h3>
+                    </div>
+                    <Select value={filter} onChange={e => setFilter(e.target.value)} className="md:max-w-48" disabled={!isStaff}>
+                        <option value="All">All Players</option>
+                        {members.map(member => <option key={member} value={member}>{member}</option>)}
+                    </Select>
+                </div>
+                <div className="space-y-3 max-h-[78vh] overflow-y-auto pr-2 custom-scrollbar">
+                    {visibleGoals.length ? visibleGoals.map(goal => (
+                        <div key={goal.id} className="rounded-xl border border-white/10 bg-black/45 p-4">
+                            <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-3">
+                                <div className="min-w-0">
+                                    <div className="flex flex-wrap gap-2 mb-2">
+                                        <span className={`text-[9px] uppercase tracking-widest border px-2 py-1 rounded ${statusClass(goal.status || 'Active')}`}>{goal.status || 'Active'}</span>
+                                        <span className="text-[9px] uppercase tracking-widest bg-white/5 border border-white/10 text-neutral-400 px-2 py-1 rounded">{goal.area || 'Development'}</span>
+                                        <span className="text-[9px] uppercase tracking-widest text-neutral-500">{goal.player}</span>
+                                    </div>
+                                    <div className="text-xl font-black text-white uppercase italic">{goal.title}</div>
+                                    {goal.target && <p className="mt-2 text-sm text-neutral-400 whitespace-pre-wrap leading-relaxed">{goal.target}</p>}
+                                </div>
+                                {isStaff && <button onClick={() => removeGoal(goal)} className="text-neutral-600 hover:text-red-500 text-xl leading-none">×</button>}
+                            </div>
+                            <div className="mt-4">
+                                <div className="flex items-center justify-between text-[10px] uppercase tracking-widest text-neutral-500 font-black mb-2"><span>Progress</span><span>{goal.progress || 0}%</span></div>
+                                <input type="range" min="0" max="100" value={goal.progress || 0} onChange={e => updateGoal(goal, { progress: Number(e.target.value) })} className="w-full accent-red-600" />
+                            </div>
+                            <div className="mt-4 flex flex-wrap gap-2">
+                                {['Active', 'Review', 'Complete', 'Archived'].map(status => <button key={status} onClick={() => updateGoal(goal, { status })} className={`rounded-lg border px-3 py-2 text-[10px] font-black uppercase tracking-widest ${goal.status === status ? 'bg-red-600 border-red-500 text-white' : 'bg-white/5 border-white/10 text-neutral-400 hover:text-white'}`}>{status}</button>)}
+                            </div>
+                        </div>
+                    )) : <div className="p-8 text-center text-sm text-neutral-500 border border-dashed border-neutral-800 rounded-xl">No goals yet.</div>}
                 </div>
             </Card>
         </div>
@@ -6204,7 +6507,7 @@ function SyrixDashboard({ onBack }) {
     const accessLabel = ADMIN_UIDS.includes(currentUser.uid) ? 'Owner' : dbAdminRole || (isRosterManager ? 'Manager' : 'Member');
     const navGroups = [
         { label: 'Command', items: [{ id: 'dashboard', label: 'Dashboard' }, { id: 'search', label: 'Search' }, { id: 'calendar', label: 'Calendar' }, { id: 'bulletins', label: 'Bulletin Board' }, { id: 'notifications', label: 'Notifications' }, { id: 'archive', label: 'Archive' }, { id: 'tasks', label: 'Tasks' }, { id: 'access', label: 'Access & Roles' }] },
-        { label: 'Team', items: [{ id: 'profile', label: 'Player Profile' }, { id: 'availability', label: 'Availability' }, { id: 'matches', label: 'Matches' }, { id: 'teamrequests', label: 'Team Requests' }, { id: 'coachrequests', label: 'Coach Requests' }, { id: 'meetings', label: 'Meetings' }] },
+        { label: 'Team', items: [{ id: 'profile', label: 'Player Profile' }, { id: 'goals', label: 'Player Goals' }, { id: 'availability', label: 'Availability' }, { id: 'matches', label: 'Matches' }, { id: 'teamrequests', label: 'Team Requests' }, { id: 'coachrequests', label: 'Coach Requests' }, { id: 'meetings', label: 'Meetings' }] },
         { label: 'Strategy', items: [{ id: 'stratlibrary', label: 'Strat Library' }, { id: 'lineups', label: 'Lineups' }, { id: 'playbook', label: 'Playbook' }, { id: 'comps', label: 'Comps' }] },
         ...(isStaff ? [{ label: 'Planning', items: [{ id: 'strats', label: 'Stratbook' }, { id: 'mapveto', label: 'Map Veto' }, { id: 'practice', label: 'Practice Plans' }, { id: 'reviews', label: 'Practice Review' }, { id: 'prep', label: 'Match Prep' }, { id: 'pipeline', label: 'Scrim Pipeline' }] }] : []),
         ...(isStaff ? [{ label: 'Coaching', items: [{ id: 'coachhome', label: 'Coach Home' }, { id: 'coachroom', label: 'Coach Room' }, ...(isAdmin ? [{ id: 'playernotes', label: 'Player Notes' }] : [])] }] : []),
@@ -6288,6 +6591,7 @@ function SyrixDashboard({ onBack }) {
         bulletins: 'Player-submitted scrim requests, tournament leads, training ideas, and team info.',
         notifications: 'Actionable reminders for events, tasks, requests, and pinned announcements.',
         profile: 'Read-only player profile with role, agents, availability, activity, and visible coach notes.',
+        goals: 'Set and track individual development goals for players.',
         managerhome: 'A dedicated operations home for managers and admins.',
         coachhome: 'A dedicated coaching home for plans, reviews, requests, and player development.',
         announcements: 'Post captain messages, urgent updates, and team-wide comms.',
@@ -6469,7 +6773,8 @@ function SyrixDashboard({ onBack }) {
                     {activeTab === 'managerhome' && isAdmin && <RoleHome type="manager" members={dynamicMembers} events={events} requests={visibleRequestItems} openTaskCount={openTaskCount} availableToday={availableToday} setActiveTab={setActiveTab} />}
                     {activeTab === 'coachhome' && isStaff && <RoleHome type="coach" members={dynamicMembers} events={events} requests={visibleRequestItems} openTaskCount={openTaskCount} availableToday={availableToday} setActiveTab={setActiveTab} />}
                     {activeTab === 'profile' && <PlayerProfile members={dynamicMembers} currentMemberName={currentMemberName} displayAvail={displayAvail} events={events} requests={visibleRequestItems} isStaff={isStaff} />}
-                    {activeTab === 'calendar' && <TeamCalendar events={events} />}
+                    {activeTab === 'goals' && <PlayerGoals members={dynamicMembers} currentUserName={currentMemberName} currentUserUid={currentUser.uid} isStaff={isStaff} />}
+                    {activeTab === 'calendar' && <TeamCalendar events={events} currentUserName={currentMemberName} currentUserUid={currentUser.uid} isStaff={isStaff} />}
                     {activeTab === 'bulletins' && <TeamBulletinBoard currentUserName={rosterName || currentUser.displayName || 'Unknown'} currentUserUid={currentUser.uid} isAdmin={isAdmin} />}
                     {activeTab === 'notifications' && <NotificationCenter events={events} requests={visibleRequestItems} setActiveTab={setActiveTab} />}
                     {activeTab === 'announcements' && isAdmin && <Announcements currentUserName={rosterName || currentUser.displayName || 'Unknown'} />}
