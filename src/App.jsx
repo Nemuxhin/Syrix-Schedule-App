@@ -1059,16 +1059,23 @@ function ApplicationForm({ currentUser }) {
 function PerformanceWidget({ events }) {
     const stats = useMemo(() => {
         let wins = 0, losses = 0; let atkWins = 0, atkPlayed = 0, defWins = 0, defPlayed = 0; const mapStats = {};
-        const recentMatches = events.filter(e => e.result && e.result.myScore).sort((a, b) => new Date(a.date) - new Date(b.date));
+        const recentMatches = events.filter(e => e.result && (e.result.myScore || e.result.maps?.length)).sort((a, b) => new Date(a.date) - new Date(b.date));
 
         recentMatches.forEach(m => {
-            const my = parseInt(m.result.myScore); const enemy = parseInt(m.result.enemyScore);
+            const maps = Array.isArray(m.result.maps) && m.result.maps.length
+                ? m.result.maps
+                : [{ map: m.result.map, myScore: m.result.myScore, enemyScore: m.result.enemyScore, atkScore: m.result.atkScore, defScore: m.result.defScore }];
+            const my = parseInt(m.result.myScore ?? maps.filter(map => Number(map.myScore) > Number(map.enemyScore)).length);
+            const enemy = parseInt(m.result.enemyScore ?? maps.filter(map => Number(map.enemyScore) > Number(map.myScore)).length);
             if (my > enemy) wins++; else if (my < enemy) losses++;
-            if (!mapStats[m.result.map]) mapStats[m.result.map] = { played: 0, wins: 0 };
-            mapStats[m.result.map].played++;
-            if (my > enemy) mapStats[m.result.map].wins++;
-            if (m.result.atkScore) { atkWins += parseInt(m.result.atkScore); atkPlayed += 12; }
-            if (m.result.defScore) { defWins += parseInt(m.result.defScore); defPlayed += 12; }
+            maps.forEach(mapResult => {
+                if (!mapResult.map) return;
+                if (!mapStats[mapResult.map]) mapStats[mapResult.map] = { played: 0, wins: 0 };
+                mapStats[mapResult.map].played++;
+                if (Number(mapResult.myScore) > Number(mapResult.enemyScore)) mapStats[mapResult.map].wins++;
+                if (mapResult.atkScore) { atkWins += parseInt(mapResult.atkScore); atkPlayed += 12; }
+                if (mapResult.defScore) { defWins += parseInt(mapResult.defScore); defPlayed += 12; }
+            });
         });
 
         const totalGames = wins + losses;
@@ -1080,7 +1087,8 @@ function PerformanceWidget({ events }) {
 
         let cumulative = 0;
         const trendPoints = recentMatches.slice(-10).map((m) => {
-            const diff = parseInt(m.result.myScore) - parseInt(m.result.enemyScore);
+            const maps = Array.isArray(m.result.maps) && m.result.maps.length ? m.result.maps : [{ myScore: m.result.myScore, enemyScore: m.result.enemyScore }];
+            const diff = maps.reduce((sum, mapResult) => sum + (parseInt(mapResult.myScore || 0) - parseInt(mapResult.enemyScore || 0)), 0);
             cumulative += diff;
             return cumulative;
         });
@@ -2907,11 +2915,23 @@ function MatchHistory({ currentUser, members }) {
     const [editingId, setEditingId] = useState(null);
     const [editForm, setEditForm] = useState({});
 
-    // State for New Manual Logs - UPDATED WITH ANALYTICS FIELDS
+    const createMapRows = (count = 1, existing = []) => Array.from({ length: count }, (_, index) => ({
+        map: existing[index]?.map || MAPS[index % MAPS.length] || 'Ascent',
+        myScore: existing[index]?.myScore || '',
+        enemyScore: existing[index]?.enemyScore || '',
+        atkScore: existing[index]?.atkScore || '',
+        defScore: existing[index]?.defScore || '',
+        pistols: existing[index]?.pistols || '',
+        ecos: existing[index]?.ecos || '',
+        fb: existing[index]?.fb || ''
+    }));
+    const seriesLengths = { BO1: 1, MR24: 1, BO3: 3, BO5: 5 };
     const [newMatch, setNewMatch] = useState({
-        opponent: '', date: '', myScore: '', enemyScore: '',
-        atkScore: '', defScore: '', map: 'Ascent', vod: '',
-        pistols: '', ecos: '', fb: ''
+        opponent: '',
+        date: '',
+        format: 'BO1',
+        vod: '',
+        maps: createMapRows(1)
     });
 
     const addToast = useToast();
@@ -2927,25 +2947,88 @@ function MatchHistory({ currentUser, members }) {
         return () => unsub();
     }, []);
 
+    const summarizeSeries = (maps = []) => {
+        const played = maps.filter(map => map.myScore !== '' && map.enemyScore !== '');
+        const myMaps = played.filter(map => Number(map.myScore) > Number(map.enemyScore)).length;
+        const enemyMaps = played.filter(map => Number(map.enemyScore) > Number(map.myScore)).length;
+        const first = played[0] || maps[0] || {};
+        return {
+            played,
+            myMaps,
+            enemyMaps,
+            first
+        };
+    };
+
+    const updateNewFormat = (format) => {
+        setNewMatch(prev => ({ ...prev, format, maps: createMapRows(seriesLengths[format] || 1, prev.maps) }));
+    };
+
+    const updateNewMap = (index, patch) => {
+        setNewMatch(prev => ({
+            ...prev,
+            maps: prev.maps.map((map, mapIndex) => mapIndex === index ? { ...map, ...patch } : map)
+        }));
+    };
+
+    const updateEditFormat = (format) => {
+        setEditForm(prev => ({ ...prev, format, maps: createMapRows(seriesLengths[format] || 1, prev.maps) }));
+    };
+
+    const updateEditMap = (index, patch) => {
+        setEditForm(prev => ({
+            ...prev,
+            maps: (prev.maps || []).map((map, mapIndex) => mapIndex === index ? { ...map, ...patch } : map)
+        }));
+    };
+
     const handleManualAdd = async () => {
-        if (!newMatch.opponent || !newMatch.myScore) return addToast("Opponent & Score required", "error");
+        if (!newMatch.opponent.trim()) return addToast("Opponent required", "error");
+        const summary = summarizeSeries(newMatch.maps);
+        if (!summary.played.length) return addToast("Add at least one completed map score", "error");
 
         await addDoc(collection(db, 'events'), {
             type: 'Scrim',
-            opponent: newMatch.opponent,
+            opponent: newMatch.opponent.trim(),
             date: newMatch.date || new Date().toISOString().split('T')[0],
-            result: { ...newMatch }
+            map: summary.first.map || 'TBD',
+            result: {
+                format: newMatch.format,
+                maps: newMatch.maps,
+                myScore: String(summary.myMaps),
+                enemyScore: String(summary.enemyMaps),
+                map: summary.first.map || 'TBD',
+                vod: newMatch.vod.trim(),
+                atkScore: summary.first.atkScore || '',
+                defScore: summary.first.defScore || '',
+                pistols: summary.played.reduce((sum, map) => sum + Number(map.pistols || 0), 0),
+                ecos: summary.played.reduce((sum, map) => sum + Number(map.ecos || 0), 0),
+                fb: summary.played.length ? Math.round(summary.played.reduce((sum, map) => sum + Number(map.fb || 0), 0) / summary.played.length) : ''
+            }
         });
         setIsAdding(false);
-        setNewMatch({ opponent: '', date: '', myScore: '', enemyScore: '', atkScore: '', defScore: '', map: 'Ascent', vod: '', pistols: '', ecos: '', fb: '' });
+        setNewMatch({ opponent: '', date: '', format: 'BO1', vod: '', maps: createMapRows(1) });
         addToast('Match Analysis Logged');
     };
 
     const openEditor = (match, isFinalizing = false) => {
+        const existingMaps = match.result?.maps || [{
+            map: match.map || match.result?.map || 'Ascent',
+            myScore: match.result?.myScore || '',
+            enemyScore: match.result?.enemyScore || '',
+            atkScore: match.result?.atkScore || '',
+            defScore: match.result?.defScore || '',
+            pistols: match.result?.pistols || '',
+            ecos: match.result?.ecos || '',
+            fb: match.result?.fb || ''
+        }];
+        const format = match.result?.format || (existingMaps.length >= 5 ? 'BO5' : existingMaps.length >= 3 ? 'BO3' : 'BO1');
         setEditingId(match.id);
         setEditForm({
             opponent: match.opponent,
             date: match.date,
+            format,
+            maps: createMapRows(seriesLengths[format] || existingMaps.length || 1, existingMaps),
             map: match.map || (match.result ? match.result.map : 'Ascent'),
             vod: match.result?.vod || '',
             myScore: match.result?.myScore || '',
@@ -2961,11 +3044,30 @@ function MatchHistory({ currentUser, members }) {
     };
 
     const saveEdit = async () => {
-        const { opponent, date, ...resultData } = editForm;
+        const { opponent, date, isFinalizing, maps = [], format = 'BO1', vod = '' } = editForm;
+        void isFinalizing;
+        const summary = summarizeSeries(maps);
+        const resultData = {
+            ...editForm,
+            format,
+            maps,
+            myScore: String(summary.myMaps),
+            enemyScore: String(summary.enemyMaps),
+            map: summary.first.map || editForm.map || 'TBD',
+            vod,
+            atkScore: summary.first.atkScore || '',
+            defScore: summary.first.defScore || '',
+            pistols: summary.played.reduce((sum, map) => sum + Number(map.pistols || 0), 0),
+            ecos: summary.played.reduce((sum, map) => sum + Number(map.ecos || 0), 0),
+            fb: summary.played.length ? Math.round(summary.played.reduce((sum, map) => sum + Number(map.fb || 0), 0) / summary.played.length) : ''
+        };
         delete resultData.isFinalizing;
+        delete resultData.opponent;
+        delete resultData.date;
         await updateDoc(doc(db, 'events', editingId), {
             opponent,
             date,
+            map: summary.first.map || editForm.map || 'TBD',
             result: resultData
         });
         setEditingId(null);
@@ -3002,6 +3104,32 @@ function MatchHistory({ currentUser, members }) {
         return 'border-l-4 border-l-neutral-500';
     };
 
+    const renderMapEditor = (maps, updateMap) => (
+        <div className="space-y-3">
+            {maps.map((mapResult, index) => (
+                <div key={index} className="rounded-sm border border-white/10 bg-black/35 p-3">
+                    <div className="flex items-center justify-between gap-3 mb-3">
+                        <div className="text-[10px] uppercase tracking-widest text-red-400 font-black">Map {index + 1}</div>
+                        <Select value={mapResult.map} onChange={e => updateMap(index, { map: e.target.value })} className="max-w-44 py-2 text-xs">
+                            {MAPS.map(map => <option key={map} value={map}>{map}</option>)}
+                        </Select>
+                    </div>
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+                        <Input placeholder="Us" value={mapResult.myScore} onChange={e => updateMap(index, { myScore: e.target.value })} type="number" />
+                        <Input placeholder="Them" value={mapResult.enemyScore} onChange={e => updateMap(index, { enemyScore: e.target.value })} type="number" />
+                        <Input placeholder="Atk Wins" value={mapResult.atkScore} onChange={e => updateMap(index, { atkScore: e.target.value })} type="number" />
+                        <Input placeholder="Def Wins" value={mapResult.defScore} onChange={e => updateMap(index, { defScore: e.target.value })} type="number" />
+                    </div>
+                    <div className="mt-2 grid grid-cols-3 gap-2">
+                        <Input placeholder="Pistols" value={mapResult.pistols} onChange={e => updateMap(index, { pistols: e.target.value })} type="number" />
+                        <Input placeholder="Ecos" value={mapResult.ecos} onChange={e => updateMap(index, { ecos: e.target.value })} type="number" />
+                        <Input placeholder="FB %" value={mapResult.fb} onChange={e => updateMap(index, { fb: e.target.value })} type="number" />
+                    </div>
+                </div>
+            ))}
+        </div>
+    );
+
     return (
         <Card className="min-h-full">
             <div className="flex justify-between items-center mb-6">
@@ -3021,37 +3149,13 @@ function MatchHistory({ currentUser, members }) {
                         <Input type="date" value={newMatch.date} onChange={e => setNewMatch({ ...newMatch, date: e.target.value })} className="[color-scheme:dark]" />
                     </div>
                     <div className="grid grid-cols-2 gap-3">
-                        <Select value={newMatch.map} onChange={e => setNewMatch({ ...newMatch, map: e.target.value })}>
-                            {MAPS.map(m => <option key={m} value={m}>{m}</option>)}
+                        <Select value={newMatch.format} onChange={e => updateNewFormat(e.target.value)}>
+                            {['BO1', 'MR24', 'BO3', 'BO5'].map(format => <option key={format} value={format}>{format}</option>)}
                         </Select>
                         <Input placeholder="VOD Link (Optional)" value={newMatch.vod} onChange={e => setNewMatch({ ...newMatch, vod: e.target.value })} />
                     </div>
 
-                    {/* Scores */}
-                    <div className="grid grid-cols-4 gap-2">
-                        <div className="col-span-2 flex gap-2">
-                            <Input placeholder="My Score" value={newMatch.myScore} onChange={e => setNewMatch({ ...newMatch, myScore: e.target.value })} type="number" />
-                            <Input placeholder="Enemy Score" value={newMatch.enemyScore} onChange={e => setNewMatch({ ...newMatch, enemyScore: e.target.value })} type="number" />
-                        </div>
-                        <Input placeholder="Atk Wins" value={newMatch.atkScore} onChange={e => setNewMatch({ ...newMatch, atkScore: e.target.value })} type="number" />
-                        <Input placeholder="Def Wins" value={newMatch.defScore} onChange={e => setNewMatch({ ...newMatch, defScore: e.target.value })} type="number" />
-                    </div>
-
-                    {/* NEW: ADVANCED ANALYTICS ROW */}
-                    <div className="grid grid-cols-3 gap-3 p-3 bg-neutral-900/50 rounded-lg border border-white/5">
-                        <div>
-                            <label className="text-[10px] text-neutral-500 font-bold uppercase block mb-1">Pistols (0-2)</label>
-                            <Input placeholder="#" value={newMatch.pistols} onChange={e => setNewMatch({ ...newMatch, pistols: e.target.value })} type="number" />
-                        </div>
-                        <div>
-                            <label className="text-[10px] text-neutral-500 font-bold uppercase block mb-1">Eco Wins</label>
-                            <Input placeholder="#" value={newMatch.ecos} onChange={e => setNewMatch({ ...newMatch, ecos: e.target.value })} type="number" />
-                        </div>
-                        <div>
-                            <label className="text-[10px] text-neutral-500 font-bold uppercase block mb-1">First Blood %</label>
-                            <Input placeholder="%" value={newMatch.fb} onChange={e => setNewMatch({ ...newMatch, fb: e.target.value })} type="number" />
-                        </div>
-                    </div>
+                    {renderMapEditor(newMatch.maps, updateNewMap)}
 
                     <ButtonPrimary onClick={handleManualAdd} className="w-full py-3 text-xs">Save to History</ButtonPrimary>
                 </div>
@@ -3073,18 +3177,13 @@ function MatchHistory({ currentUser, members }) {
                                 {editingId === p.id ? (
                                     <div className="flex-1 w-full bg-black p-4 rounded-lg border border-neutral-700 animate-fade-in">
                                         <div className="text-xs text-yellow-500 font-bold mb-2 uppercase">Input Stats</div>
-                                        <div className="grid grid-cols-4 gap-2 mb-2">
-                                            <Input placeholder="Us" value={editForm.myScore} onChange={e => setEditForm({ ...editForm, myScore: e.target.value })} type="number" />
-                                            <Input placeholder="Them" value={editForm.enemyScore} onChange={e => setEditForm({ ...editForm, enemyScore: e.target.value })} type="number" />
-                                            <Input placeholder="Atk" value={editForm.atkScore} onChange={e => setEditForm({ ...editForm, atkScore: e.target.value })} type="number" />
-                                            <Input placeholder="Def" value={editForm.defScore} onChange={e => setEditForm({ ...editForm, defScore: e.target.value })} type="number" />
+                                        <div className="grid grid-cols-2 gap-2 mb-3">
+                                            <Select value={editForm.format || 'BO1'} onChange={e => updateEditFormat(e.target.value)}>
+                                                {['BO1', 'MR24', 'BO3', 'BO5'].map(format => <option key={format} value={format}>{format}</option>)}
+                                            </Select>
+                                            <Input placeholder="VOD Link" value={editForm.vod || ''} onChange={e => setEditForm({ ...editForm, vod: e.target.value })} />
                                         </div>
-                                        {/* NEW: ANALYTICS FOR PENDING */}
-                                        <div className="grid grid-cols-3 gap-2 mb-2">
-                                            <Input placeholder="Pistols" value={editForm.pistols} onChange={e => setEditForm({ ...editForm, pistols: e.target.value })} type="number" />
-                                            <Input placeholder="Ecos" value={editForm.ecos} onChange={e => setEditForm({ ...editForm, ecos: e.target.value })} type="number" />
-                                            <Input placeholder="FB %" value={editForm.fb} onChange={e => setEditForm({ ...editForm, fb: e.target.value })} type="number" />
-                                        </div>
+                                        {renderMapEditor(editForm.maps || [], updateEditMap)}
                                         <div className="flex gap-2">
                                             <ButtonPrimary onClick={saveEdit} className="text-xs py-2 flex-1">Confirm</ButtonPrimary>
                                             <ButtonSecondary onClick={() => setEditingId(null)} className="text-xs py-2">Cancel</ButtonSecondary>
@@ -3119,25 +3218,12 @@ function MatchHistory({ currentUser, members }) {
                                 <Input type="date" value={editForm.date} onChange={e => setEditForm({ ...editForm, date: e.target.value })} className="[color-scheme:dark]" />
                             </div>
                             <div className="grid grid-cols-2 gap-3">
-                                <Select value={editForm.map} onChange={e => setEditForm({ ...editForm, map: e.target.value })}>
-                                    {MAPS.map(map => <option key={map} value={map}>{map}</option>)}
+                                <Select value={editForm.format || 'BO1'} onChange={e => updateEditFormat(e.target.value)}>
+                                    {['BO1', 'MR24', 'BO3', 'BO5'].map(format => <option key={format} value={format}>{format}</option>)}
                                 </Select>
                                 <Input placeholder="VOD Link" value={editForm.vod} onChange={e => setEditForm({ ...editForm, vod: e.target.value })} />
                             </div>
-                            <div className="grid grid-cols-4 gap-2">
-                                <div className="col-span-2 flex gap-2">
-                                    <Input placeholder="Us" value={editForm.myScore} onChange={e => setEditForm({ ...editForm, myScore: e.target.value })} />
-                                    <Input placeholder="Them" value={editForm.enemyScore} onChange={e => setEditForm({ ...editForm, enemyScore: e.target.value })} />
-                                </div>
-                                <Input placeholder="Atk" value={editForm.atkScore} onChange={e => setEditForm({ ...editForm, atkScore: e.target.value })} />
-                                <Input placeholder="Def" value={editForm.defScore} onChange={e => setEditForm({ ...editForm, defScore: e.target.value })} />
-                            </div>
-                            {/* NEW: ANALYTICS EDITING */}
-                            <div className="grid grid-cols-3 gap-2">
-                                <Input placeholder="Pistols" value={editForm.pistols} onChange={e => setEditForm({ ...editForm, pistols: e.target.value })} />
-                                <Input placeholder="Ecos" value={editForm.ecos} onChange={e => setEditForm({ ...editForm, ecos: e.target.value })} />
-                                <Input placeholder="FB %" value={editForm.fb} onChange={e => setEditForm({ ...editForm, fb: e.target.value })} />
-                            </div>
+                            {renderMapEditor(editForm.maps || [], updateEditMap)}
                             <ButtonPrimary onClick={saveEdit} className="w-full py-2 text-xs">Update Record</ButtonPrimary>
                         </div>
                     );
@@ -3145,6 +3231,16 @@ function MatchHistory({ currentUser, members }) {
                     // --- VIEW MODE ---
                     const voteData = getVoteLeader(m.mvpVotes);
                     const isWin = parseInt(m.result.myScore) > parseInt(m.result.enemyScore);
+                    const mapResults = Array.isArray(m.result.maps) && m.result.maps.length ? m.result.maps : [{
+                        map: m.result.map,
+                        myScore: m.result.myScore,
+                        enemyScore: m.result.enemyScore,
+                        atkScore: m.result.atkScore,
+                        defScore: m.result.defScore,
+                        pistols: m.result.pistols,
+                        ecos: m.result.ecos,
+                        fb: m.result.fb
+                    }];
 
                     return (
                         <div key={m.id} onClick={() => setExpandedId(expandedId === m.id ? null : m.id)} className={`bg-black/40 border border-neutral-800 p-4 rounded-xl relative overflow-hidden cursor-pointer hover:bg-neutral-900 transition-all ${getResultColor(m.result.myScore, m.result.enemyScore)}`}>
@@ -3157,7 +3253,7 @@ function MatchHistory({ currentUser, members }) {
                                             <a href={m.result.vod} target="_blank" rel="noreferrer" onClick={e => e.stopPropagation()} className="text-[9px] bg-red-600 text-white px-2 py-0.5 rounded hover:bg-red-500 font-black uppercase flex items-center gap-1"><span>▶</span> VOD</a>
                                         )}
                                     </div>
-                                    <div className="text-xs text-neutral-500 font-mono mt-0.5">{m.date} • {m.result.map}</div>
+                                    <div className="text-xs text-neutral-500 font-mono mt-0.5">{m.date} • {m.result.format || 'BO1'} • {mapResults.map(map => map.map).filter(Boolean).join(', ') || m.result.map}</div>
                                 </div>
                                 <div className="flex items-center gap-4">
                                     <div className={`text-2xl font-black ${isWin ? 'text-green-500' : 'text-red-500'}`}>{m.result.myScore} - {m.result.enemyScore}</div>
@@ -3171,32 +3267,21 @@ function MatchHistory({ currentUser, members }) {
                             {/* Details Drawer */}
                             {expandedId === m.id && (
                                 <div className="mt-4 pt-4 border-t border-neutral-800 animate-slide-in">
-                                    {/* SCORES ROW */}
-                                    <div className="grid grid-cols-2 gap-4 text-center mb-4">
-                                        <div className="bg-neutral-900 p-2 rounded border border-neutral-800">
-                                            <div className="text-[10px] text-neutral-500 uppercase font-bold">Attack Wins</div>
-                                            <div className="text-white font-bold text-lg">{m.result.atkScore || '-'}</div>
-                                        </div>
-                                        <div className="bg-neutral-900 p-2 rounded border border-neutral-800">
-                                            <div className="text-[10px] text-neutral-500 uppercase font-bold">Defense Wins</div>
-                                            <div className="text-white font-bold text-lg">{m.result.defScore || '-'}</div>
-                                        </div>
-                                    </div>
-
-                                    {/* NEW: ANALYTICS ROW */}
-                                    <div className="grid grid-cols-3 gap-2 text-center mb-4">
-                                        <div className="bg-neutral-900/50 p-2 rounded border border-white/5">
-                                            <div className="text-[9px] text-neutral-400 uppercase font-bold">Pistols Won</div>
-                                            <div className={`text-sm font-black ${m.result.pistols >= 1 ? 'text-green-500' : 'text-neutral-500'}`}>{m.result.pistols || '0'}/2</div>
-                                        </div>
-                                        <div className="bg-neutral-900/50 p-2 rounded border border-white/5">
-                                            <div className="text-[9px] text-neutral-400 uppercase font-bold">Eco Wins</div>
-                                            <div className="text-sm font-black text-white">{m.result.ecos || '0'}</div>
-                                        </div>
-                                        <div className="bg-neutral-900/50 p-2 rounded border border-white/5">
-                                            <div className="text-[9px] text-neutral-400 uppercase font-bold">FB %</div>
-                                            <div className="text-sm font-black text-white">{m.result.fb || '0'}%</div>
-                                        </div>
+                                    <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3 mb-4">
+                                        {mapResults.map((mapResult, index) => (
+                                            <div key={`${mapResult.map}-${index}`} className="bg-neutral-900/60 p-3 rounded-sm border border-white/10">
+                                                <div className="flex items-center justify-between gap-2 mb-2">
+                                                    <div className="text-[10px] text-red-400 uppercase font-black tracking-widest">Map {index + 1}</div>
+                                                    <div className="text-[10px] text-neutral-500 uppercase font-black">{mapResult.map || 'TBD'}</div>
+                                                </div>
+                                                <div className={`text-2xl font-black ${Number(mapResult.myScore) > Number(mapResult.enemyScore) ? 'text-green-400' : 'text-red-400'}`}>{mapResult.myScore || '-'} - {mapResult.enemyScore || '-'}</div>
+                                                <div className="mt-3 grid grid-cols-3 gap-2 text-center">
+                                                    <div><div className="text-[8px] uppercase tracking-widest text-neutral-500">Atk</div><div className="text-xs font-black text-white">{mapResult.atkScore || '-'}</div></div>
+                                                    <div><div className="text-[8px] uppercase tracking-widest text-neutral-500">Def</div><div className="text-xs font-black text-white">{mapResult.defScore || '-'}</div></div>
+                                                    <div><div className="text-[8px] uppercase tracking-widest text-neutral-500">Pistol</div><div className="text-xs font-black text-white">{mapResult.pistols || '0'}</div></div>
+                                                </div>
+                                            </div>
+                                        ))}
                                     </div>
 
                                     <div className="bg-neutral-900/50 p-3 rounded-lg border border-white/5 flex flex-wrap gap-4 items-center justify-between" onClick={e => e.stopPropagation()}>
@@ -6261,6 +6346,7 @@ function SyrixDashboard({ onBack }) {
     const [activeTab, setActiveTab] = useState('dashboard');
     const [availabilities, setAvailabilities] = useState({});
     const [events, setEvents] = useState([]);
+    const [allEvents, setAllEvents] = useState([]);
     const [day, setDay] = useState(DAYS[0]);
     const [start, setStart] = useState('12:00');
     const [end, setEnd] = useState('23:30');
@@ -6327,6 +6413,7 @@ function SyrixDashboard({ onBack }) {
         const unsub3 = onSnapshot(collection(db, 'events'), (s) => {
             const e = [];
             s.forEach(d => e.push({ id: d.id, ...d.data() }));
+            setAllEvents(e);
 
             const now = new Date().setHours(0, 0, 0, 0);
 
@@ -6760,7 +6847,7 @@ function SyrixDashboard({ onBack }) {
                         <div className="lg:col-span-8 space-y-8">
                             <Card><h2 className="text-lg font-bold text-white mb-4 flex justify-between items-center uppercase tracking-wide"><span>Needs Attention</span><span className="text-[10px] bg-red-900/30 text-red-400 border border-red-900/50 px-2 py-1 rounded font-bold">{attentionItems.length} ACTIVE</span></h2><div className="grid grid-cols-1 md:grid-cols-2 gap-3">{attentionItems.length > 0 ? attentionItems.map(item => (<button key={item.label} onClick={() => setActiveTab(item.tab)} className="p-4 bg-black/40 rounded-xl border border-neutral-800 text-left hover:border-red-900/50 transition-colors"><div className="text-3xl font-black text-white">{item.value}</div><div className="mt-1 text-[10px] uppercase tracking-widest text-neutral-500 font-black">{item.label}</div></button>)) : <div className="md:col-span-2 p-6 text-center text-sm text-neutral-500 border border-dashed border-neutral-800 rounded-xl">Nothing urgent is waiting right now.</div>}</div></Card>
                             <Card><h2 className="text-lg font-bold text-white mb-4 flex justify-between items-center uppercase tracking-wide"><span>Upcoming Events</span><span className="text-[10px] bg-red-900/30 text-red-400 border border-red-900/50 px-2 py-1 rounded font-bold">{events.length} ACTIVE</span></h2><div className="space-y-3 max-h-64 overflow-y-auto pr-2 scrollbar-thin scrollbar-thumb-neutral-700">{events.length > 0 ? events.map(ev => (<div key={ev.id} className="p-3 bg-black/40 rounded-xl border border-neutral-800 flex justify-between items-center group hover:border-red-900/50 transition-colors"><div><div className="font-bold text-white text-sm group-hover:text-red-400 transition-colors">{ev.type} <span className="text-neutral-500">vs</span> {ev.opponent || 'TBD'}</div><div className="text-xs text-neutral-400 mt-1">{ev.date} @ <span className="text-white font-mono">{ev.time}</span></div></div>{isStaff && <button onClick={() => openModal('Delete Event', 'Remove?', () => deleteEvent(ev.id))} className="text-neutral-600 hover:text-red-500">×</button>}</div>)) : <div className="p-6 text-center text-sm text-neutral-500 border border-dashed border-neutral-800 rounded-xl">No active events scheduled.</div>}</div></Card>
-                            <PerformanceWidget events={events} />
+                            <PerformanceWidget events={allEvents} />
                         </div>
                     </div></div>}
                     {activeTab === 'search' && <GlobalSearch isAdmin={isAdmin} setActiveTab={setActiveTab} />}
