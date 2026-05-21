@@ -3472,89 +3472,85 @@ function TeamCalendar({ events, currentUserName, currentUserUid, isStaff }) {
     };
 
     return (
-        <div className="animate-fade-in space-y-6">
-            <Card className="border-white/10">
-                <div className="flex flex-col md:flex-row md:items-end md:justify-between gap-4 mb-6">
+        <div className="animate-fade-in grid grid-cols-1 2xl:grid-cols-[minmax(0,1.35fr)_minmax(22rem,0.65fr)] gap-4 min-h-0">
+            <Card className="border-white/10 p-4 md:p-5 min-h-0">
+                <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 mb-4">
                     <div>
-                        <div className="text-[10px] uppercase tracking-[0.28em] text-red-400 font-black mb-3">Team Calendar</div>
-                        <h2 className="text-3xl md:text-4xl font-black text-white uppercase italic leading-none">{monthLabel}</h2>
-                        <p className="mt-3 text-sm text-neutral-400">A single view for scrims, officials, practices, VOD reviews, and prep deadlines.</p>
+                        <div className="text-[10px] uppercase tracking-[0.24em] text-red-400 font-black mb-2">Team Calendar</div>
+                        <h2 className="text-2xl md:text-3xl font-black text-white uppercase italic leading-none">{monthLabel}</h2>
                     </div>
                     <div className="flex gap-2">
-                        <ButtonSecondary onClick={() => moveMonth(-1)} className="text-xs px-4">Prev</ButtonSecondary>
-                        <ButtonSecondary onClick={() => setCursor(new Date(new Date().getFullYear(), new Date().getMonth(), 1))} className="text-xs px-4">Today</ButtonSecondary>
-                        <ButtonSecondary onClick={() => moveMonth(1)} className="text-xs px-4">Next</ButtonSecondary>
+                        <ButtonSecondary onClick={() => moveMonth(-1)} className="text-[10px] px-3 py-2">Prev</ButtonSecondary>
+                        <ButtonSecondary onClick={() => setCursor(new Date(new Date().getFullYear(), new Date().getMonth(), 1))} className="text-[10px] px-3 py-2">Today</ButtonSecondary>
+                        <ButtonSecondary onClick={() => moveMonth(1)} className="text-[10px] px-3 py-2">Next</ButtonSecondary>
                     </div>
                 </div>
-                <div className="grid grid-cols-7 border border-white/10 rounded-xl overflow-hidden bg-black/35">
-                    {SHORT_DAYS.map(day => <div key={day} className="p-3 text-[10px] font-black uppercase tracking-widest text-red-400 border-b border-white/10 bg-white/5">{day}</div>)}
+                <div className="grid grid-cols-7 border border-white/10 rounded-lg overflow-hidden bg-black/35">
+                    {SHORT_DAYS.map(day => <div key={day} className="px-2 py-2 text-[9px] font-black uppercase tracking-widest text-red-400 border-b border-white/10 bg-white/5">{day}</div>)}
                     {cells.map((cell, index) => (
-                        <div key={cell?.date || `blank-${index}`} className={`min-h-32 p-3 border-b border-r border-white/10 last:border-r-0 ${cell?.isToday ? 'bg-red-950/20 ring-1 ring-inset ring-red-500/50' : ''}`}>
+                        <div key={cell?.date || `blank-${index}`} className={`min-h-[5.8rem] 2xl:min-h-[6.5rem] p-2 border-b border-r border-white/10 last:border-r-0 ${cell?.isToday ? 'bg-red-950/20 ring-1 ring-inset ring-red-500/50' : ''}`}>
                             {cell && <>
-                                <div className="flex items-center justify-between gap-2 mb-2">
+                                <div className="flex items-center justify-between gap-2 mb-1.5">
                                     <div className={`text-xs font-black ${cell.isToday ? 'text-red-300' : 'text-white'}`}>{cell.dayNumber}</div>
-                                    <div className="text-[9px] uppercase tracking-widest text-neutral-600">{cell.weekday.slice(0, 3)}</div>
+                                    <div className="text-[8px] uppercase tracking-widest text-neutral-600">{cell.weekday.slice(0, 3)}</div>
                                 </div>
                                 <div className="space-y-1">
-                                    {(eventsByDate[cell.date] || []).map(event => (
-                                        <div key={event.id} className="rounded-md border border-red-900/35 bg-red-950/25 px-2 py-1">
-                                            <div className="text-[10px] font-black uppercase text-white truncate">{event.type || 'Event'}</div>
-                                            <div className="text-[9px] text-neutral-400 truncate">{event.time || 'TBD'} · {event.opponent || event.map || 'Team'}</div>
+                                    {(eventsByDate[cell.date] || []).slice(0, 2).map(event => (
+                                        <div key={event.id} className="rounded border border-red-900/35 bg-red-950/25 px-1.5 py-1">
+                                            <div className="text-[9px] font-black uppercase text-white truncate">{event.type || 'Event'}</div>
+                                            <div className="text-[8px] text-neutral-400 truncate">{event.time || 'TBD'} · {event.opponent || event.map || 'Team'}</div>
                                         </div>
                                     ))}
+                                    {(eventsByDate[cell.date] || []).length > 2 && <div className="text-[8px] font-black uppercase tracking-widest text-neutral-500">+{(eventsByDate[cell.date] || []).length - 2} more</div>}
                                 </div>
                             </>}
                         </div>
                     ))}
                 </div>
             </Card>
-            <Card>
-                <div className="flex flex-col md:flex-row md:items-end md:justify-between gap-4 mb-5">
+
+            <Card className="p-4 md:p-5 min-h-0">
+                <div className="flex items-end justify-between gap-3 mb-4">
                     <div>
-                        <div className="text-[10px] uppercase tracking-[0.28em] text-red-400 font-black mb-3">Event RSVP</div>
-                        <h3 className="text-2xl font-black text-white uppercase italic">Confirm Attendance</h3>
-                        <p className="mt-2 text-sm text-neutral-400">Players can confirm, maybe, or decline upcoming events so staff know what the lineup actually looks like.</p>
+                        <div className="text-[10px] uppercase tracking-[0.24em] text-red-400 font-black mb-2">Event RSVP</div>
+                        <h3 className="text-2xl font-black text-white uppercase italic leading-none">Attendance</h3>
                     </div>
                     <div className="text-xs text-neutral-500">{events.length} upcoming</div>
                 </div>
-                <div className="grid grid-cols-1 xl:grid-cols-2 gap-3">
+                <div className="space-y-3 max-h-[calc(100vh-15rem)] overflow-y-auto pr-2 custom-scrollbar">
                     {events.length ? events.map(event => {
                         const counts = rsvpCounts(event);
                         const myStatus = event.rsvps?.[currentUserUid]?.status || '';
                         return (
-                            <div key={event.id} className="rounded-xl border border-white/10 bg-black/45 p-4">
-                                <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-3">
-                                    <div>
-                                        <div className="flex flex-wrap gap-2 mb-2">
-                                            <span className="text-[9px] uppercase tracking-widest bg-red-950/25 border border-red-900/40 text-red-300 px-2 py-1 rounded">{event.type || 'Event'}</span>
-                                            <span className="text-[9px] uppercase tracking-widest bg-white/5 border border-white/10 text-neutral-400 px-2 py-1 rounded">{event.map || 'Map TBD'}</span>
-                                            {myStatus && <span className="text-[9px] uppercase tracking-widest bg-green-950/25 border border-green-900/40 text-green-300 px-2 py-1 rounded">You: {myStatus}</span>}
-                                        </div>
-                                        <div className="text-lg font-black text-white">{event.opponent ? `SYRIX vs ${event.opponent}` : event.type || 'Team Event'}</div>
-                                        <div className="mt-1 text-xs text-neutral-500">{event.date || 'Date TBD'} @ {event.time || 'Time TBD'} {event.timezone || ''}</div>
-                                    </div>
-                                    <div className="grid grid-cols-3 gap-2 min-w-44">
-                                        <div className="rounded-lg border border-green-900/30 bg-green-950/15 p-2 text-center"><div className="text-lg font-black text-white">{counts.yes}</div><div className="text-[9px] uppercase tracking-widest text-green-300">Going</div></div>
-                                        <div className="rounded-lg border border-yellow-900/30 bg-yellow-950/15 p-2 text-center"><div className="text-lg font-black text-white">{counts.maybe}</div><div className="text-[9px] uppercase tracking-widest text-yellow-300">Maybe</div></div>
-                                        <div className="rounded-lg border border-red-900/30 bg-red-950/15 p-2 text-center"><div className="text-lg font-black text-white">{counts.no}</div><div className="text-[9px] uppercase tracking-widest text-red-300">Out</div></div>
-                                    </div>
+                            <div key={event.id} className="rounded-xl border border-white/10 bg-black/45 p-3">
+                                <div className="flex flex-wrap gap-2 mb-2">
+                                    <span className="text-[9px] uppercase tracking-widest bg-red-950/25 border border-red-900/40 text-red-300 px-2 py-1 rounded">{event.type || 'Event'}</span>
+                                    <span className="text-[9px] uppercase tracking-widest bg-white/5 border border-white/10 text-neutral-400 px-2 py-1 rounded">{event.map || 'Map TBD'}</span>
+                                    {myStatus && <span className="text-[9px] uppercase tracking-widest bg-green-950/25 border border-green-900/40 text-green-300 px-2 py-1 rounded">You: {myStatus}</span>}
                                 </div>
-                                <div className="mt-4 flex flex-wrap gap-2">
+                                <div className="text-sm font-black text-white">{event.opponent ? `SYRIX vs ${event.opponent}` : event.type || 'Team Event'}</div>
+                                <div className="mt-1 text-[10px] text-neutral-500">{event.date || 'Date TBD'} @ {event.time || 'Time TBD'} {event.timezone || ''}</div>
+                                <div className="mt-3 grid grid-cols-3 gap-2">
+                                    <div className="rounded-lg border border-green-900/30 bg-green-950/15 p-2 text-center"><div className="text-base font-black text-white">{counts.yes}</div><div className="text-[8px] uppercase tracking-widest text-green-300">Going</div></div>
+                                    <div className="rounded-lg border border-yellow-900/30 bg-yellow-950/15 p-2 text-center"><div className="text-base font-black text-white">{counts.maybe}</div><div className="text-[8px] uppercase tracking-widest text-yellow-300">Maybe</div></div>
+                                    <div className="rounded-lg border border-red-900/30 bg-red-950/15 p-2 text-center"><div className="text-base font-black text-white">{counts.no}</div><div className="text-[8px] uppercase tracking-widest text-red-300">Out</div></div>
+                                </div>
+                                <div className="mt-3 grid grid-cols-3 gap-2">
                                     {['Going', 'Maybe', 'Unavailable'].map(status => (
-                                        <button key={status} onClick={() => setRsvp(event, status)} className={`rounded-lg border px-3 py-2 text-[10px] font-black uppercase tracking-widest ${myStatus === status ? 'bg-red-600 border-red-500 text-white' : 'bg-white/5 border-white/10 text-neutral-400 hover:text-white'}`}>{status}</button>
+                                        <button key={status} onClick={() => setRsvp(event, status)} className={`rounded-lg border px-2 py-2 text-[9px] font-black uppercase tracking-widest ${myStatus === status ? 'bg-red-600 border-red-500 text-white' : 'bg-white/5 border-white/10 text-neutral-400 hover:text-white'}`}>{status === 'Unavailable' ? 'Out' : status}</button>
                                     ))}
                                 </div>
                                 {isStaff && event.rsvps && (
-                                    <div className="mt-4 border-t border-white/10 pt-3">
+                                    <div className="mt-3 border-t border-white/10 pt-3">
                                         <div className="text-[9px] uppercase tracking-widest text-neutral-500 font-black mb-2">Responses</div>
-                                        <div className="flex flex-wrap gap-2">
-                                            {Object.values(event.rsvps).map(row => <span key={row.uid || row.name} className="rounded-md border border-white/10 bg-white/5 px-2 py-1 text-[10px] text-neutral-300">{row.name}: {row.status}</span>)}
+                                        <div className="flex flex-wrap gap-1.5">
+                                            {Object.values(event.rsvps).map(row => <span key={row.uid || row.name} className="rounded-md border border-white/10 bg-white/5 px-2 py-1 text-[9px] text-neutral-300">{row.name}: {row.status}</span>)}
                                         </div>
                                     </div>
                                 )}
                             </div>
                         );
-                    }) : <div className="xl:col-span-2 p-8 text-center text-sm text-neutral-500 border border-dashed border-neutral-800 rounded-xl">No upcoming events to confirm.</div>}
+                    }) : <div className="p-8 text-center text-sm text-neutral-500 border border-dashed border-neutral-800 rounded-xl">No upcoming events to confirm.</div>}
                 </div>
             </Card>
         </div>
