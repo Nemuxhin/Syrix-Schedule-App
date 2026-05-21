@@ -219,11 +219,11 @@ const LandingPage = ({ onEnterHub }) => {
         <div className="min-h-screen w-full font-sans text-white flex flex-col relative overflow-x-hidden bg-[#050608]">
             <Background />
 
-            <header className="fixed top-0 w-full z-50 bg-[#050608]/90 backdrop-blur-xl border-b border-white/10 flex justify-center">
-                <nav className="max-w-[1480px] w-full px-5 md:px-8 py-3 flex justify-between items-center">
+            <header className="fixed top-0 w-full z-50 org-nav backdrop-blur-xl flex justify-center">
+                <nav className="max-w-[1560px] w-full px-5 md:px-8 py-3 flex justify-between items-center">
                     <a href="#home" className="flex items-center gap-3 text-white hover:text-red-500 transition-colors">
                         <TeamLogo className="h-9 w-9 rounded-sm shadow-lg shadow-red-950/30" />
-                        <span className="text-xl font-black uppercase tracking-tight italic">Syrix</span>
+                        <span className="org-wordmark text-2xl font-black uppercase italic">Syrix</span>
                     </a>
                     <button onClick={() => setMobileMenuOpen(!mobileMenuOpen)} className="md:hidden text-2xl z-50 p-2 focus:outline-none text-white">☰</button>
                     <div className="hidden md:flex items-center space-x-7 text-[11px] font-black uppercase tracking-[0.18em]">
@@ -232,7 +232,7 @@ const LandingPage = ({ onEnterHub }) => {
                         <a href="#vods" className="text-white hover:text-red-500 transition duration-300">Media</a>
                         <a href="#news" className="text-white hover:text-red-500 transition duration-300">News</a>
                         <a href="#merch" className="text-white hover:text-red-500 transition duration-300">Shop</a>
-                        <button onClick={onEnterHub} className="px-5 py-2.5 rounded-sm bg-white hover:bg-red-600 text-black hover:text-white transition duration-300 flex items-center gap-2">
+                        <button onClick={onEnterHub} className="px-5 py-2.5 rounded-sm bg-white hover:bg-red-600 text-black hover:text-white transition duration-300 flex items-center gap-2 syrix-cut">
                             <span>TEAM HUB</span>
                             <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M9 5l7 7-7 7"></path></svg>
                         </button>
@@ -250,33 +250,33 @@ const LandingPage = ({ onEnterHub }) => {
             </div>
 
             <main className="flex-1 relative z-10 flex flex-col items-center w-full">
-                <section id="home" className="w-full min-h-[78vh] flex items-center justify-center relative overflow-hidden bg-black pt-24 pb-8">
+                <section id="home" className="w-full min-h-[82vh] flex items-center justify-center relative overflow-hidden bg-black pt-24 pb-8">
                     <div className="absolute inset-0 w-full h-full z-0 pointer-events-none overflow-hidden">
                         <iframe className="absolute top-1/2 left-1/2 w-full h-full min-w-[177vh] min-h-[56.25vw] -translate-x-1/2 -translate-y-1/2 scale-[2.15] opacity-35 mix-blend-luminosity" src="https://www.youtube.com/embed/y9zweO_hU1U?autoplay=1&mute=1&controls=0&loop=1&playlist=y9zweO_hU1U&showinfo=0&rel=0&iv_load_policy=3&modestbranding=1&playsinline=1&enablejsapi=1&origin=http://localhost:3000" title="Hero Background" frameBorder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowFullScreen></iframe>
                         <div className="absolute inset-0 bg-[linear-gradient(90deg,#050608_0%,rgba(5,6,8,0.84)_38%,rgba(5,6,8,0.35)_100%)]"></div>
                         <div className="absolute inset-0 bg-gradient-to-t from-[#050608] via-transparent to-[#050608]/90"></div>
                     </div>
 
-                    <div className="relative z-10 max-w-[1480px] w-full mx-auto px-5 md:px-8 grid grid-cols-1 lg:grid-cols-[1.12fr_0.88fr] gap-6 items-center">
+                    <div className="relative z-10 max-w-[1560px] w-full mx-auto px-5 md:px-8 grid grid-cols-1 lg:grid-cols-[1.05fr_0.95fr] gap-6 items-center">
                         <div data-aos="fade-up">
                             <div className="inline-flex items-center gap-3 border border-white/15 bg-white/5 backdrop-blur-md px-3 py-1.5 mb-6">
                                 <TeamLogo className="h-5 w-5 rounded-sm border-white/20" />
                                 <span className="text-[10px] font-black uppercase tracking-[0.28em] text-neutral-300">Official Valorant Team</span>
                             </div>
-                            <h1 className="text-[18vw] sm:text-[7.4rem] lg:text-[9rem] font-black leading-[0.78] tracking-tight italic text-white">SYRIX</h1>
+                            <h1 className="org-wordmark text-[19vw] sm:text-[8.2rem] lg:text-[10.5rem] font-black leading-[0.72] tracking-tight italic text-white">SYRIX</h1>
                             <p className="text-neutral-300 text-base md:text-lg font-medium mt-5 mb-6 max-w-2xl leading-relaxed">
-                                We are a VALORANT team trying to build something properly: good practice, better comms, and people who want to improve together.
+                                A VALORANT team built around sharp practice, honest review, and matchdays that feel earned.
                             </p>
                             <div className="flex flex-col sm:flex-row gap-3 w-full sm:w-auto">
-                                <button onClick={() => document.getElementById('roster')?.scrollIntoView({ behavior: 'smooth' })} className="group relative px-8 py-4 bg-red-600 text-white font-black uppercase tracking-widest overflow-hidden hover:bg-red-700 transition-all border border-red-500 rounded-sm">
+                                <button onClick={() => document.getElementById('roster')?.scrollIntoView({ behavior: 'smooth' })} className="group relative px-8 py-4 bg-red-600 text-white font-black uppercase tracking-widest overflow-hidden hover:bg-white hover:text-black transition-all border border-red-500 rounded-sm syrix-cut">
                                     <span className="relative z-10 flex items-center gap-2 justify-center">View Roster <span className="group-hover:translate-x-1 transition-transform">→</span></span>
                                 </button>
-                                <button onClick={onEnterHub} className="px-8 py-4 bg-white text-black border border-white font-black uppercase tracking-widest hover:bg-neutral-200 transition-all rounded-sm">Team Hub</button>
+                                <button onClick={onEnterHub} className="px-8 py-4 bg-white text-black border border-white font-black uppercase tracking-widest hover:bg-red-600 hover:text-white transition-all rounded-sm syrix-cut">Team Hub</button>
                             </div>
                         </div>
 
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 lg:pt-20" data-aos="fade-left">
-                            <div className="bg-[#0d1016]/92 border border-white/10 p-5 min-h-52 flex flex-col justify-between">
+                            <div className="bg-[#0d1016]/92 border border-white/10 p-5 min-h-52 flex flex-col justify-between syrix-cut">
                                 <div>
                                     <div className="text-[10px] uppercase tracking-[0.24em] text-red-400 font-black mb-3">Next Match</div>
                                     <div className="text-3xl font-black italic uppercase leading-none">SYRIX <span className="text-red-500">vs</span><br />{nextMatch?.opponent || 'TBD'}</div>
@@ -290,13 +290,13 @@ const LandingPage = ({ onEnterHub }) => {
                                     <a href="#schedule" className="text-xs font-black uppercase text-red-400 hover:text-white">Schedule</a>
                                 </div>
                             </div>
-                            <div className="bg-[#151922] text-white border border-white/10 p-5 min-h-52 flex flex-col justify-between">
+                            <div className="editorial-card p-5 min-h-52 flex flex-col justify-between syrix-cut">
                                 <div>
-                                    <div className="text-[10px] uppercase tracking-[0.24em] text-red-400 font-black mb-3">Team Update</div>
-                                    <div className="text-2xl font-black uppercase leading-tight">{fallbackNews.title}</div>
-                                    <p className="mt-3 text-sm text-neutral-400 line-clamp-3">{fallbackNews.body}</p>
+                                    <div className="text-[10px] uppercase tracking-[0.24em] text-red-600 font-black mb-3">Team Update</div>
+                                    <div className="text-2xl font-black uppercase leading-tight text-black">{fallbackNews.title}</div>
+                                    <p className="mt-3 text-sm text-neutral-700 line-clamp-3">{fallbackNews.body}</p>
                                 </div>
-                                <a href="#news" className="text-xs font-black uppercase text-red-400 hover:text-white">Latest News</a>
+                                <a href="#news" className="text-xs font-black uppercase text-red-600 hover:text-black">Latest News</a>
                             </div>
                         </div>
                     </div>
@@ -319,7 +319,7 @@ const LandingPage = ({ onEnterHub }) => {
                 </section>
 
                 <section className="w-full py-7 bg-[#080a0f] border-b border-white/10 flex justify-center relative z-20">
-                    <div className="max-w-[1480px] w-full px-5 md:px-8 grid grid-cols-2 lg:grid-cols-4 gap-6">
+                    <div className="max-w-[1560px] w-full px-5 md:px-8 grid grid-cols-2 lg:grid-cols-4 gap-6">
                         <StatBlock label="Season WR" value={`${teamStats.winRate}%`} sub="Recorded matches" />
                         <StatBlock label="Current Record" value={`${teamStats.wins}W ${teamStats.losses}L`} sub="Completed events" />
                         <StatBlock label="Active Roster" value={activePlayers.length} sub={`${coachingStaff.length + managementStaff.length} staff`} />
@@ -334,11 +334,11 @@ const LandingPage = ({ onEnterHub }) => {
                 </section>
 
                 <section id="schedule" className="w-full py-14 bg-[#050608] text-white relative flex justify-center border-y border-white/10">
-                    <div className="max-w-[1480px] w-full px-5 md:px-8">
+                    <div className="max-w-[1560px] w-full px-5 md:px-8">
                         <div className="flex flex-col lg:flex-row lg:items-end justify-between gap-5 mb-7">
                             <div>
                                 <div className="text-[11px] uppercase tracking-[0.28em] text-red-400 font-black mb-3">Match Center</div>
-                                <h3 className="text-5xl md:text-7xl font-black italic uppercase leading-none">Upcoming Matches</h3>
+                                <h3 className="org-wordmark text-5xl md:text-7xl font-black italic uppercase leading-none">Upcoming Matches</h3>
                             </div>
                             <button onClick={onEnterHub} className="self-start lg:self-auto bg-white text-black px-6 py-3 text-xs font-black uppercase tracking-widest hover:bg-red-600 hover:text-white transition-colors">Manage Schedule</button>
                         </div>
@@ -6629,7 +6629,7 @@ function SyrixDashboard({ onBack }) {
         <button
             onClick={() => setActiveTab(item.id)}
             title={item.label}
-            className={`${compact ? 'px-3 py-2 text-[10px]' : collapsed ? 'w-full px-2 py-2.5 text-[10px] justify-center' : 'w-full px-3 py-2.5 text-xs'} text-left font-black uppercase tracking-[0.1em] transition-all border flex items-center ${collapsed ? 'justify-center' : 'justify-between'} gap-3 ${activeTab === item.id ? 'bg-red-600 text-white border-red-500' : 'bg-transparent text-neutral-500 border-transparent hover:text-white hover:bg-white/5 hover:border-white/10'}`}
+            className={`${compact ? 'px-3 py-2 text-[10px]' : collapsed ? 'w-full px-2 py-2.5 text-[10px] justify-center' : 'w-full px-3 py-2.5 text-xs'} text-left font-black uppercase tracking-[0.1em] transition-all border flex items-center ${collapsed ? 'justify-center' : 'justify-between'} gap-3 rounded-sm ${activeTab === item.id ? 'bg-red-600 text-white border-red-500 syrix-cut' : 'bg-transparent text-neutral-500 border-transparent hover:text-white hover:bg-white/5 hover:border-white/10'}`}
         >
             <span>{collapsed ? item.label.slice(0, 2) : item.label}</span>
             {!collapsed && navBadge(item.id) && <span className={`text-[9px] px-1.5 py-0.5 border ${activeTab === item.id ? 'border-white/30 bg-black/20 text-white' : 'border-white/10 bg-white/5 text-neutral-400'}`}>{navBadge(item.id)}</span>}
@@ -6637,14 +6637,14 @@ function SyrixDashboard({ onBack }) {
     );
 
     return (
-        <div className="fixed inset-0 h-full w-full text-neutral-200 font-sans selection:bg-red-500/30 flex overflow-hidden bg-[#050608]">
+        <div className="fixed inset-0 h-full w-full text-neutral-200 font-sans selection:bg-red-500/30 flex overflow-hidden bg-[#030304]">
             <Background />
 
-            <aside className={`relative z-40 hidden lg:flex ${sidebarCollapsed ? 'w-20' : 'w-72'} flex-none flex-col border-r border-white/10 bg-[#080a0f]/92 backdrop-blur-xl transition-[width] duration-200`}>
+            <aside className={`relative z-40 hidden lg:flex ${sidebarCollapsed ? 'w-20' : 'w-72'} flex-none flex-col border-r border-white/10 bg-[#050506]/95 backdrop-blur-xl transition-[width] duration-200`}>
                 <div className={`${sidebarCollapsed ? 'p-3' : 'p-5'} border-b border-white/10`}>
                     <button onClick={onBack} className={`flex items-center ${sidebarCollapsed ? 'justify-center' : 'gap-3'} text-white hover:text-red-400 transition w-full`}>
                         <TeamLogo className="h-10 w-10 rounded-sm shadow-lg shadow-red-950/30" />
-                        {!sidebarCollapsed && <span className="text-2xl font-black tracking-tight italic">SYRIX</span>}
+                        {!sidebarCollapsed && <span className="org-wordmark text-3xl font-black tracking-tight italic">SYRIX</span>}
                     </button>
                     <button onClick={() => setSidebarCollapsed(value => !value)} className="mt-3 w-full bg-white/5 hover:bg-white/10 border border-white/10 text-neutral-400 hover:text-white py-2 text-[10px] font-black uppercase tracking-widest">
                         {sidebarCollapsed ? 'Open' : 'Collapse'}
@@ -6690,7 +6690,7 @@ function SyrixDashboard({ onBack }) {
             </aside>
 
             <div className="relative z-10 flex-1 min-w-0 flex flex-col">
-            <header className="flex-none border-b border-white/10 bg-[#080a0f]/88 backdrop-blur-xl">
+            <header className="flex-none border-b border-white/10 bg-[#050506]/92 backdrop-blur-xl">
                 <div className="flex justify-between items-center px-4 md:px-6 py-3">
                     <div className="flex items-center gap-3 min-w-0">
                         <button onClick={onBack} className="lg:hidden text-neutral-500 hover:text-white transition">
@@ -6698,7 +6698,7 @@ function SyrixDashboard({ onBack }) {
                         </button>
                         <div>
                             <div className="text-[10px] uppercase tracking-[0.24em] text-red-400 font-black">Command Center</div>
-                            <h1 className="text-xl md:text-2xl font-black text-white uppercase tracking-tight">{activeLabel}</h1>
+                            <h1 className="org-wordmark text-2xl md:text-3xl font-black text-white uppercase tracking-tight italic">{activeLabel}</h1>
                             <p className="hidden sm:block mt-0.5 text-xs text-neutral-500 max-w-xl">{pageMeta[activeTab]}</p>
                         </div>
                     </div>

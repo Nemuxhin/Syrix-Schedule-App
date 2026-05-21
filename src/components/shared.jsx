@@ -1,14 +1,14 @@
 import { TEAM_LOGO } from '../lib/constants';
 
 export const TeamLogo = ({ className = "", imageClassName = "" }) => (
-    <span className={`relative inline-flex shrink-0 overflow-hidden bg-black border border-white/10 ${className}`}>
+    <span className={`relative inline-flex shrink-0 overflow-hidden bg-black border border-white/15 ${className}`}>
         <img src={TEAM_LOGO} alt="SYRIX logo" className={`h-full w-full object-cover ${imageClassName}`} />
     </span>
 );
 
 export const GlobalStyles = () => (
     <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap');
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700;900&family=Rajdhani:wght@600;700&display=swap');
         
         html, body, #root { 
             width: 100%; 
@@ -17,11 +17,55 @@ export const GlobalStyles = () => (
             overflow-x: hidden;
         }
 
-        .glass-panel { background: rgba(10, 12, 16, 0.92); backdrop-filter: blur(12px); border: 1px solid rgba(255,255,255,0.08); box-shadow: 0 12px 32px rgba(0, 0, 0, 0.28); }
-        .card-shine:hover { border-color: rgba(239, 68, 68, 0.26); background: rgba(15, 18, 24, 0.96); box-shadow: 0 16px 36px rgba(0,0,0,0.34); }
+        .glass-panel {
+            background: linear-gradient(180deg, rgba(16, 18, 22, 0.98), rgba(8, 9, 12, 0.98));
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(255,255,255,0.1);
+            box-shadow: 0 18px 48px rgba(0, 0, 0, 0.34);
+        }
+        .glass-panel::after {
+            content: "";
+            position: absolute;
+            inset: 0;
+            pointer-events: none;
+            background: linear-gradient(135deg, rgba(255,255,255,0.05), transparent 32%, transparent 72%, rgba(239,68,68,0.06));
+            opacity: 0.55;
+        }
+        .card-shine:hover { border-color: rgba(239, 68, 68, 0.44); background: linear-gradient(180deg, rgba(21, 24, 30, 0.98), rgba(9, 10, 13, 0.98)); box-shadow: 0 20px 52px rgba(0,0,0,0.42); }
+        .card-shine > * { position: relative; z-index: 1; }
         .section-kicker { color: #ef4444; font-size: 0.7rem; font-weight: 900; letter-spacing: 0.18em; text-transform: uppercase; }
-        .section-title { color: #fff; font-size: clamp(1.9rem, 4vw, 3.05rem); line-height: 1; font-weight: 900; letter-spacing: 0; text-transform: uppercase; }
+        .section-title { color: #fff; font-size: clamp(2.25rem, 5vw, 4.6rem); line-height: 0.88; font-weight: 900; letter-spacing: -0.02em; text-transform: uppercase; font-style: italic; }
         .surface-band { background: rgba(9, 11, 15, 0.74); border-block: 1px solid rgba(255,255,255,0.06); }
+        .org-wordmark { font-family: Rajdhani, Inter, sans-serif; letter-spacing: -0.035em; }
+        .org-nav {
+            background: rgba(3, 3, 4, 0.92);
+            border-bottom: 1px solid rgba(255,255,255,0.12);
+            box-shadow: 0 12px 28px rgba(0,0,0,0.32);
+        }
+        .editorial-band {
+            background: #f4f4f1;
+            color: #050608;
+        }
+        .editorial-card {
+            background: #f4f4f1;
+            color: #050608;
+            border: 1px solid rgba(0,0,0,0.12);
+        }
+        .syrix-cut {
+            clip-path: polygon(0 0, 100% 0, 100% calc(100% - 14px), calc(100% - 14px) 100%, 0 100%);
+        }
+        .syrix-redline {
+            position: relative;
+        }
+        .syrix-redline::before {
+            content: "";
+            position: absolute;
+            left: 0;
+            top: 0;
+            height: 3px;
+            width: 4.5rem;
+            background: #ef2424;
+        }
         @keyframes slideIn { from { transform: translateX(100%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
         .animate-slide-in { animation: slideIn 0.3s cubic-bezier(0.2, 0.8, 0.2, 1); }
         @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
@@ -32,7 +76,7 @@ export const GlobalStyles = () => (
         .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #ef4444; }
         .mask-fade { -webkit-mask-image: linear-gradient(to right, black 90%, transparent 100%); mask-image: linear-gradient(to right, black 90%, transparent 100%); }
 
-        :root { --primary-red: #ef4444; --dark-bg: #050608; --card-bg: #111318; }
+        :root { --primary-red: #ef2424; --dark-bg: #030304; --card-bg: #111318; }
         .accent-text { color: var(--primary-red); }
         .accent-bg { background-color: var(--primary-red); transition: background-color 0.3s; }
         .accent-bg:hover { background-color: #e02c2c; }
@@ -84,8 +128,8 @@ export const GlobalStyles = () => (
 
 export const Background = () => (
     <div className="fixed inset-0 w-full h-full z-0 pointer-events-none bg-[#050608]">
-        <div className="absolute inset-0 opacity-[0.08] bg-[linear-gradient(to_right,#ffffff_1px,transparent_1px),linear-gradient(to_bottom,#ffffff_1px,transparent_1px)] bg-[size:4rem_4rem]"></div>
-        <div className="absolute inset-0 bg-[linear-gradient(to_bottom,rgba(5,6,8,0.35),#050608_82%)]"></div>
+        <div className="absolute inset-0 opacity-[0.06] bg-[linear-gradient(to_right,#ffffff_1px,transparent_1px),linear-gradient(to_bottom,#ffffff_1px,transparent_1px)] bg-[size:4.5rem_4.5rem]"></div>
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_72%_8%,rgba(239,36,36,0.16),transparent_28%),linear-gradient(to_bottom,rgba(3,3,4,0.35),#030304_82%)]"></div>
     </div>
 );
 
@@ -106,29 +150,29 @@ export const Modal = ({ isOpen, onClose, onConfirm, title, children }) => {
 };
 
 export const Input = ({ className = '', ...props }) => (
-    <input {...props} className={`w-full bg-black/40 border border-neutral-800 rounded-lg p-3 text-white text-sm outline-none focus:border-red-600 focus:ring-1 focus:ring-red-600 transition-all placeholder-neutral-600 shadow-inner hover:border-neutral-700 ${className}`} />
+    <input {...props} className={`w-full bg-black/55 border border-neutral-800 rounded-sm p-3 text-white text-sm outline-none focus:border-red-500 focus:ring-1 focus:ring-red-500 transition-all placeholder-neutral-600 shadow-inner hover:border-neutral-700 ${className}`} />
 );
 
 export const Select = ({ className = '', children, ...props }) => (
-    <select {...props} className={`w-full bg-black/40 border border-neutral-800 rounded-lg p-3 text-white text-sm outline-none focus:border-red-600 focus:ring-1 focus:ring-red-600 transition-all shadow-inner hover:border-neutral-700 ${className}`}>
+    <select {...props} className={`w-full bg-black/55 border border-neutral-800 rounded-sm p-3 text-white text-sm outline-none focus:border-red-500 focus:ring-1 focus:ring-red-500 transition-all shadow-inner hover:border-neutral-700 ${className}`}>
         {children}
     </select>
 );
 
 export const ButtonPrimary = ({ children, onClick, disabled, className = "" }) => (
-    <button onClick={onClick} disabled={disabled} className={`bg-red-600 hover:bg-red-500 text-white font-black uppercase tracking-[0.12em] py-3 px-6 rounded-lg shadow-lg shadow-red-950/20 transition-all transform active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed ${className}`}>
+    <button onClick={onClick} disabled={disabled} className={`bg-red-600 hover:bg-white text-white hover:text-black font-black uppercase tracking-[0.13em] py-3 px-6 rounded-sm shadow-lg shadow-red-950/20 transition-all transform active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed syrix-cut ${className}`}>
         {children}
     </button>
 );
 
 export const ButtonSecondary = ({ children, onClick, disabled, className = "" }) => (
-    <button onClick={onClick} disabled={disabled} className={`bg-black/40 hover:bg-neutral-900 border border-neutral-800 hover:border-red-900/50 text-neutral-400 hover:text-white font-bold uppercase tracking-[0.1em] py-2 px-4 rounded-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed ${className}`}>
+    <button onClick={onClick} disabled={disabled} className={`bg-black/55 hover:bg-white border border-neutral-800 hover:border-white text-neutral-400 hover:text-black font-black uppercase tracking-[0.11em] py-2 px-4 rounded-sm transition-all disabled:opacity-50 disabled:cursor-not-allowed ${className}`}>
         {children}
     </button>
 );
 
 export const Card = ({ children, className = "" }) => (
-    <div className={`glass-panel rounded-lg p-6 relative overflow-hidden group card-shine transition-all duration-300 ${className}`}>
+    <div className={`glass-panel rounded-sm p-6 relative overflow-hidden group card-shine transition-all duration-300 ${className}`}>
         {children}
     </div>
 );
