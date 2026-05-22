@@ -1283,6 +1283,12 @@ function StratBook() {
     const [pendingTextPoint, setPendingTextPoint] = useState(null);
     const [textDraft, setTextDraft] = useState('');
     const [compactMode, setCompactMode] = useState(false);
+    const [showGrid, setShowGrid] = useState(true);
+    const [snapToGrid, setSnapToGrid] = useState(false);
+    const [snapStep, setSnapStep] = useState(2);
+    const [mapOpacity, setMapOpacity] = useState(0.95);
+    const [boardZoom, setBoardZoom] = useState(1);
+    const [stratNotes, setStratNotes] = useState('');
 
     const tools = [
         { id: 'select', label: 'Select', hint: 'Move and edit placed items' },
@@ -1312,6 +1318,29 @@ function StratBook() {
     const TEXT_MIN = 0.2;
     const TEXT_DEFAULT = 0.32;
     const TEXT_MAX = 0.85;
+    const LOCAL_DRAFT_KEY = 'syrix-stratbook-draft';
+    const objectLabel = (obj) => {
+        if (!obj) return 'Item';
+        if (obj.type === 'agent') return obj.name || 'Agent';
+        if (obj.type === 'ability') return obj.name || 'Ability';
+        if (obj.type === 'text') return obj.text?.split('\n')[0]?.slice(0, 36) || 'Text note';
+        if (obj.type === 'area') return obj.name || obj.kind || 'Utility';
+        if (obj.type === 'freehand') return 'Drawing';
+        if (obj.type === 'line') return 'Line';
+        if (obj.type === 'arrow') return 'Arrow';
+        if (obj.type === 'spike') return 'Spike';
+        if (obj.type === 'ping') return 'Ping';
+        return obj.type || 'Item';
+    };
+
+    const snapPoint = (point) => {
+        if (!snapToGrid || tool === 'freehand') return point;
+        const step = Math.max(0.5, Number(snapStep) || 2);
+        return {
+            x: clamp(Math.round(point.x / step) * step, 0, 100),
+            y: clamp(Math.round(point.y / step) * step, 0, 100)
+        };
+    };
 
     const getAgentData = (name) => {
         if (!agentData) return null;
@@ -1329,6 +1358,20 @@ function StratBook() {
             setSelectedAbility(availableAbilities[0]);
         }
     }, [availableAbilities, selectedAbility]);
+
+    useEffect(() => {
+        const draftPayload = {
+            map: selectedMap,
+            side,
+            name: stratName,
+            status: stratStatus,
+            tags: stratTags,
+            notes: stratNotes,
+            objects,
+            savedAt: new Date().toISOString()
+        };
+        window.localStorage?.setItem(LOCAL_DRAFT_KEY, JSON.stringify(draftPayload));
+    }, [objects, selectedMap, side, stratName, stratNotes, stratStatus, stratTags]);
 
     const commitObjects = useCallback((nextObjects) => {
         const clean = nextObjects.map(obj => ({ ...obj }));
@@ -1359,10 +1402,10 @@ function StratBook() {
     const getBoardPoint = (event) => {
         const rect = boardRef.current?.getBoundingClientRect();
         if (!rect) return { x: 50, y: 50 };
-        return {
+        return snapPoint({
             x: clamp(((event.clientX - rect.left) / rect.width) * 100, 0, 100),
             y: clamp(((event.clientY - rect.top) / rect.height) * 100, 0, 100)
-        };
+        });
     };
 
     const area = (kind, radius, fill, stroke, extra = {}) => ({ shape: 'circle', kind, radius, fill, stroke, ...extra });
@@ -1761,6 +1804,11 @@ function StratBook() {
     const startDragObject = (event, obj, handle = 'body') => {
         if (tool !== 'select') return;
         event.stopPropagation();
+        if (obj.locked) {
+            setSelectedId(obj.id);
+            addToast('Unlock the item before moving it', 'error');
+            return;
+        }
         event.currentTarget.setPointerCapture?.(event.pointerId);
         const point = getBoardPoint(event);
         setSelectedId(obj.id);
@@ -1782,11 +1830,33 @@ function StratBook() {
         commitObjects(next);
     };
 
+    const toggleObjectFlag = (id, flag) => {
+        commitObjects(objects.map(obj => obj.id === id ? { ...obj, [flag]: !obj[flag] } : obj));
+    };
+
+    const moveSelectedLayer = (direction) => {
+        if (!selectedId) return;
+        const index = objects.findIndex(obj => obj.id === selectedId);
+        if (index < 0) return;
+        const next = [...objects];
+        const [item] = next.splice(index, 1);
+        if (direction === 'top') next.push(item);
+        if (direction === 'bottom') next.unshift(item);
+        if (direction === 'up') next.splice(Math.min(index + 1, next.length), 0, item);
+        if (direction === 'down') next.splice(Math.max(index - 1, 0), 0, item);
+        commitObjects(next);
+    };
+
     const deleteSelected = useCallback(() => {
         if (!selectedId) return;
+        const target = objects.find(obj => obj.id === selectedId);
+        if (target?.locked) {
+            addToast('Unlock the item before deleting it', 'error');
+            return;
+        }
         commitObjects(objects.filter(obj => obj.id !== selectedId));
         setSelectedId(null);
-    }, [commitObjects, objects, selectedId]);
+    }, [addToast, commitObjects, objects, selectedId]);
 
     useEffect(() => {
         const handleKeyDown = (event) => {
@@ -1844,6 +1914,7 @@ function StratBook() {
                 side,
                 status: stratStatus,
                 tags: normalizeStratTags(stratTags),
+                notes: stratNotes.trim(),
                 objects,
                 createdBy: identity.uid,
                 createdByName: identity.name,
@@ -1853,6 +1924,7 @@ function StratBook() {
             });
             setStratName('');
             setStratTags('');
+            setStratNotes('');
             addToast('Strategy saved');
         } catch (error) {
             console.error('Save strat failed:', error);
@@ -1863,7 +1935,7 @@ function StratBook() {
     };
 
     const exportJson = () => {
-        const payload = JSON.stringify({ name: stratName || `${selectedMap}-${side}`, map: selectedMap, side, status: stratStatus, tags: stratTags.split(',').map(tag => tag.trim()).filter(Boolean), objects }, null, 2);
+        const payload = JSON.stringify({ name: stratName || `${selectedMap}-${side}`, map: selectedMap, side, status: stratStatus, tags: stratTags.split(',').map(tag => tag.trim()).filter(Boolean), notes: stratNotes.trim(), objects }, null, 2);
         const blob = new Blob([payload], { type: 'application/json' });
         const url = URL.createObjectURL(blob);
         const link = document.createElement('a');
@@ -1873,12 +1945,61 @@ function StratBook() {
         URL.revokeObjectURL(url);
     };
 
+    const importJsonFile = async (event) => {
+        const file = event.target.files?.[0];
+        if (!file) return;
+        try {
+            const payload = JSON.parse(await file.text());
+            if (!Array.isArray(payload.objects)) throw new Error('Missing objects array');
+            if (payload.map && MAPS.includes(payload.map)) setSelectedMap(payload.map);
+            if (payload.side) setSide(payload.side === 'Defense' ? 'Defense' : 'Attack');
+            setStratName(payload.name || '');
+            setStratStatus(payload.status || 'Draft');
+            setStratTags(Array.isArray(payload.tags) ? payload.tags.join(', ') : '');
+            setStratNotes(payload.notes || '');
+            commitObjects(payload.objects.map(obj => ({ ...obj, id: obj.id || uid() })));
+            setSelectedId(null);
+            addToast('Strategy imported');
+        } catch (error) {
+            console.error('Import strategy failed:', error);
+            addToast('Unable to import strategy JSON', 'error');
+        } finally {
+            event.target.value = '';
+        }
+    };
+
+    const restoreLocalDraft = () => {
+        try {
+            const raw = window.localStorage?.getItem(LOCAL_DRAFT_KEY);
+            if (!raw) return addToast('No local planner draft found', 'error');
+            const payload = JSON.parse(raw);
+            if (payload.map && MAPS.includes(payload.map)) setSelectedMap(payload.map);
+            if (payload.side) setSide(payload.side === 'Defense' ? 'Defense' : 'Attack');
+            setStratName(payload.name || '');
+            setStratStatus(payload.status || 'Draft');
+            setStratTags(payload.tags || '');
+            setStratNotes(payload.notes || '');
+            commitObjects(Array.isArray(payload.objects) ? payload.objects.map(obj => ({ ...obj, id: obj.id || uid() })) : []);
+            setSelectedId(null);
+            addToast('Local draft restored');
+        } catch (error) {
+            console.error('Restore planner draft failed:', error);
+            addToast('Unable to restore local draft', 'error');
+        }
+    };
+
+    const clearLocalDraft = () => {
+        window.localStorage?.removeItem(LOCAL_DRAFT_KEY);
+        addToast('Local draft cleared');
+    };
+
     const renderArrowHead = (obj) => {
         const angle = Math.atan2(obj.y2 - obj.y1, obj.x2 - obj.x1) * 180 / Math.PI;
         return `translate(${obj.x2} ${obj.y2}) rotate(${angle})`;
     };
 
     const renderObject = (obj) => {
+        if (obj.hidden) return null;
         const isSelected = selectedId === obj.id;
         if (obj.type === 'line' || obj.type === 'arrow') {
             return (
@@ -2029,6 +2150,29 @@ function StratBook() {
                         </div>
                     </div>
 
+                    <div className="pt-4 border-t border-white/10 space-y-3">
+                        <div className="flex items-center justify-between">
+                            <label className="text-[10px] font-black text-red-500 uppercase">Workspace</label>
+                            <button onClick={() => { setBoardZoom(1); setMapOpacity(0.95); }} className="text-[10px] font-black uppercase tracking-widest text-neutral-500 hover:text-white">Reset View</button>
+                        </div>
+                        <div className="grid grid-cols-2 gap-2">
+                            <button onClick={() => setShowGrid(!showGrid)} className={`h-9 rounded-lg border text-[10px] font-black uppercase ${showGrid ? 'bg-white text-black border-white' : 'bg-white/5 text-neutral-400 border-white/10'}`}>Grid</button>
+                            <button onClick={() => setSnapToGrid(!snapToGrid)} className={`h-9 rounded-lg border text-[10px] font-black uppercase ${snapToGrid ? 'bg-white text-black border-white' : 'bg-white/5 text-neutral-400 border-white/10'}`}>Snap</button>
+                        </div>
+                        <div>
+                            <label className="text-[10px] text-neutral-500 uppercase font-bold flex justify-between"><span>Snap Step</span><span>{snapStep}%</span></label>
+                            <input type="range" min="1" max="5" step="0.5" value={snapStep} onChange={e => setSnapStep(Number(e.target.value))} className="w-full accent-red-600" />
+                        </div>
+                        <div>
+                            <label className="text-[10px] text-neutral-500 uppercase font-bold flex justify-between"><span>Map Opacity</span><span>{Math.round(mapOpacity * 100)}%</span></label>
+                            <input type="range" min="0.35" max="1" step="0.05" value={mapOpacity} onChange={e => setMapOpacity(Number(e.target.value))} className="w-full accent-red-600" />
+                        </div>
+                        <div>
+                            <label className="text-[10px] text-neutral-500 uppercase font-bold flex justify-between"><span>Board Zoom</span><span>{Math.round(boardZoom * 100)}%</span></label>
+                            <input type="range" min="0.75" max="1.35" step="0.05" value={boardZoom} onChange={e => setBoardZoom(Number(e.target.value))} className="w-full accent-red-600" />
+                        </div>
+                    </div>
+
                     <div>
                         <label className="text-[10px] font-black text-red-500 uppercase mb-2 block">Tools</label>
                         <div className="grid grid-cols-2 gap-2">
@@ -2058,7 +2202,7 @@ function StratBook() {
                 </div>
             </aside>}
 
-            <section className="relative min-h-[540px] bg-[#0b1116] overflow-hidden flex items-center justify-center p-4 md:p-8">
+            <section className="relative min-h-[540px] bg-[#0b1116] overflow-auto custom-scrollbar flex items-center justify-center p-4 md:p-8">
                 <div className="absolute top-4 left-4 right-4 z-20 flex flex-wrap items-center gap-2 pointer-events-none">
                     <div className="px-3 py-2 rounded-lg bg-black/70 border border-white/10 text-xs font-black uppercase text-white pointer-events-auto">{selectedMap} / {side} / {tool}</div>
                     <div className="ml-auto px-3 py-2 rounded-lg bg-black/70 border border-white/10 text-xs font-bold text-neutral-400 pointer-events-auto">{objects.length} items</div>
@@ -2078,6 +2222,7 @@ function StratBook() {
                 <div
                     ref={boardRef}
                     className={`relative aspect-square w-full ${boardMaxClass} rounded-xl overflow-hidden border border-white/10 bg-neutral-950 shadow-2xl touch-none`}
+                    style={{ transform: `scale(${boardZoom})`, transformOrigin: 'center' }}
                     onPointerDown={handleBoardPointerDown}
                     onPointerMove={handleBoardPointerMove}
                     onPointerUp={finishBoardAction}
@@ -2086,9 +2231,18 @@ function StratBook() {
                     onDrop={handleBoardDrop}
                 >
                     {mapImages?.[selectedMap] ? (
-                        <img src={mapImages[selectedMap]} alt={`${selectedMap} tactical map`} className="absolute inset-0 w-full h-full object-cover opacity-95 pointer-events-none" draggable={false} />
+                        <img src={mapImages[selectedMap]} alt={`${selectedMap} tactical map`} className="absolute inset-0 w-full h-full object-cover pointer-events-none" style={{ opacity: mapOpacity }} draggable={false} />
                     ) : (
                         <div className="absolute inset-0 flex items-center justify-center text-neutral-700 font-black text-5xl italic">{selectedMap}</div>
+                    )}
+                    {showGrid && (
+                        <div
+                            className="absolute inset-0 z-[1] pointer-events-none opacity-30"
+                            style={{
+                                backgroundImage: 'linear-gradient(rgba(255,255,255,0.12) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.12) 1px, transparent 1px)',
+                                backgroundSize: `${snapStep}% ${snapStep}%`
+                            }}
+                        />
                     )}
                     <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,transparent_45%,rgba(0,0,0,0.35)_100%)] pointer-events-none" />
                     <svg className="absolute inset-0 w-full h-full z-10" viewBox="0 0 100 100" preserveAspectRatio="none">
@@ -2143,11 +2297,36 @@ function StratBook() {
                     </div>
                 </div>
 
+                <div className="p-4 border-b border-white/10">
+                    <div className="flex items-center justify-between mb-3">
+                        <label className="text-[10px] font-black text-red-500 uppercase block">Layers</label>
+                        <span className="text-[10px] font-bold text-neutral-500">{objects.filter(obj => !obj.hidden).length}/{objects.length} visible</span>
+                    </div>
+                    <div className="space-y-2 max-h-52 overflow-y-auto custom-scrollbar pr-1">
+                        {objects.length ? [...objects].reverse().map(obj => (
+                            <div key={obj.id} className={`grid grid-cols-[1fr_auto_auto] gap-2 items-center rounded-lg border p-2 ${selectedId === obj.id ? 'border-red-500 bg-red-950/25' : 'border-white/10 bg-white/[0.03]'}`}>
+                                <button onClick={() => setSelectedId(obj.id)} className="min-w-0 text-left">
+                                    <div className={`text-xs font-black uppercase truncate ${obj.hidden ? 'text-neutral-600' : 'text-white'}`}>{objectLabel(obj)}</div>
+                                    <div className="text-[10px] text-neutral-500 uppercase">{obj.locked ? 'Locked' : obj.type}</div>
+                                </button>
+                                <button onClick={() => toggleObjectFlag(obj.id, 'hidden')} className={`h-8 w-8 rounded border text-[10px] font-black ${obj.hidden ? 'border-neutral-700 text-neutral-600 bg-black/40' : 'border-white/10 text-neutral-300 bg-white/5'}`} title={obj.hidden ? 'Show layer' : 'Hide layer'}>{obj.hidden ? 'H' : 'V'}</button>
+                                <button onClick={() => toggleObjectFlag(obj.id, 'locked')} className={`h-8 w-8 rounded border text-[10px] font-black ${obj.locked ? 'border-red-500 text-red-300 bg-red-950/30' : 'border-white/10 text-neutral-300 bg-white/5'}`} title={obj.locked ? 'Unlock layer' : 'Lock layer'}>{obj.locked ? 'L' : 'U'}</button>
+                            </div>
+                        )) : <div className="rounded-lg border border-dashed border-white/10 p-4 text-center text-xs text-neutral-500">Drag agents or abilities onto the map to build a layer stack.</div>}
+                    </div>
+                </div>
+
                 {selectedObject && (
                     <div className="p-4 border-b border-white/10 bg-red-950/10">
                         <div className="text-[10px] font-black text-red-500 uppercase mb-3">Inspector</div>
                         <div className="space-y-3">
                             <div className="text-sm font-bold text-white truncate">{selectedObject.name || selectedObject.text || selectedObject.type}</div>
+                            <div className="grid grid-cols-2 gap-2">
+                                <ButtonSecondary onClick={() => toggleObjectFlag(selectedObject.id, 'hidden')} className="text-[10px] py-2">{selectedObject.hidden ? 'Show' : 'Hide'}</ButtonSecondary>
+                                <ButtonSecondary onClick={() => toggleObjectFlag(selectedObject.id, 'locked')} className="text-[10px] py-2">{selectedObject.locked ? 'Unlock' : 'Lock'}</ButtonSecondary>
+                                <ButtonSecondary onClick={() => moveSelectedLayer('down')} className="text-[10px] py-2">Back</ButtonSecondary>
+                                <ButtonSecondary onClick={() => moveSelectedLayer('up')} className="text-[10px] py-2">Forward</ButtonSecondary>
+                            </div>
                             {'size' in selectedObject && <div><label className="text-[10px] text-neutral-500 uppercase font-bold">Size</label><input type="range" min={selectedObject.type === 'text' ? TEXT_MIN : 0.5} max={selectedObject.type === 'text' ? TEXT_MAX : 2.5} step="0.05" value={selectedObject.type === 'text' ? clamp(selectedObject.size || TEXT_DEFAULT, TEXT_MIN, TEXT_MAX) : selectedObject.size || 1} onChange={e => updateSelected({ size: Number(e.target.value) })} className="w-full accent-red-600" /></div>}
                             {selectedObject.type === 'text' && <div><label className="text-[10px] text-neutral-500 uppercase font-bold">Text Width</label><input type="range" min="8" max="34" step="1" value={selectedObject.width || 18} onChange={e => updateSelected({ width: Number(e.target.value) })} className="w-full accent-red-600" /></div>}
                             {'rotation' in selectedObject && <div><label className="text-[10px] text-neutral-500 uppercase font-bold">Rotation</label><input type="range" min="0" max="360" value={selectedObject.rotation || 0} onChange={e => updateSelected({ rotation: Number(e.target.value) })} className="w-full accent-red-600" /></div>}
@@ -2163,9 +2342,23 @@ function StratBook() {
                         {['Draft', 'Reviewed', 'Match Ready', 'Archived'].map(status => <option key={status}>{status}</option>)}
                     </Select>
                     <Input value={stratTags} onChange={e => setStratTags(e.target.value)} placeholder="Tags: pistol, anti-eco, retake" />
+                    <textarea
+                        value={stratNotes}
+                        onChange={e => setStratNotes(e.target.value)}
+                        className="w-full min-h-24 bg-black/40 border border-neutral-800 rounded-xl p-3 text-white text-xs outline-none focus:border-red-600 focus:ring-1 focus:ring-red-600 transition-all placeholder-neutral-600 resize-y"
+                        placeholder="Round plan, win condition, reminders..."
+                    />
                     <div className="grid grid-cols-2 gap-2">
                         <ButtonPrimary onClick={saveStrat} disabled={loadingSave} className="text-xs py-2">{loadingSave ? 'Saving...' : 'Save'}</ButtonPrimary>
                         <ButtonSecondary onClick={exportJson} className="text-xs">Export</ButtonSecondary>
+                    </div>
+                    <label className="block cursor-pointer">
+                        <input type="file" accept="application/json,.json" onChange={importJsonFile} className="hidden" />
+                        <span className="flex h-10 items-center justify-center rounded-lg border border-white/10 bg-white/5 text-[10px] font-black uppercase tracking-widest text-neutral-300 hover:border-white/25 hover:text-white">Import JSON</span>
+                    </label>
+                    <div className="grid grid-cols-2 gap-2">
+                        <ButtonSecondary onClick={restoreLocalDraft} className="text-[10px] py-2">Restore Draft</ButtonSecondary>
+                        <ButtonSecondary onClick={clearLocalDraft} className="text-[10px] py-2">Clear Draft</ButtonSecondary>
                     </div>
                 </div>
                 <div className="p-4 text-xs text-neutral-500 leading-relaxed">
