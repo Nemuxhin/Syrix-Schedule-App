@@ -2128,9 +2128,9 @@ function StratBook() {
             const textSize = clamp(obj.size || TEXT_DEFAULT, TEXT_MIN, TEXT_MAX);
             const textWidth = clamp(obj.width || 18, 8, 34);
             return (
-                <foreignObject key={obj.id} x={`${obj.x}%`} y={`${obj.y}%`} width={`${textWidth}%`} height="30%" className="overflow-visible">
+                <foreignObject key={obj.id} x={`${obj.x}%`} y={`${obj.y}%`} width={`${Math.max(textWidth, 70)}%`} height="30%" className="overflow-visible">
                     <div
-                        className={`inline-block w-full rounded bg-black/72 border border-white/20 px-1.5 py-1 text-[4.5px] font-bold leading-snug tracking-normal whitespace-pre-wrap break-words shadow-[0_3px_14px_rgba(0,0,0,0.8)] select-none cursor-grab ${isSelected ? 'outline outline-1 outline-green-400 outline-offset-1' : ''}`}
+                        className={`inline-block w-max max-w-none rounded bg-black/72 border border-white/20 px-1.5 py-1 text-[4.5px] font-bold leading-snug tracking-normal whitespace-pre shadow-[0_3px_14px_rgba(0,0,0,0.8)] select-none cursor-grab ${isSelected ? 'outline outline-1 outline-green-400 outline-offset-1' : ''}`}
                         style={{ color: obj.color, transform: `translate(-50%, -50%) rotate(${obj.rotation || 0}deg) scale(${textSize})`, transformOrigin: 'center' }}
                         onPointerDown={(e) => startDragObject(e, obj)}
                     >
@@ -2603,9 +2603,9 @@ function StratPreviewBoard({ strat, mapImage, className = '' }) {
             const textSize = clampValue(obj.size || 0.32, 0.2, 0.85);
             const textWidth = clampValue(obj.width || 18, 8, 34);
             return (
-                <foreignObject key={key} x={`${obj.x}%`} y={`${obj.y}%`} width={`${textWidth}%`} height="30%" className="overflow-visible">
+                <foreignObject key={key} x={`${obj.x}%`} y={`${obj.y}%`} width={`${Math.max(textWidth, 70)}%`} height="30%" className="overflow-visible">
                     <div
-                        className="inline-block w-full rounded bg-black/72 border border-white/20 px-1.5 py-1 text-[4.5px] font-bold leading-snug tracking-normal whitespace-pre-wrap break-words shadow-[0_3px_14px_rgba(0,0,0,0.8)]"
+                        className="inline-block w-max max-w-none rounded bg-black/72 border border-white/20 px-1.5 py-1 text-[4.5px] font-bold leading-snug tracking-normal whitespace-pre shadow-[0_3px_14px_rgba(0,0,0,0.8)]"
                         style={{ color: obj.color || '#f8fafc', transform: `translate(-50%, -50%) rotate(${obj.rotation || 0}deg) scale(${textSize})`, transformOrigin: 'center' }}
                     >
                         {obj.text}
