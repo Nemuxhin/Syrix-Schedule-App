@@ -6748,6 +6748,7 @@ function SyrixDashboard({ onBack }) {
     const [currentUserRole, setCurrentUserRole] = useState('');
     const [adminAccess, setAdminAccess] = useState(null);
     const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+    const [collapsedNavGroups, setCollapsedNavGroups] = useState({});
     const addToast = useToast();
     const [allRosterNames, setAllRosterNames] = useState([]);
     const [openTaskCount, setOpenTaskCount] = useState(0);
@@ -7100,6 +7101,10 @@ function SyrixDashboard({ onBack }) {
         if (['teamrequests', 'coachrequests', 'meetings'].includes(id)) return requestCountById(id) ? String(requestCountById(id)) : '';
         return '';
     };
+    const toggleNavGroup = (label) => {
+        setCollapsedNavGroups(prev => ({ ...prev, [label]: !prev[label] }));
+    };
+    const groupBadgeCount = (group) => group.items.reduce((total, item) => total + Number(navBadge(item.id) || 0), 0);
     const NavItem = ({ item, compact = false, collapsed = false }) => (
         <button
             onClick={() => setActiveTab(item.id)}
@@ -7137,14 +7142,32 @@ function SyrixDashboard({ onBack }) {
                 </div>
 
                 <nav className={`flex-1 overflow-y-auto ${sidebarCollapsed ? 'p-2 space-y-3' : 'p-4 space-y-6'} custom-scrollbar`}>
-                    {navGroups.map(group => (
-                        <div key={group.label}>
-                            {!sidebarCollapsed && <div className="px-3 mb-2 text-[10px] uppercase tracking-[0.24em] text-neutral-600 font-black">{group.label}</div>}
-                            <div className="space-y-1">
-                                {group.items.map(item => <NavItem key={item.id} item={item} collapsed={sidebarCollapsed} />)}
+                    {navGroups.map(group => {
+                        const isGroupCollapsed = Boolean(collapsedNavGroups[group.label]);
+                        const hasActiveItem = group.items.some(item => item.id === activeTab);
+                        const badgeCount = groupBadgeCount(group);
+                        return (
+                            <div key={group.label}>
+                                {!sidebarCollapsed && (
+                                    <button
+                                        onClick={() => toggleNavGroup(group.label)}
+                                        className={`mb-2 flex w-full items-center justify-between px-3 py-1.5 text-left text-[10px] uppercase tracking-[0.24em] font-black transition-colors ${hasActiveItem ? 'text-red-300' : 'text-neutral-600 hover:text-neutral-300'}`}
+                                    >
+                                        <span>{group.label}</span>
+                                        <span className="flex items-center gap-2">
+                                            {badgeCount > 0 && <span className="border border-white/10 bg-white/5 px-1.5 py-0.5 text-[9px] tracking-normal text-neutral-400">{badgeCount}</span>}
+                                            <span className={`inline-block transition-transform ${isGroupCollapsed ? '-rotate-90' : 'rotate-0'}`}>⌄</span>
+                                        </span>
+                                    </button>
+                                )}
+                                {(!isGroupCollapsed || sidebarCollapsed) && (
+                                    <div className="space-y-1">
+                                        {group.items.map(item => <NavItem key={item.id} item={item} collapsed={sidebarCollapsed} />)}
+                                    </div>
+                                )}
                             </div>
-                        </div>
-                    ))}
+                        );
+                    })}
                 </nav>
 
                 {!sidebarCollapsed ? <div className="p-4 border-t border-white/10">
