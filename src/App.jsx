@@ -154,6 +154,8 @@ const LandingPage = ({ onEnterHub }) => {
 
     const PlayerCard = ({ player, delay }) => {
         const initials = String(player.id || '?').slice(0, 2).toUpperCase();
+        const displayRole = player.role || player.ingameRole || 'Member';
+        const topBadge = player.ingameRole && !['Manager', 'Coach', 'Head Coach'].includes(player.role) ? player.ingameRole : displayRole;
         return (
             <div className="player-card group w-full sm:w-[18.5rem]" data-aos="fade-up" data-aos-delay={delay}>
                 <div className="card-inner h-full">
@@ -165,9 +167,9 @@ const LandingPage = ({ onEnterHub }) => {
                                 <span className="text-7xl font-black text-neutral-700 group-hover:text-red-500 transition-colors">{initials}</span>
                             )}
                             <div className="absolute inset-x-0 bottom-0 h-28 bg-gradient-to-t from-[#0d1016] to-transparent"></div>
-                            {player.ingameRole && (
+                            {topBadge && (
                                 <div className="absolute top-3 right-3 bg-red-600 text-white text-[10px] font-black uppercase px-2.5 py-1 rounded-sm shadow-lg">
-                                    {player.ingameRole}
+                                    {topBadge}
                                 </div>
                             )}
                         </div>
@@ -177,7 +179,7 @@ const LandingPage = ({ onEnterHub }) => {
                                     <h4 className="text-2xl font-black text-white leading-none">{player.id}</h4>
                                     {player.gameId && <p className="mt-1 text-xs text-neutral-500 font-mono truncate">{player.gameId}</p>}
                                 </div>
-                                <div className="text-[10px] font-black text-red-400 uppercase tracking-widest border border-red-500/30 bg-red-950/20 px-2 py-1 rounded-md whitespace-nowrap">{player.role || 'Member'}</div>
+                                <div className="text-[10px] font-black text-red-400 uppercase tracking-widest border border-red-500/30 bg-red-950/20 px-2 py-1 rounded-md whitespace-nowrap">{displayRole}</div>
                             </div>
                             <p className="text-sm text-neutral-400 leading-relaxed line-clamp-3 flex-1">{player.notes || 'No bio available yet.'}</p>
                             <div className="mt-4 flex items-center justify-between gap-2 border-t border-white/10 pt-3">
@@ -340,7 +342,6 @@ const LandingPage = ({ onEnterHub }) => {
                                 <div className="text-[11px] uppercase tracking-[0.28em] text-red-400 font-black mb-3">Match Center</div>
                                 <h3 className="org-wordmark text-5xl md:text-7xl font-black italic uppercase leading-none">Upcoming Matches</h3>
                             </div>
-                            <button onClick={onEnterHub} className="self-start lg:self-auto bg-white text-black px-6 py-3 text-xs font-black uppercase tracking-widest hover:bg-red-600 hover:text-white transition-colors">Manage Schedule</button>
                         </div>
                         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
                             {matchPreview.length > 0 ? matchPreview.map((match, i) => (
