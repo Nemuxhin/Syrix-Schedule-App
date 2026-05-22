@@ -1259,6 +1259,7 @@ function TeamComps({ members }) {
 
 function StratBook() {
     const boardRef = useRef(null);
+    const palettePointerRef = useRef(null);
     const { mapImages, agentData } = useValorantData();
     const addToast = useToast();
 
@@ -1289,6 +1290,15 @@ function StratBook() {
     const [mapOpacity, setMapOpacity] = useState(0.95);
     const [boardZoom, setBoardZoom] = useState(1);
     const [stratNotes, setStratNotes] = useState('');
+    const [activePhaseId, setActivePhaseId] = useState('all');
+    const [timeline, setTimeline] = useState([
+        { id: 'buy', time: '0:00', label: 'Buy / Setup' },
+        { id: 'default', time: '1:40', label: 'Default' },
+        { id: 'execute', time: '1:10', label: 'Execute' },
+        { id: 'post', time: '0:35', label: 'Post / Retake' }
+    ]);
+    const [assignments, setAssignments] = useState([]);
+    const [assignmentDraft, setAssignmentDraft] = useState({ player: '', agent: selectedAgent, job: '' });
 
     const tools = [
         { id: 'select', label: 'Select', hint: 'Move and edit placed items' },
@@ -1319,7 +1329,7 @@ function StratBook() {
     const TEXT_DEFAULT = 0.32;
     const TEXT_MAX = 0.85;
     const LOCAL_DRAFT_KEY = 'syrix-stratbook-draft';
-    const objectLabel = (obj) => {
+    const objectLabel = useCallback((obj) => {
         if (!obj) return 'Item';
         if (obj.type === 'agent') return obj.name || 'Agent';
         if (obj.type === 'ability') return obj.name || 'Ability';
@@ -1331,7 +1341,13 @@ function StratBook() {
         if (obj.type === 'spike') return 'Spike';
         if (obj.type === 'ping') return 'Ping';
         return obj.type || 'Item';
-    };
+    }, []);
+
+    const phaseLabel = useCallback((phaseId) => {
+        if (!phaseId || phaseId === 'all') return 'All Round';
+        const phase = timeline.find(item => item.id === phaseId);
+        return phase ? `${phase.time} ${phase.label}` : 'All Round';
+    }, [timeline]);
 
     const snapPoint = (point) => {
         if (!snapToGrid || tool === 'freehand') return point;
@@ -1368,10 +1384,13 @@ function StratBook() {
             tags: stratTags,
             notes: stratNotes,
             objects,
+            timeline,
+            assignments,
+            activePhaseId,
             savedAt: new Date().toISOString()
         };
         window.localStorage?.setItem(LOCAL_DRAFT_KEY, JSON.stringify(draftPayload));
-    }, [objects, selectedMap, side, stratName, stratNotes, stratStatus, stratTags]);
+    }, [activePhaseId, assignments, objects, selectedMap, side, stratName, stratNotes, stratStatus, stratTags, timeline]);
 
     const commitObjects = useCallback((nextObjects) => {
         const clean = nextObjects.map(obj => ({ ...obj }));
@@ -1654,11 +1673,11 @@ function StratBook() {
         if (!paletteItem) return null;
         if (paletteItem.type === 'agent') {
             const data = getAgentData(paletteItem.agent);
-            return { id: uid(), type: 'agent', name: paletteItem.agent, icon: data?.icon || '', x: point.x, y: point.y, size: 1, rotation: 0, side };
+            return { id: uid(), type: 'agent', name: paletteItem.agent, icon: data?.icon || '', x: point.x, y: point.y, size: 1, rotation: 0, side, phaseId: activePhaseId === 'all' ? '' : activePhaseId };
         }
         if (paletteItem.type === 'ability') {
             const preset = utilityPresetFor(paletteItem.agent, paletteItem.ability.name);
-            return { id: uid(), type: 'ability', name: paletteItem.ability.name, icon: paletteItem.ability.icon, x: point.x, y: point.y, side, ...preset };
+            return { id: uid(), type: 'ability', name: paletteItem.ability.name, icon: paletteItem.ability.icon, x: point.x, y: point.y, side, phaseId: activePhaseId === 'all' ? '' : activePhaseId, ...preset };
         }
         return null;
     };
@@ -1671,6 +1690,46 @@ function StratBook() {
         setTool('select');
     };
 
+    const beginPalettePointerDrag = (event, paletteItem) => {
+        if (event.button !== undefined && event.button !== 0) return;
+        palettePointerRef.current = {
+            item: paletteItem,
+            startX: event.clientX,
+            startY: event.clientY,
+            moved: false
+        };
+    };
+
+    useEffect(() => {
+        const handlePointerMove = (event) => {
+            const drag = palettePointerRef.current;
+            if (!drag) return;
+            if (Math.hypot(event.clientX - drag.startX, event.clientY - drag.startY) > 6) drag.moved = true;
+        };
+
+        const handlePointerUp = (event) => {
+            const drag = palettePointerRef.current;
+            if (!drag) return;
+            palettePointerRef.current = null;
+            const rect = boardRef.current?.getBoundingClientRect();
+            const droppedOnBoard = rect &&
+                event.clientX >= rect.left &&
+                event.clientX <= rect.right &&
+                event.clientY >= rect.top &&
+                event.clientY <= rect.bottom;
+            if (drag.moved && droppedOnBoard) placePaletteObject(getBoardPoint(event), drag.item);
+        };
+
+        window.addEventListener('pointermove', handlePointerMove);
+        window.addEventListener('pointerup', handlePointerUp);
+        window.addEventListener('pointercancel', handlePointerUp);
+        return () => {
+            window.removeEventListener('pointermove', handlePointerMove);
+            window.removeEventListener('pointerup', handlePointerUp);
+            window.removeEventListener('pointercancel', handlePointerUp);
+        };
+    });
+
     const handleBoardDrop = (event) => {
         event.preventDefault();
         let dropped = paletteDrag;
@@ -1680,6 +1739,7 @@ function StratBook() {
         }
         if (!dropped) return;
         placePaletteObject(getBoardPoint(event), dropped);
+        palettePointerRef.current = null;
         setPaletteDrag(null);
     };
 
@@ -1693,15 +1753,15 @@ function StratBook() {
         let item = null;
         if (tool === 'smoke' || tool === 'molly') {
             const style = circleStyleFor(tool);
-            item = { id: uid(), type: 'area', name: tool === 'smoke' ? 'Smoke' : 'Molly', kind: tool, x: point.x, y: point.y, radius: style.r, fill: style.fill, stroke: style.stroke, side };
+            item = { id: uid(), type: 'area', name: tool === 'smoke' ? 'Smoke' : 'Molly', kind: tool, x: point.x, y: point.y, radius: style.r, fill: style.fill, stroke: style.stroke, side, phaseId: activePhaseId === 'all' ? '' : activePhaseId };
         }
         if (tool === 'text') {
             setPendingTextPoint(point);
             setTextDraft('');
             return;
         }
-        if (tool === 'spike') item = { id: uid(), type: 'spike', x: point.x, y: point.y, color: '#facc15', size: 1, side };
-        if (tool === 'ping') item = { id: uid(), type: 'ping', x: point.x, y: point.y, color, size: 1, side };
+        if (tool === 'spike') item = { id: uid(), type: 'spike', x: point.x, y: point.y, color: '#facc15', size: 1, side, phaseId: activePhaseId === 'all' ? '' : activePhaseId };
+        if (tool === 'ping') item = { id: uid(), type: 'ping', x: point.x, y: point.y, color, size: 1, side, phaseId: activePhaseId === 'all' ? '' : activePhaseId };
 
         if (!item) return;
         commitObjects([...objects, item]);
@@ -1715,7 +1775,7 @@ function StratBook() {
             setTextDraft('');
             return;
         }
-        const item = { id: uid(), type: 'text', text: textDraft.trim(), x: pendingTextPoint.x, y: pendingTextPoint.y, color, size: TEXT_DEFAULT, width: 18, rotation: 0, side };
+        const item = { id: uid(), type: 'text', text: textDraft.trim(), x: pendingTextPoint.x, y: pendingTextPoint.y, color, size: TEXT_DEFAULT, width: 18, rotation: 0, side, phaseId: activePhaseId === 'all' ? '' : activePhaseId };
         commitObjects([...objects, item]);
         setSelectedId(item.id);
         setPendingTextPoint(null);
@@ -1731,11 +1791,11 @@ function StratBook() {
             return;
         }
         if (tool === 'line' || tool === 'arrow') {
-            setDraft({ id: uid(), type: tool, x1: point.x, y1: point.y, x2: point.x, y2: point.y, color, width: strokeWidth, side });
+            setDraft({ id: uid(), type: tool, x1: point.x, y1: point.y, x2: point.x, y2: point.y, color, width: strokeWidth, side, phaseId: activePhaseId === 'all' ? '' : activePhaseId });
             return;
         }
         if (tool === 'freehand') {
-            setDraft({ id: uid(), type: 'freehand', points: [point], color, width: strokeWidth, side });
+            setDraft({ id: uid(), type: 'freehand', points: [point], color, width: strokeWidth, side, phaseId: activePhaseId === 'all' ? '' : activePhaseId });
             return;
         }
         setSelectedId(null);
@@ -1916,6 +1976,8 @@ function StratBook() {
                 tags: normalizeStratTags(stratTags),
                 notes: stratNotes.trim(),
                 objects,
+                timeline,
+                assignments,
                 createdBy: identity.uid,
                 createdByName: identity.name,
                 date: new Date().toISOString(),
@@ -1925,6 +1987,7 @@ function StratBook() {
             setStratName('');
             setStratTags('');
             setStratNotes('');
+            setAssignments([]);
             addToast('Strategy saved');
         } catch (error) {
             console.error('Save strat failed:', error);
@@ -1935,7 +1998,7 @@ function StratBook() {
     };
 
     const exportJson = () => {
-        const payload = JSON.stringify({ name: stratName || `${selectedMap}-${side}`, map: selectedMap, side, status: stratStatus, tags: stratTags.split(',').map(tag => tag.trim()).filter(Boolean), notes: stratNotes.trim(), objects }, null, 2);
+        const payload = JSON.stringify({ name: stratName || `${selectedMap}-${side}`, map: selectedMap, side, status: stratStatus, tags: stratTags.split(',').map(tag => tag.trim()).filter(Boolean), notes: stratNotes.trim(), timeline, assignments, objects }, null, 2);
         const blob = new Blob([payload], { type: 'application/json' });
         const url = URL.createObjectURL(blob);
         const link = document.createElement('a');
@@ -1957,6 +2020,8 @@ function StratBook() {
             setStratStatus(payload.status || 'Draft');
             setStratTags(Array.isArray(payload.tags) ? payload.tags.join(', ') : '');
             setStratNotes(payload.notes || '');
+            if (Array.isArray(payload.timeline) && payload.timeline.length) setTimeline(payload.timeline);
+            setAssignments(Array.isArray(payload.assignments) ? payload.assignments : []);
             commitObjects(payload.objects.map(obj => ({ ...obj, id: obj.id || uid() })));
             setSelectedId(null);
             addToast('Strategy imported');
@@ -1979,6 +2044,9 @@ function StratBook() {
             setStratStatus(payload.status || 'Draft');
             setStratTags(payload.tags || '');
             setStratNotes(payload.notes || '');
+            if (Array.isArray(payload.timeline) && payload.timeline.length) setTimeline(payload.timeline);
+            setAssignments(Array.isArray(payload.assignments) ? payload.assignments : []);
+            setActivePhaseId(payload.activePhaseId || 'all');
             commitObjects(Array.isArray(payload.objects) ? payload.objects.map(obj => ({ ...obj, id: obj.id || uid() })) : []);
             setSelectedId(null);
             addToast('Local draft restored');
@@ -1992,6 +2060,40 @@ function StratBook() {
         window.localStorage?.removeItem(LOCAL_DRAFT_KEY);
         addToast('Local draft cleared');
     };
+
+    const updatePhase = (id, patch) => {
+        setTimeline(prev => prev.map(phase => phase.id === id ? { ...phase, ...patch } : phase));
+    };
+
+    const addAssignment = () => {
+        if (!assignmentDraft.player.trim() || !assignmentDraft.job.trim()) return addToast('Add a player and job first', 'error');
+        const item = {
+            id: uid(),
+            player: assignmentDraft.player.trim(),
+            agent: assignmentDraft.agent || selectedAgent,
+            job: assignmentDraft.job.trim(),
+            phaseId: activePhaseId === 'all' ? 'default' : activePhaseId
+        };
+        setAssignments(prev => [...prev, item]);
+        setAssignmentDraft({ player: '', agent: selectedAgent, job: '' });
+    };
+
+    const removeAssignment = (id) => {
+        setAssignments(prev => prev.filter(item => item.id !== id));
+    };
+
+    const visiblePlannerObjects = objects.filter(obj => activePhaseId === 'all' || !obj.phaseId || obj.phaseId === activePhaseId);
+    const utilityChecklist = useMemo(() => {
+        const counts = new Map();
+        objects.forEach(obj => {
+            if (!['ability', 'area', 'spike', 'ping'].includes(obj.type)) return;
+            const label = objectLabel(obj);
+            const key = `${label}|${obj.phaseId || 'all'}`;
+            const current = counts.get(key) || { label, phaseId: obj.phaseId || 'all', count: 0 };
+            counts.set(key, { ...current, count: current.count + 1 });
+        });
+        return Array.from(counts.values()).sort((a, b) => phaseLabel(a.phaseId).localeCompare(phaseLabel(b.phaseId)) || a.label.localeCompare(b.label));
+    }, [objectLabel, objects, phaseLabel]);
 
     const renderArrowHead = (obj) => {
         const angle = Math.atan2(obj.y2 - obj.y1, obj.x2 - obj.x1) * 180 / Math.PI;
@@ -2121,11 +2223,11 @@ function StratBook() {
         );
     };
 
-    const allObjects = draft ? [...objects, draft] : objects;
+    const allObjects = draft ? [...visiblePlannerObjects, draft] : visiblePlannerObjects;
     const plannerGridClass = compactMode
-        ? 'h-full min-h-[760px] grid grid-cols-1 bg-[#070b0f] border border-white/10 rounded-xl overflow-hidden shadow-2xl'
-        : 'h-full min-h-[760px] grid grid-cols-1 xl:grid-cols-[280px_minmax(420px,1fr)_320px] bg-[#070b0f] border border-white/10 rounded-xl overflow-hidden shadow-2xl';
-    const boardMaxClass = compactMode ? 'max-w-[min(88vh,1120px)]' : 'max-w-[min(78vh,920px)]';
+        ? 'h-full min-h-0 grid grid-cols-1 bg-[#070b0f] border border-white/10 rounded-xl overflow-hidden shadow-2xl'
+        : 'h-full min-h-0 grid grid-cols-1 xl:grid-cols-[260px_minmax(420px,1fr)_300px] bg-[#070b0f] border border-white/10 rounded-xl overflow-hidden shadow-2xl';
+    const boardMaxClass = compactMode ? 'max-w-[min(82vh,1120px)]' : 'max-w-[min(68vh,850px)]';
 
     return (
         <div className={plannerGridClass}>
@@ -2147,6 +2249,21 @@ function StratBook() {
                         <label className="text-[10px] font-black text-red-500 uppercase mb-2 block">Side</label>
                         <div className="grid grid-cols-2 gap-2">
                             {['Attack', 'Defense'].map(value => <button key={value} onClick={() => setSide(value)} className={`h-10 rounded-lg border text-xs font-black uppercase ${side === value ? 'bg-red-700 text-white border-red-500' : 'bg-white/5 text-neutral-400 border-white/10 hover:text-white'}`}>{value}</button>)}
+                        </div>
+                    </div>
+
+                    <div className="pt-4 border-t border-white/10 space-y-3">
+                        <div className="flex items-center justify-between">
+                            <label className="text-[10px] font-black text-red-500 uppercase">Round Timeline</label>
+                            <button onClick={() => setActivePhaseId('all')} className={`text-[10px] font-black uppercase ${activePhaseId === 'all' ? 'text-white' : 'text-neutral-500 hover:text-white'}`}>All</button>
+                        </div>
+                        <div className="grid grid-cols-2 gap-2">
+                            {timeline.map(phase => (
+                                <button key={phase.id} onClick={() => setActivePhaseId(phase.id)} className={`rounded-lg border p-2 text-left transition-all ${activePhaseId === phase.id ? 'border-red-500 bg-red-950/40 text-white' : 'border-white/10 bg-white/5 text-neutral-400 hover:text-white'}`}>
+                                    <div className="text-[10px] font-black uppercase text-red-300">{phase.time}</div>
+                                    <div className="text-[11px] font-black uppercase truncate">{phase.label}</div>
+                                </button>
+                            ))}
                         </div>
                     </div>
 
@@ -2205,14 +2322,25 @@ function StratBook() {
             <section className="relative min-h-[540px] bg-[#0b1116] overflow-auto custom-scrollbar flex items-center justify-center p-4 md:p-8">
                 <div className="absolute top-4 left-4 right-4 z-20 flex flex-wrap items-center gap-2 pointer-events-none">
                     <div className="px-3 py-2 rounded-lg bg-black/70 border border-white/10 text-xs font-black uppercase text-white pointer-events-auto">{selectedMap} / {side} / {tool}</div>
-                    <div className="ml-auto px-3 py-2 rounded-lg bg-black/70 border border-white/10 text-xs font-bold text-neutral-400 pointer-events-auto">{objects.length} items</div>
+                    <div className="px-3 py-2 rounded-lg bg-black/70 border border-red-500/30 text-xs font-black uppercase text-red-200 pointer-events-auto">{phaseLabel(activePhaseId)}</div>
+                    <div className="ml-auto px-3 py-2 rounded-lg bg-black/70 border border-white/10 text-xs font-bold text-neutral-400 pointer-events-auto">{visiblePlannerObjects.length}/{objects.length} items</div>
                     <button onClick={() => setCompactMode(!compactMode)} className="px-3 py-2 rounded-lg bg-red-600 hover:bg-red-500 border border-red-500/50 text-[10px] font-black uppercase tracking-widest text-white pointer-events-auto">
                         {compactMode ? 'Show Panels' : 'Focus Mode'}
                     </button>
                 </div>
 
+                <div className="absolute left-4 right-4 bottom-4 z-20 hidden md:grid grid-cols-5 gap-2 pointer-events-none">
+                    <button onClick={() => setActivePhaseId('all')} className={`h-10 rounded-lg border px-3 text-[10px] font-black uppercase pointer-events-auto ${activePhaseId === 'all' ? 'bg-white text-black border-white' : 'bg-black/75 text-neutral-300 border-white/10 hover:text-white'}`}>All</button>
+                    {timeline.map(phase => (
+                        <button key={phase.id} onClick={() => setActivePhaseId(phase.id)} className={`h-10 rounded-lg border px-3 text-left pointer-events-auto ${activePhaseId === phase.id ? 'bg-red-700 text-white border-red-500' : 'bg-black/75 text-neutral-300 border-white/10 hover:text-white'}`}>
+                            <span className="block text-[9px] font-black text-red-200">{phase.time}</span>
+                            <span className="block text-[10px] font-black uppercase truncate">{phase.label}</span>
+                        </button>
+                    ))}
+                </div>
+
                 {compactMode && (
-                    <div className="absolute bottom-4 left-4 right-4 z-20 flex flex-wrap items-center justify-center gap-2 pointer-events-none">
+                    <div className="absolute bottom-16 left-4 right-4 z-20 flex flex-wrap items-center justify-center gap-2 pointer-events-none">
                         {tools.map(item => <button key={item.id} title={item.hint} onClick={() => setTool(item.id)} className={`h-9 px-3 rounded-lg border text-[10px] font-black uppercase pointer-events-auto ${tool === item.id ? 'bg-red-700 text-white border-red-500' : 'bg-black/75 text-neutral-300 border-white/10 hover:text-white'}`}>{item.label}</button>)}
                         <ButtonSecondary onClick={undo} className="text-[10px] h-9 py-0 pointer-events-auto" disabled={historyStep === 0}>Undo</ButtonSecondary>
                         <ButtonSecondary onClick={redo} className="text-[10px] h-9 py-0 pointer-events-auto" disabled={historyStep === history.length - 1}>Redo</ButtonSecondary>
@@ -2257,13 +2385,14 @@ function StratBook() {
                     <Select value={selectedAgent} onChange={e => { setSelectedAgent(e.target.value); setSelectedAbility(null); }}>
                         {AGENT_NAMES.map(agent => <option key={agent} value={agent}>{agent}</option>)}
                     </Select>
-                    <div className="mt-3 grid grid-cols-4 gap-2 max-h-52 overflow-y-auto custom-scrollbar pr-1">
+                    <div className="mt-3 grid grid-cols-4 gap-2 max-h-40 overflow-y-auto custom-scrollbar pr-1">
                         {AGENT_NAMES.map(agent => {
                             const data = getAgentData(agent);
                             return (
                                 <button
                                     key={agent}
-                                    draggable
+                                    draggable={false}
+                                    onPointerDown={(event) => beginPalettePointerDrag(event, { type: 'agent', agent })}
                                     onDragStart={(event) => startPaletteDrag(event, { type: 'agent', agent })}
                                     onDragEnd={() => setPaletteDrag(null)}
                                     onClick={() => { setSelectedAgent(agent); setSelectedAbility(null); setTool('select'); }}
@@ -2283,7 +2412,8 @@ function StratBook() {
                         {availableAbilities.length ? availableAbilities.map(ability => (
                             <button
                                 key={ability.name}
-                                draggable
+                                draggable={false}
+                                onPointerDown={(event) => beginPalettePointerDrag(event, { type: 'ability', agent: selectedAgent, ability })}
                                 onDragStart={(event) => startPaletteDrag(event, { type: 'ability', agent: selectedAgent, ability })}
                                 onDragEnd={() => setPaletteDrag(null)}
                                 onClick={() => { setSelectedAbility(ability); setTool('select'); }}
@@ -2297,17 +2427,74 @@ function StratBook() {
                     </div>
                 </div>
 
+                <div className="p-4 border-b border-white/10 space-y-4">
+                    <div>
+                        <div className="flex items-center justify-between mb-2">
+                            <label className="text-[10px] font-black text-red-500 uppercase block">Phase Editor</label>
+                            <span className="text-[10px] font-bold text-neutral-500">{phaseLabel(activePhaseId)}</span>
+                        </div>
+                        <div className="space-y-2">
+                            {timeline.map(phase => (
+                                <div key={phase.id} className="grid grid-cols-[3.7rem_1fr] gap-2">
+                                    <Input value={phase.time} onChange={e => updatePhase(phase.id, { time: e.target.value })} className="text-xs px-2 py-2" />
+                                    <Input value={phase.label} onChange={e => updatePhase(phase.id, { label: e.target.value })} className="text-xs px-2 py-2" />
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+
+                    <div className="pt-3 border-t border-white/10">
+                        <label className="text-[10px] font-black text-red-500 uppercase mb-2 block">Player Jobs</label>
+                        <div className="grid grid-cols-2 gap-2">
+                            <Input value={assignmentDraft.player} onChange={e => setAssignmentDraft({ ...assignmentDraft, player: e.target.value })} placeholder="Player" className="text-xs px-2 py-2" />
+                            <Select value={assignmentDraft.agent} onChange={e => setAssignmentDraft({ ...assignmentDraft, agent: e.target.value })} className="text-xs px-2 py-2">
+                                {AGENT_NAMES.map(agent => <option key={agent} value={agent}>{agent}</option>)}
+                            </Select>
+                        </div>
+                        <div className="mt-2 grid grid-cols-[1fr_auto] gap-2">
+                            <Input value={assignmentDraft.job} onChange={e => setAssignmentDraft({ ...assignmentDraft, job: e.target.value })} placeholder="Job this phase" className="text-xs px-2 py-2" />
+                            <ButtonPrimary onClick={addAssignment} className="text-[10px] px-3 py-2">Add</ButtonPrimary>
+                        </div>
+                        <div className="mt-3 space-y-2 max-h-32 overflow-y-auto custom-scrollbar pr-1">
+                            {assignments.length ? assignments.map(item => (
+                                <div key={item.id} className="rounded-lg border border-white/10 bg-white/[0.03] p-2">
+                                    <div className="flex items-start justify-between gap-2">
+                                        <div className="min-w-0">
+                                            <div className="text-xs font-black text-white truncate">{item.player} <span className="text-neutral-500">/ {item.agent}</span></div>
+                                            <div className="text-[10px] text-red-300 uppercase">{phaseLabel(item.phaseId)}</div>
+                                            <div className="text-xs text-neutral-300 line-clamp-2">{item.job}</div>
+                                        </div>
+                                        <button onClick={() => removeAssignment(item.id)} className="text-[10px] font-black text-neutral-500 hover:text-red-400">X</button>
+                                    </div>
+                                </div>
+                            )) : <div className="rounded-lg border border-dashed border-white/10 p-3 text-center text-xs text-neutral-500">No player jobs yet.</div>}
+                        </div>
+                    </div>
+
+                    <div className="pt-3 border-t border-white/10">
+                        <label className="text-[10px] font-black text-red-500 uppercase mb-2 block">Utility Checklist</label>
+                        <div className="space-y-1 max-h-28 overflow-y-auto custom-scrollbar pr-1">
+                            {utilityChecklist.length ? utilityChecklist.map(item => (
+                                <div key={`${item.label}-${item.phaseId}`} className="flex items-center justify-between gap-2 rounded border border-white/10 bg-black/30 px-2 py-1.5">
+                                    <span className="min-w-0 text-xs font-bold text-neutral-300 truncate">{item.label}</span>
+                                    <span className="text-[10px] font-black text-red-300">{item.count}x</span>
+                                </div>
+                            )) : <div className="text-xs text-neutral-500">Place utility to generate the list.</div>}
+                        </div>
+                    </div>
+                </div>
+
                 <div className="p-4 border-b border-white/10">
                     <div className="flex items-center justify-between mb-3">
                         <label className="text-[10px] font-black text-red-500 uppercase block">Layers</label>
                         <span className="text-[10px] font-bold text-neutral-500">{objects.filter(obj => !obj.hidden).length}/{objects.length} visible</span>
                     </div>
-                    <div className="space-y-2 max-h-52 overflow-y-auto custom-scrollbar pr-1">
+                    <div className="space-y-2 max-h-36 overflow-y-auto custom-scrollbar pr-1">
                         {objects.length ? [...objects].reverse().map(obj => (
                             <div key={obj.id} className={`grid grid-cols-[1fr_auto_auto] gap-2 items-center rounded-lg border p-2 ${selectedId === obj.id ? 'border-red-500 bg-red-950/25' : 'border-white/10 bg-white/[0.03]'}`}>
                                 <button onClick={() => setSelectedId(obj.id)} className="min-w-0 text-left">
                                     <div className={`text-xs font-black uppercase truncate ${obj.hidden ? 'text-neutral-600' : 'text-white'}`}>{objectLabel(obj)}</div>
-                                    <div className="text-[10px] text-neutral-500 uppercase">{obj.locked ? 'Locked' : obj.type}</div>
+                                    <div className="text-[10px] text-neutral-500 uppercase">{obj.locked ? 'Locked' : obj.type} / {phaseLabel(obj.phaseId)}</div>
                                 </button>
                                 <button onClick={() => toggleObjectFlag(obj.id, 'hidden')} className={`h-8 w-8 rounded border text-[10px] font-black ${obj.hidden ? 'border-neutral-700 text-neutral-600 bg-black/40' : 'border-white/10 text-neutral-300 bg-white/5'}`} title={obj.hidden ? 'Show layer' : 'Hide layer'}>{obj.hidden ? 'H' : 'V'}</button>
                                 <button onClick={() => toggleObjectFlag(obj.id, 'locked')} className={`h-8 w-8 rounded border text-[10px] font-black ${obj.locked ? 'border-red-500 text-red-300 bg-red-950/30' : 'border-white/10 text-neutral-300 bg-white/5'}`} title={obj.locked ? 'Unlock layer' : 'Lock layer'}>{obj.locked ? 'L' : 'U'}</button>
@@ -2326,6 +2513,13 @@ function StratBook() {
                                 <ButtonSecondary onClick={() => toggleObjectFlag(selectedObject.id, 'locked')} className="text-[10px] py-2">{selectedObject.locked ? 'Unlock' : 'Lock'}</ButtonSecondary>
                                 <ButtonSecondary onClick={() => moveSelectedLayer('down')} className="text-[10px] py-2">Back</ButtonSecondary>
                                 <ButtonSecondary onClick={() => moveSelectedLayer('up')} className="text-[10px] py-2">Forward</ButtonSecondary>
+                            </div>
+                            <div>
+                                <label className="text-[10px] text-neutral-500 uppercase font-bold">Phase</label>
+                                <Select value={selectedObject.phaseId || ''} onChange={e => updateSelected({ phaseId: e.target.value })} className="text-xs py-2">
+                                    <option value="">All Round</option>
+                                    {timeline.map(phase => <option key={phase.id} value={phase.id}>{phase.time} {phase.label}</option>)}
+                                </Select>
                             </div>
                             {'size' in selectedObject && <div><label className="text-[10px] text-neutral-500 uppercase font-bold">Size</label><input type="range" min={selectedObject.type === 'text' ? TEXT_MIN : 0.5} max={selectedObject.type === 'text' ? TEXT_MAX : 2.5} step="0.05" value={selectedObject.type === 'text' ? clamp(selectedObject.size || TEXT_DEFAULT, TEXT_MIN, TEXT_MAX) : selectedObject.size || 1} onChange={e => updateSelected({ size: Number(e.target.value) })} className="w-full accent-red-600" /></div>}
                             {selectedObject.type === 'text' && <div><label className="text-[10px] text-neutral-500 uppercase font-bold">Text Width</label><input type="range" min="8" max="34" step="1" value={selectedObject.width || 18} onChange={e => updateSelected({ width: Number(e.target.value) })} className="w-full accent-red-600" /></div>}
