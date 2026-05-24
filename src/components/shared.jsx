@@ -76,6 +76,84 @@ export const GlobalStyles = () => (
         .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #ef4444; }
         .mask-fade { -webkit-mask-image: linear-gradient(to right, black 90%, transparent 100%); mask-image: linear-gradient(to right, black 90%, transparent 100%); }
 
+        .team-theme-blue {
+            --syrix-accent: #0f6bff;
+            --syrix-accent-strong: #0052e0;
+            --syrix-accent-soft: rgba(15, 107, 255, 0.16);
+            --syrix-accent-border: rgba(59, 130, 246, 0.46);
+            --syrix-accent-glow: rgba(15, 107, 255, 0.34);
+            background: #030406;
+        }
+        .team-theme-blue .syrix-bg {
+            background: #030406;
+        }
+        .team-theme-blue .syrix-bg::before {
+            content: "";
+            position: absolute;
+            inset: 0;
+            background:
+                radial-gradient(circle at 72% 8%, rgba(15, 107, 255, 0.22), transparent 30%),
+                radial-gradient(circle at 12% 18%, rgba(255, 255, 255, 0.08), transparent 22%),
+                linear-gradient(to bottom, rgba(3, 4, 6, 0.35), #030406 82%);
+        }
+        .team-theme-blue .glass-panel {
+            background: linear-gradient(180deg, rgba(15, 18, 23, 0.98), rgba(4, 5, 8, 0.98));
+            border-color: rgba(255, 255, 255, 0.12);
+            box-shadow: 0 18px 54px rgba(0, 0, 0, 0.44), 0 0 36px rgba(15, 107, 255, 0.06);
+        }
+        .team-theme-blue .glass-panel::after {
+            background: linear-gradient(135deg, rgba(255,255,255,0.07), transparent 32%, transparent 72%, rgba(15,107,255,0.10));
+        }
+        .team-theme-blue .card-shine:hover {
+            border-color: var(--syrix-accent-border);
+            box-shadow: 0 20px 54px rgba(0,0,0,0.48), 0 0 32px rgba(15,107,255,0.10);
+        }
+        .team-theme-blue .section-kicker,
+        .team-theme-blue [class*="text-red-"] {
+            color: #3b82f6 !important;
+        }
+        .team-theme-blue [class*="bg-red-"] {
+            background-color: var(--syrix-accent) !important;
+        }
+        .team-theme-blue [class*="bg-red-9"],
+        .team-theme-blue [class*="bg-red-950"] {
+            background-color: rgba(15, 107, 255, 0.14) !important;
+        }
+        .team-theme-blue [class*="border-red-"] {
+            border-color: var(--syrix-accent-border) !important;
+        }
+        .team-theme-blue [class*="ring-red-"] {
+            --tw-ring-color: rgba(59, 130, 246, 0.52) !important;
+        }
+        .team-theme-blue [class*="accent-red-"] {
+            accent-color: var(--syrix-accent) !important;
+        }
+        .team-theme-blue [class*="shadow-red-"] {
+            --tw-shadow-color: rgba(15, 107, 255, 0.28) !important;
+        }
+        .team-theme-blue [class*="from-red-"] {
+            --tw-gradient-from: var(--syrix-accent) var(--tw-gradient-from-position) !important;
+            --tw-gradient-to: rgba(15, 107, 255, 0) var(--tw-gradient-to-position) !important;
+            --tw-gradient-stops: var(--tw-gradient-from), var(--tw-gradient-to) !important;
+        }
+        .team-theme-blue [class*="via-red-"] {
+            --tw-gradient-to: rgba(15, 107, 255, 0) var(--tw-gradient-to-position) !important;
+            --tw-gradient-stops: var(--tw-gradient-from), rgba(15, 107, 255, 0.48) var(--tw-gradient-via-position), var(--tw-gradient-to) !important;
+        }
+        .team-theme-blue [class*="to-red-"] {
+            --tw-gradient-to: #003fb3 var(--tw-gradient-to-position) !important;
+        }
+        .team-theme-blue [class*="hover\\:text-red-"]:hover,
+        .team-theme-blue [class*="group-hover\\:text-red-"]:hover {
+            color: #60a5fa !important;
+        }
+        .team-theme-blue [class*="hover\\:bg-red-"]:hover {
+            background-color: var(--syrix-accent-strong) !important;
+        }
+        .team-theme-blue .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+            background: var(--syrix-accent);
+        }
+
         :root { --primary-red: #ef2424; --dark-bg: #030304; --card-bg: #111318; }
         .accent-text { color: var(--primary-red); }
         .accent-bg { background-color: var(--primary-red); transition: background-color 0.3s; }
@@ -127,7 +205,7 @@ export const GlobalStyles = () => (
 );
 
 export const Background = () => (
-    <div className="fixed inset-0 w-full h-full z-0 pointer-events-none bg-[#050608]">
+    <div className="syrix-bg fixed inset-0 w-full h-full z-0 pointer-events-none bg-[#050608] overflow-hidden">
         <div className="absolute inset-0 opacity-[0.06] bg-[linear-gradient(to_right,#ffffff_1px,transparent_1px),linear-gradient(to_bottom,#ffffff_1px,transparent_1px)] bg-[size:4.5rem_4.5rem]"></div>
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_72%_8%,rgba(239,36,36,0.16),transparent_28%),linear-gradient(to_bottom,rgba(3,3,4,0.35),#030304_82%)]"></div>
     </div>

@@ -7228,7 +7228,7 @@ function SyrixDashboard({ onBack }) {
     );
 
     return (
-        <div className="fixed inset-0 h-full w-full text-neutral-200 font-sans selection:bg-red-500/30 flex overflow-hidden bg-[#030304]">
+        <div className={`fixed inset-0 h-full w-full text-neutral-200 font-sans selection:bg-red-500/30 flex overflow-hidden bg-[#030304] ${activeTeamId === 'blue' ? 'team-theme-blue' : 'team-theme-red'}`}>
             <Background />
 
             <aside className={`relative z-40 hidden lg:flex ${sidebarCollapsed ? 'w-20' : 'w-72'} flex-none flex-col border-r border-white/10 bg-[#050506]/95 backdrop-blur-xl transition-[width] duration-200`}>
