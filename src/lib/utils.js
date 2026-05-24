@@ -1,4 +1,4 @@
-import { addDoc, collection } from 'firebase/firestore';
+import { addDoc, collection, doc, setDoc } from 'firebase/firestore';
 import { DEFAULT_TEAM_ID, DEFAULT_TEAMS } from './constants';
 import { db } from './firebase';
 
@@ -30,6 +30,19 @@ export const mergeDefaultTeams = (teams = []) => {
         if (b.id === DEFAULT_TEAM_ID) return 1;
         return (a.name || a.id).localeCompare(b.name || b.id);
     });
+};
+
+export const syncTeamMember = async ({ uid, teamId = DEFAULT_TEAM_ID, name = '', role = 'Player', rosterRole = '', active = true }) => {
+    if (!uid) return;
+    await setDoc(doc(db, 'team_members', uid), {
+        uid,
+        teamId: teamId || DEFAULT_TEAM_ID,
+        name: name || uid,
+        role,
+        rosterRole,
+        active,
+        updatedAt: new Date().toISOString()
+    }, { merge: true });
 };
 
 export const normalizeAvailabilitySlots = (data = {}) => {

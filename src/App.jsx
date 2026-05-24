@@ -3,7 +3,7 @@ import { collection, onSnapshot, doc, setDoc, deleteDoc, addDoc, updateDoc, quer
 import { onAuthStateChanged, signInWithPopup, signOut, OAuthProvider } from 'firebase/auth';
 import { auth, db, discordWebhookUrl } from './lib/firebase';
 import { ADMIN_ACCESS_ROLES, ADMIN_ROLES, ADMIN_UIDS, AGENT_NAMES, DAYS, DEFAULT_TEAM_ID, MAPS, RANKS, ROLE_ABBREVIATIONS, ROLES, SHORT_DAYS, STAFF_ACCESS_ROLES, TEAM_LOGOS, UTILITY_TYPES, timezones } from './lib/constants';
-import { convertFromGMT, convertToGMT, mergeDefaultTeams, normalizeAvailabilitySlots, safeDocId, sortRosterByRole, teamMatches, timeToMinutes, writeAuditLog } from './lib/utils';
+import { convertFromGMT, convertToGMT, mergeDefaultTeams, normalizeAvailabilitySlots, safeDocId, sortRosterByRole, syncTeamMember, teamMatches, timeToMinutes, writeAuditLog } from './lib/utils';
 import { Background, ButtonPrimary, ButtonSecondary, Card, GlobalStyles, Input, Modal, Select, TeamLogo } from './components/shared';
 import { ToastProvider } from './components/ToastProvider';
 import { AdminPanel } from './components/hub/AdminPanel';
@@ -6230,6 +6230,13 @@ function RosterManager({ members, events, canManageRoster = false, teamId = DEFA
                 pfp,
                 ingameRole
             }, { merge: true });
+            await syncTeamMember({
+                uid: rosterData[selectedMember]?.uid,
+                teamId: assignedTeamId,
+                name: selectedMember,
+                role: ['Manager', 'Head Coach', 'Coach'].includes(role) ? role : 'Player',
+                rosterRole: role
+            });
             addToast('Player Updated Successfully');
         } catch (error) {
             console.error("Save failed:", error);
@@ -6255,6 +6262,13 @@ function RosterManager({ members, events, canManageRoster = false, teamId = DEFA
                     movedAt: new Date().toISOString()
                 }, { merge: true });
             }
+            await syncTeamMember({
+                uid: rosterData[member]?.uid,
+                teamId: nextTeamId,
+                name: member,
+                role: ['Manager', 'Head Coach', 'Coach'].includes(rosterData[member]?.role) ? rosterData[member]?.role : 'Player',
+                rosterRole: rosterData[member]?.role || 'Player'
+            });
 
             if (selectedMember === member) setAssignedTeamId(nextTeamId);
             await writeAuditLog('Roster team changed', `${member}: ${teamNameById[previousTeamId] || previousTeamId} -> ${teamNameById[nextTeamId] || nextTeamId}`, 'Roster Manager');
@@ -6299,6 +6313,13 @@ function RosterManager({ members, events, canManageRoster = false, teamId = DEFA
                 await setDoc(doc(db, 'availabilities', renameInput), { ...availSnap.data(), teamId: assignedTeamId });
                 await deleteDoc(oldAvailRef); // Delete old
             }
+            await syncTeamMember({
+                uid: rosterSnap.exists() ? rosterSnap.data().uid : '',
+                teamId: assignedTeamId,
+                name: renameInput,
+                role: ['Manager', 'Head Coach', 'Coach'].includes(role) ? role : 'Player',
+                rosterRole: role
+            });
 
             addToast(`Successfully renamed to ${renameInput}`);
             setSelectedMember(renameInput); // Switch selection to new name

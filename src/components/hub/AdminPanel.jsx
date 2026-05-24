@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { addDoc, collection, deleteDoc, doc, onSnapshot, setDoc, updateDoc } from 'firebase/firestore';
 import { DEFAULT_TEAM_ID, STAFF_ACCESS_ROLES, MAPS, timezones } from '../../lib/constants';
 import { db } from '../../lib/firebase';
-import { safeDocId, teamMatches, writeAuditLog } from '../../lib/utils';
+import { safeDocId, syncTeamMember, teamMatches, writeAuditLog } from '../../lib/utils';
 import { ButtonPrimary, ButtonSecondary, Card, Input, Select } from '../shared';
 import { useToast } from '../../hooks/useToast';
 
@@ -18,7 +18,7 @@ export const AdminPanel = ({ activeTeam, teams = [], onSelectTeam, onCreateTeam 
     });
     const [applications, setApplications] = useState([]);
     const [adminUsers, setAdminUsers] = useState([]);
-    const [adminForm, setAdminForm] = useState({ uid: '', name: '', role: 'Manager' });
+    const [adminForm, setAdminForm] = useState({ uid: '', name: '', role: 'Manager', teamId: activeTeamId });
     const [teamForm, setTeamForm] = useState({ name: '', id: '', color: '#2563eb' });
     const [saving, setSaving] = useState(false);
     const addToast = useToast();
@@ -77,6 +77,15 @@ export const AdminPanel = ({ activeTeam, teams = [], onSelectTeam, onCreateTeam 
                 notes: application.why || application.exp || '',
                 joinedAt: new Date().toISOString()
             }, { merge: true });
+            if (application.uid) {
+                await syncTeamMember({
+                    uid: application.uid,
+                    teamId: activeTeamId,
+                    name: memberName,
+                    role: 'Player',
+                    rosterRole: 'Tryout'
+                });
+            }
             await deleteDoc(doc(db, 'applications', application.id));
             addToast(`${memberName} approved`);
         } catch (error) {
@@ -99,16 +108,33 @@ export const AdminPanel = ({ activeTeam, teams = [], onSelectTeam, onCreateTeam 
         const uid = adminForm.uid.trim();
         if (!uid) return addToast('UID is required', 'error');
         if (!STAFF_ACCESS_ROLES.includes(adminForm.role)) return addToast('Choose a valid access role', 'error');
+        const isGlobalRole = ['Owner', 'Manager'].includes(adminForm.role);
+        if (!isGlobalRole && !adminForm.teamId) return addToast('Choose a team for team-scoped staff', 'error');
         try {
-            await setDoc(doc(db, 'admin_users', uid), {
+            const accessPayload = {
                 uid,
                 name: adminForm.name.trim() || uid,
                 role: adminForm.role,
                 active: true,
                 updatedAt: new Date().toISOString()
-            }, { merge: true });
+            };
+            if (isGlobalRole) {
+                accessPayload.teamId = '';
+            } else {
+                accessPayload.teamId = adminForm.teamId || activeTeamId;
+            }
+            await setDoc(doc(db, 'admin_users', uid), accessPayload, { merge: true });
+            if (!isGlobalRole) {
+                await syncTeamMember({
+                    uid,
+                    teamId: accessPayload.teamId,
+                    name: accessPayload.name,
+                    role: adminForm.role,
+                    rosterRole: adminForm.role
+                });
+            }
             await writeAuditLog('Admin access granted', `${adminForm.role} access for ${adminForm.name.trim() || uid}`, 'Admin Panel');
-            setAdminForm({ uid: '', name: '', role: 'Manager' });
+            setAdminForm({ uid: '', name: '', role: 'Manager', teamId: activeTeamId });
             addToast('Admin access updated');
         } catch (error) {
             console.error('Admin access update failed:', error);
@@ -122,12 +148,26 @@ export const AdminPanel = ({ activeTeam, teams = [], onSelectTeam, onCreateTeam 
         setTeamForm({ name: '', id: '', color: '#2563eb' });
     };
 
+    useEffect(() => {
+        setAdminForm(prev => prev.teamId ? prev : { ...prev, teamId: activeTeamId });
+    }, [activeTeamId]);
+
     const removeAdminUser = async (entry) => {
         try {
             await updateDoc(doc(db, 'admin_users', entry.id), {
                 active: false,
                 removedAt: new Date().toISOString()
             });
+            if (entry.teamId) {
+                await syncTeamMember({
+                    uid: entry.uid || entry.id,
+                    teamId: entry.teamId,
+                    name: entry.name || entry.id,
+                    role: entry.role || 'Staff',
+                    rosterRole: entry.role || 'Staff',
+                    active: false
+                });
+            }
             await writeAuditLog('Admin access revoked', `${entry.role || 'Admin'} access for ${entry.name || entry.id}`, 'Admin Panel');
             addToast('Admin access revoked');
         } catch (error) {
@@ -259,6 +299,11 @@ export const AdminPanel = ({ activeTeam, teams = [], onSelectTeam, onCreateTeam 
                     <Select value={adminForm.role} onChange={e => setAdminForm({ ...adminForm, role: e.target.value })}>
                         {STAFF_ACCESS_ROLES.map(role => <option key={role}>{role}</option>)}
                     </Select>
+                    {!['Owner', 'Manager'].includes(adminForm.role) && (
+                        <Select value={adminForm.teamId} onChange={e => setAdminForm({ ...adminForm, teamId: e.target.value })}>
+                            {teams.map(team => <option key={team.id} value={team.id}>{team.name || team.id}</option>)}
+                        </Select>
+                    )}
                     <ButtonPrimary onClick={saveAdminUser} className="w-full text-xs py-2">Grant Access</ButtonPrimary>
                 </div>
                 <div className="space-y-2 max-h-[420px] overflow-y-auto custom-scrollbar pr-1">
@@ -271,6 +316,7 @@ export const AdminPanel = ({ activeTeam, teams = [], onSelectTeam, onCreateTeam 
                                 </div>
                                 <div className="text-right">
                                     <div className="text-[10px] font-black uppercase text-red-400">{entry.role || 'Admin'}</div>
+                                    {entry.teamId && <div className="text-[9px] font-black uppercase text-neutral-500">{teams.find(team => team.id === entry.teamId)?.name || entry.teamId}</div>}
                                     <button onClick={() => removeAdminUser(entry)} disabled={entry.active === false} className="mt-2 text-[10px] font-black uppercase text-neutral-500 hover:text-red-400 disabled:opacity-40">Revoke</button>
                                 </div>
                             </div>
