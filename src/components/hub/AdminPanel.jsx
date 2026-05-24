@@ -1,12 +1,13 @@
 import { useEffect, useState } from 'react';
 import { addDoc, collection, deleteDoc, doc, onSnapshot, setDoc, updateDoc } from 'firebase/firestore';
-import { STAFF_ACCESS_ROLES, MAPS, timezones } from '../../lib/constants';
+import { DEFAULT_TEAM_ID, STAFF_ACCESS_ROLES, MAPS, timezones } from '../../lib/constants';
 import { db } from '../../lib/firebase';
-import { safeDocId, writeAuditLog } from '../../lib/utils';
+import { safeDocId, teamMatches, writeAuditLog } from '../../lib/utils';
 import { ButtonPrimary, ButtonSecondary, Card, Input, Select } from '../shared';
 import { useToast } from '../../hooks/useToast';
 
-export const AdminPanel = () => {
+export const AdminPanel = ({ activeTeam, teams = [], onSelectTeam, onCreateTeam }) => {
+    const activeTeamId = activeTeam?.id || DEFAULT_TEAM_ID;
     const [form, setForm] = useState({
         type: 'Scrim',
         opponent: '',
@@ -18,13 +19,17 @@ export const AdminPanel = () => {
     const [applications, setApplications] = useState([]);
     const [adminUsers, setAdminUsers] = useState([]);
     const [adminForm, setAdminForm] = useState({ uid: '', name: '', role: 'Manager' });
+    const [teamForm, setTeamForm] = useState({ name: '', id: '', color: '#2563eb' });
     const [saving, setSaving] = useState(false);
     const addToast = useToast();
 
     useEffect(() => {
         const unsub = onSnapshot(collection(db, 'applications'), (snap) => {
             const rows = [];
-            snap.forEach(d => rows.push({ id: d.id, ...d.data() }));
+            snap.forEach(d => {
+                const data = { id: d.id, ...d.data() };
+                if (teamMatches(data, activeTeamId)) rows.push(data);
+            });
             setApplications(rows.sort((a, b) => new Date(b.submittedAt || 0) - new Date(a.submittedAt || 0)));
         });
         const unsubAdmins = onSnapshot(collection(db, 'admin_users'), (snap) => {
@@ -33,7 +38,7 @@ export const AdminPanel = () => {
             setAdminUsers(rows.sort((a, b) => (a.role || '').localeCompare(b.role || '') || (a.name || a.id).localeCompare(b.name || b.id)));
         });
         return () => { unsub(); unsubAdmins(); };
-    }, []);
+    }, [activeTeamId]);
 
     const submit = async () => {
         if (!form.opponent.trim() || !form.date || !form.time) {
@@ -45,6 +50,7 @@ export const AdminPanel = () => {
         try {
             await addDoc(collection(db, 'events'), {
                 ...form,
+                teamId: activeTeamId,
                 opponent: form.opponent.trim(),
                 createdAt: new Date().toISOString()
             });
@@ -63,6 +69,7 @@ export const AdminPanel = () => {
         try {
             await setDoc(doc(db, 'roster', memberName), {
                 uid: application.uid || '',
+                teamId: activeTeamId,
                 role: 'Tryout',
                 rank: application.rank || 'Unranked',
                 ingameRole: application.role || 'Flex',
@@ -109,6 +116,12 @@ export const AdminPanel = () => {
         }
     };
 
+    const createTeam = async () => {
+        if (!onCreateTeam) return;
+        await onCreateTeam(teamForm);
+        setTeamForm({ name: '', id: '', color: '#2563eb' });
+    };
+
     const removeAdminUser = async (entry) => {
         try {
             await updateDoc(doc(db, 'admin_users', entry.id), {
@@ -125,8 +138,36 @@ export const AdminPanel = () => {
 
     return (
         <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
+            <Card className="xl:col-span-3">
+                <div className="flex flex-col lg:flex-row lg:items-end lg:justify-between gap-5">
+                    <div>
+                        <div className="text-[10px] uppercase tracking-[0.28em] text-red-400 font-black mb-3">Team Hubs</div>
+                        <h3 className="text-2xl font-black text-white uppercase italic">Manage Squad Spaces</h3>
+                        <p className="mt-2 text-sm text-neutral-400">Switch the active admin context or create another Syrix team hub. Old data without a team is treated as Syrix Red.</p>
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                        {teams.map(team => (
+                            <button
+                                key={team.id}
+                                onClick={() => onSelectTeam?.(team.id)}
+                                className={`px-4 py-2 rounded-lg border text-xs font-black uppercase tracking-widest ${team.id === activeTeamId ? 'bg-white text-black border-white' : 'bg-black/40 border-white/10 text-neutral-400 hover:text-white'}`}
+                            >
+                                {team.name || team.id}
+                            </button>
+                        ))}
+                    </div>
+                </div>
+                <div className="mt-5 grid grid-cols-1 md:grid-cols-[1fr_12rem_9rem_auto] gap-3">
+                    <Input placeholder="Team name, e.g. Syrix Blue" value={teamForm.name} onChange={e => setTeamForm({ ...teamForm, name: e.target.value })} />
+                    <Input placeholder="team-id" value={teamForm.id} onChange={e => setTeamForm({ ...teamForm, id: e.target.value })} />
+                    <Input type="color" value={teamForm.color} onChange={e => setTeamForm({ ...teamForm, color: e.target.value })} className="h-11 p-1" />
+                    <ButtonPrimary onClick={createTeam} className="text-xs py-3">Create Team</ButtonPrimary>
+                </div>
+            </Card>
+
             <Card>
-                <h3 className="text-xl font-black text-white uppercase mb-4">Schedule Event</h3>
+                <h3 className="text-xl font-black text-white uppercase mb-1">Schedule Event</h3>
+                <div className="mb-4 text-xs text-neutral-500">Posting to {activeTeam?.name || 'Syrix Red'}</div>
                 <div className="space-y-4">
                     <div>
                         <label className="text-xs font-bold text-red-500 block mb-1">EVENT TYPE</label>

@@ -1,4 +1,5 @@
 import { addDoc, collection } from 'firebase/firestore';
+import { DEFAULT_TEAM_ID, DEFAULT_TEAMS } from './constants';
 import { db } from './firebase';
 
 export function timeToMinutes(t) {
@@ -15,6 +16,21 @@ export const safeDocId = (value, fallback = 'Unknown_User') => String(value || f
     .replaceAll('[', '-')
     .replaceAll(']', '-')
     .slice(0, 120) || fallback;
+
+export const teamMatches = (item = {}, teamId = DEFAULT_TEAM_ID) => (item.teamId || DEFAULT_TEAM_ID) === teamId;
+
+export const mergeDefaultTeams = (teams = []) => {
+    const byId = new Map();
+    DEFAULT_TEAMS.forEach(team => byId.set(team.id, team));
+    teams.forEach(team => {
+        if (team?.id) byId.set(team.id, team);
+    });
+    return Array.from(byId.values()).sort((a, b) => {
+        if (a.id === DEFAULT_TEAM_ID) return -1;
+        if (b.id === DEFAULT_TEAM_ID) return 1;
+        return (a.name || a.id).localeCompare(b.name || b.id);
+    });
+};
 
 export const normalizeAvailabilitySlots = (data = {}) => {
     if (Array.isArray(data.slots)) return data.slots;
