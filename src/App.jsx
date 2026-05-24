@@ -22,15 +22,18 @@ const LandingPage = ({ onEnterHub }) => {
     const [intelData, setIntelData] = useState([]);
     const [merchData, setMerchData] = useState([]);
     const [achievements, setAchievements] = useState([]);
+    const [teams, setTeams] = useState(() => mergeDefaultTeams([]));
 
     // Load real data from Firestore
     useEffect(() => {
+        const unsubTeams = onSnapshot(collection(db, 'teams'), (snap) => {
+            const rows = [];
+            snap.forEach(doc => rows.push({ id: doc.id, ...doc.data() }));
+            setTeams(mergeDefaultTeams(rows));
+        }, () => setTeams(mergeDefaultTeams([])));
         const unsubRoster = onSnapshot(collection(db, 'roster'), (snap) => {
             const r = [];
-            snap.forEach(doc => {
-                const data = { id: doc.id, ...doc.data() };
-                if (teamMatches(data, DEFAULT_TEAM_ID)) r.push(data);
-            });
+            snap.forEach(doc => r.push({ id: doc.id, ...doc.data() }));
             setRoster(r);
         });
         const unsubEvents = onSnapshot(collection(db, 'events'), (snap) => {
@@ -83,22 +86,26 @@ const LandingPage = ({ onEnterHub }) => {
         });
 
         return () => {
-            unsubRoster(); unsubEvents(); unsubNews(); unsubIntel(); unsubMerch(); unsubAchieve();
+            unsubTeams(); unsubRoster(); unsubEvents(); unsubNews(); unsubIntel(); unsubMerch(); unsubAchieve();
         };
     }, []);
 
-    const { activePlayers, coachingStaff, managementStaff } = useMemo(() => {
-        const sorted = sortRosterByRole(roster);
+    const groupedRosters = useMemo(() => teams.map(team => {
+        const teamRoster = sortRosterByRole(roster.filter(player => teamMatches(player, team.id)));
         const coachingRoles = ["Head Coach", "Coach"];
         const managementRoles = ["Manager"];
         const staffRoles = [...managementRoles, ...coachingRoles];
 
         return {
-            managementStaff: sorted.filter(p => managementRoles.includes(p.role)),
-            coachingStaff: sorted.filter(p => coachingRoles.includes(p.role)),
-            activePlayers: sorted.filter(p => !staffRoles.includes(p.role))
+            team,
+            managementStaff: teamRoster.filter(p => managementRoles.includes(p.role)),
+            coachingStaff: teamRoster.filter(p => coachingRoles.includes(p.role)),
+            activePlayers: teamRoster.filter(p => !staffRoles.includes(p.role))
         };
-    }, [roster]);
+    }), [roster, teams]);
+
+    const primaryRosterGroup = groupedRosters.find(group => group.team.id === DEFAULT_TEAM_ID) || groupedRosters[0] || { activePlayers: [], coachingStaff: [], managementStaff: [] };
+    const { activePlayers, coachingStaff, managementStaff } = primaryRosterGroup;
 
     // --- NEW STATS CALCULATION ---
     const teamStats = useMemo(() => {
@@ -214,6 +221,64 @@ const LandingPage = ({ onEnterHub }) => {
             {sub && <div className="mt-2 text-xs text-neutral-400">{sub}</div>}
         </div>
     );
+
+    const TeamRosterSection = ({ group, index }) => {
+        const color = group.team.color || (group.team.id === 'blue' ? '#0f6bff' : '#dc2626');
+        const hasRoster = group.activePlayers.length || group.managementStaff.length || group.coachingStaff.length;
+        return (
+            <div className={index > 0 ? 'border-t border-white/10 pt-12 mt-12' : ''}>
+                <div className="mb-7 flex flex-col lg:flex-row lg:items-end lg:justify-between gap-5" data-aos="fade-up">
+                    <div>
+                        <div className="text-[10px] uppercase tracking-[0.28em] font-black mb-3" style={{ color }}>{group.team.name || group.team.id}</div>
+                        <h3 className="section-title">{group.team.name || group.team.id} Roster</h3>
+                        <p className="mt-4 text-sm md:text-base text-neutral-400 leading-relaxed max-w-4xl">
+                            The current players and staff assigned to this Syrix squad.
+                        </p>
+                    </div>
+                    <div className="grid grid-cols-3 gap-3 min-w-[18rem]">
+                        <div className="border border-white/10 bg-black/35 p-3">
+                            <div className="text-[9px] uppercase tracking-widest text-neutral-500 font-black">Players</div>
+                            <div className="mt-1 text-2xl font-black text-white">{group.activePlayers.length}</div>
+                        </div>
+                        <div className="border border-white/10 bg-black/35 p-3">
+                            <div className="text-[9px] uppercase tracking-widest text-neutral-500 font-black">Staff</div>
+                            <div className="mt-1 text-2xl font-black text-white">{group.managementStaff.length + group.coachingStaff.length}</div>
+                        </div>
+                        <div className="border border-white/10 bg-black/35 p-3">
+                            <div className="text-[9px] uppercase tracking-widest text-neutral-500 font-black">Team</div>
+                            <div className="mt-1 h-6 w-12 rounded-sm border border-white/20" style={{ backgroundColor: color }}></div>
+                        </div>
+                    </div>
+                </div>
+
+                {hasRoster ? (
+                    <>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-5 mb-12">
+                            {group.activePlayers.map((p, i) => <PlayerCard key={`${group.team.id}-${p.id}`} player={p} delay={i * 50} />)}
+                        </div>
+                        {group.managementStaff.length > 0 && (
+                            <div className="border-t border-white/10 pt-10 mb-10">
+                                <SectionHeading kicker="Management" title={`${group.team.name || group.team.id} Management`} copy="Staff supporting this roster with scheduling, updates, and operations." />
+                                <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-5">
+                                    {group.managementStaff.map((p, i) => <PlayerCard key={`${group.team.id}-management-${p.id}`} player={p} delay={i * 50} />)}
+                                </div>
+                            </div>
+                        )}
+                        {group.coachingStaff.length > 0 && (
+                            <div className="border-t border-white/10 pt-10">
+                                <SectionHeading kicker="Coaching" title={`${group.team.name || group.team.id} Coaching`} copy="The people helping this squad review, prepare, and improve." />
+                                <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-5">
+                                    {group.coachingStaff.map((p, i) => <PlayerCard key={`${group.team.id}-coaching-${p.id}`} player={p} delay={i * 50} />)}
+                                </div>
+                            </div>
+                        )}
+                    </>
+                ) : (
+                    <div className="text-center text-neutral-500 py-12 border border-dashed border-neutral-800">No public roster members assigned yet.</div>
+                )}
+            </div>
+        );
+    };
 
     const nextMatch = matches[0];
     const fallbackNews = featuredNews || { title: 'Getting ready for the next one', body: 'The team is putting in the quiet work: reviewing rounds, tightening comms, and making sure practice turns into better matches.', date: new Date().toISOString().split('T')[0], type: 'Update' };
@@ -377,30 +442,8 @@ const LandingPage = ({ onEnterHub }) => {
 
                 <section id="roster" className="w-full py-16 relative flex flex-col items-center">
                     <div className="max-w-[1480px] w-full px-5 md:px-8">
-                        <SectionHeading kicker="The Squad" title="Active Roster" copy="The players putting the hours in together. Scrims, reviews, officials, rough days, good days: this is the group behind the tag." />
-                        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-5 mb-12">
-                            {activePlayers.length > 0 ? activePlayers.map((p, i) => (
-                                <PlayerCard key={p.id} player={p} delay={i * 50} />
-                            )) : (
-                                <div className="sm:col-span-2 xl:col-span-4 text-center text-neutral-500 py-12 border border-dashed border-neutral-800">Roster loading.</div>
-                            )}
-                        </div>
-                        {managementStaff.length > 0 && (
-                            <div className="border-t border-white/10 pt-12 mb-12">
-                                <SectionHeading kicker="Management" title="Team Management" copy="The people handling the less visible work: schedules, updates, support, and the small things that let the team focus on playing." />
-                                <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-5">
-                                    {managementStaff.map((p, i) => <PlayerCard key={p.id} player={p} delay={i * 50} />)}
-                                </div>
-                            </div>
-                        )}
-                        {coachingStaff.length > 0 && (
-                            <div className="border-t border-white/10 pt-12">
-                                <SectionHeading kicker="Coaching" title="Coaching Staff" copy="The people helping the team slow things down, review honestly, and turn messy rounds into something we can learn from." />
-                                <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-5">
-                                    {coachingStaff.map((p, i) => <PlayerCard key={p.id} player={p} delay={i * 50} />)}
-                                </div>
-                            </div>
-                        )}
+                        <SectionHeading kicker="The Squads" title="Syrix Rosters" copy="Red, Blue, and every future Syrix team each get their own roster section so players are easy to follow without mixing squads together." />
+                        {groupedRosters.map((group, index) => <TeamRosterSection key={group.team.id} group={group} index={index} />)}
                     </div>
                 </section>
 
@@ -6129,9 +6172,10 @@ function AuditLog() {
     );
 }
 
-function RosterManager({ members, events, canManageRoster = false, teamId = DEFAULT_TEAM_ID }) {
+function RosterManager({ members, events, canManageRoster = false, teamId = DEFAULT_TEAM_ID, teams = mergeDefaultTeams([]) }) {
     const [rosterData, setRosterData] = useState({});
     const [mode, setMode] = useState(canManageRoster ? 'edit' : 'compare');
+    const [teamFilter, setTeamFilter] = useState('all');
     const [compare1, setCompare1] = useState('');
     const [compare2, setCompare2] = useState('');
     const [selectedMember, setSelectedMember] = useState(null);
@@ -6143,6 +6187,7 @@ function RosterManager({ members, events, canManageRoster = false, teamId = DEFA
     const [pfp, setPfp] = useState('');
     const [ingameRole, setIngameRole] = useState('Flex');
     const [notes, setNotes] = useState('');
+    const [assignedTeamId, setAssignedTeamId] = useState(teamId);
 
     // Rename State
     const [renameInput, setRenameInput] = useState('');
@@ -6155,12 +6200,22 @@ function RosterManager({ members, events, canManageRoster = false, teamId = DEFA
             const data = {};
             snap.forEach(doc => {
                 const item = doc.data();
-                if (teamMatches(item, teamId)) data[doc.id] = item;
+                data[doc.id] = { ...item, teamId: item.teamId || DEFAULT_TEAM_ID };
             });
             setRosterData(data);
         });
         return () => unsub();
+    }, []);
+
+    useEffect(() => {
+        setTeamFilter(teamId);
     }, [teamId]);
+
+    const teamNameById = useMemo(() => {
+        const found = {};
+        teams.forEach(team => { found[team.id] = team.name || team.id; });
+        return found;
+    }, [teams]);
 
     // Save Changes Handler
     const handleSave = async () => {
@@ -6168,7 +6223,7 @@ function RosterManager({ members, events, canManageRoster = false, teamId = DEFA
         try {
             await setDoc(doc(db, 'roster', selectedMember), {
                 role,
-                teamId,
+                teamId: assignedTeamId,
                 rank,
                 notes,
                 gameId,
@@ -6179,6 +6234,34 @@ function RosterManager({ members, events, canManageRoster = false, teamId = DEFA
         } catch (error) {
             console.error("Save failed:", error);
             addToast("Error saving player", "error");
+        }
+    };
+
+    const moveMemberToTeam = async (member, nextTeamId) => {
+        if (!member || !nextTeamId) return;
+        const previousTeamId = rosterData[member]?.teamId || DEFAULT_TEAM_ID;
+        if (previousTeamId === nextTeamId) return addToast(`${member} is already on ${teamNameById[nextTeamId] || nextTeamId}`, 'error');
+        try {
+            await setDoc(doc(db, 'roster', member), {
+                teamId: nextTeamId,
+                movedAt: new Date().toISOString()
+            }, { merge: true });
+
+            const availRef = doc(db, 'availabilities', member);
+            const availSnap = await getDoc(availRef);
+            if (availSnap.exists()) {
+                await setDoc(availRef, {
+                    teamId: nextTeamId,
+                    movedAt: new Date().toISOString()
+                }, { merge: true });
+            }
+
+            if (selectedMember === member) setAssignedTeamId(nextTeamId);
+            await writeAuditLog('Roster team changed', `${member}: ${teamNameById[previousTeamId] || previousTeamId} -> ${teamNameById[nextTeamId] || nextTeamId}`, 'Roster Manager');
+            addToast(`${member} moved to ${teamNameById[nextTeamId] || nextTeamId}`);
+        } catch (error) {
+            console.error('Move member failed:', error);
+            addToast('Unable to move player', 'error');
         }
     };
 
@@ -6205,15 +6288,15 @@ function RosterManager({ members, events, canManageRoster = false, teamId = DEFA
 
             // 2. Create NEW Roster Document
             if (rosterSnap.exists()) {
-                await setDoc(doc(db, 'roster', renameInput), { ...rosterSnap.data(), teamId });
+                await setDoc(doc(db, 'roster', renameInput), { ...rosterSnap.data(), teamId: assignedTeamId });
                 await deleteDoc(oldRosterRef); // Delete old
             } else {
-                await setDoc(doc(db, 'roster', renameInput), { role: 'Tryout', rank: 'Unranked', notes: 'Renamed user', teamId });
+                await setDoc(doc(db, 'roster', renameInput), { role: 'Tryout', rank: 'Unranked', notes: 'Renamed user', teamId: assignedTeamId });
             }
 
             // 3. Create NEW Availability Document (if it exists)
             if (availSnap.exists()) {
-                await setDoc(doc(db, 'availabilities', renameInput), { ...availSnap.data(), teamId });
+                await setDoc(doc(db, 'availabilities', renameInput), { ...availSnap.data(), teamId: assignedTeamId });
                 await deleteDoc(oldAvailRef); // Delete old
             }
 
@@ -6229,8 +6312,24 @@ function RosterManager({ members, events, canManageRoster = false, teamId = DEFA
 
     // Sorted Members for Sidebar
     const sortedMembers = useMemo(() => {
-        return sortRosterByRole(members, rosterData);
+        const names = Object.keys(rosterData).filter(name => teamFilter === 'all' || (rosterData[name]?.teamId || DEFAULT_TEAM_ID) === teamFilter);
+        return sortRosterByRole(names, rosterData);
+    }, [rosterData, teamFilter]);
+
+    const compareMembers = useMemo(() => {
+        const provided = members?.length ? members : Object.keys(rosterData);
+        return [...new Set(provided)].filter(name => rosterData[name]).sort((a, b) => a.localeCompare(b));
     }, [members, rosterData]);
+
+    const rosterCounts = useMemo(() => {
+        const counts = {};
+        teams.forEach(team => { counts[team.id] = 0; });
+        Object.values(rosterData).forEach(player => {
+            const id = player.teamId || DEFAULT_TEAM_ID;
+            counts[id] = (counts[id] || 0) + 1;
+        });
+        return counts;
+    }, [rosterData, teams]);
 
     // MVP Calculations
     const mvpCounts = useMemo(() => {
@@ -6249,19 +6348,43 @@ function RosterManager({ members, events, canManageRoster = false, teamId = DEFA
 
     return (
         <div className="h-full flex flex-col gap-6">
-            <div className="flex gap-4 border-b border-white/10 pb-4">
-                {canManageRoster && <button onClick={() => setMode('edit')} className={`text-sm font-bold uppercase ${mode === 'edit' ? 'text-red-500' : 'text-neutral-500'}`}>Edit Mode</button>}
-                <button onClick={() => setMode('compare')} className={`text-sm font-bold uppercase ${mode === 'compare' ? 'text-red-500' : 'text-neutral-500'}`}>Compare Players</button>
+            <div className="flex flex-col xl:flex-row xl:items-end xl:justify-between gap-4 border-b border-white/10 pb-4">
+                <div>
+                    <div className="text-[10px] uppercase tracking-[0.28em] text-red-400 font-black mb-2">Roster Operations</div>
+                    <h2 className="text-3xl font-black text-white uppercase italic">Roster Manager</h2>
+                    <p className="mt-2 text-sm text-neutral-400">Admins can inspect every player across every Syrix team and move players between rosters.</p>
+                </div>
+                <div className="flex flex-wrap items-center gap-3">
+                    {canManageRoster && <button onClick={() => setMode('edit')} className={`text-sm font-bold uppercase ${mode === 'edit' ? 'text-red-500' : 'text-neutral-500'}`}>Edit Mode</button>}
+                    <button onClick={() => setMode('compare')} className={`text-sm font-bold uppercase ${mode === 'compare' ? 'text-red-500' : 'text-neutral-500'}`}>Compare Players</button>
+                    {mode === 'edit' && (
+                        <Select value={teamFilter} onChange={e => setTeamFilter(e.target.value)} className="max-w-56 text-xs py-2">
+                            <option value="all">All Teams</option>
+                            {teams.map(team => <option key={team.id} value={team.id}>{team.name || team.id} ({rosterCounts[team.id] || 0})</option>)}
+                        </Select>
+                    )}
+                </div>
             </div>
 
             {mode === 'edit' && canManageRoster ? (
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 h-full">
                     {/* Sidebar List */}
                     <div className="lg:col-span-1 bg-neutral-900/80 p-6 rounded-xl border border-white/5 flex flex-col">
-                        <h3 className="text-white font-bold mb-4">Members</h3>
+                        <div className="flex items-center justify-between gap-3 mb-4">
+                            <h3 className="text-white font-bold">Members</h3>
+                            <span className="text-[10px] uppercase tracking-widest text-neutral-500">{sortedMembers.length} shown</span>
+                        </div>
+                        <div className="grid grid-cols-2 gap-2 mb-4">
+                            {teams.map(team => (
+                                <button key={team.id} onClick={() => setTeamFilter(team.id)} className={`rounded-lg border p-3 text-left ${teamFilter === team.id ? 'bg-white text-black border-white' : 'bg-black/40 border-white/10 text-neutral-400 hover:text-white'}`}>
+                                    <div className="text-[9px] uppercase tracking-widest font-black truncate">{team.name || team.id}</div>
+                                    <div className="mt-1 text-xl font-black">{rosterCounts[team.id] || 0}</div>
+                                </button>
+                            ))}
+                        </div>
                         <div className="flex-1 space-y-2 overflow-y-auto custom-scrollbar">
                             {sortedMembers.length === 0 ?
-                                <div className="text-neutral-500 text-xs italic p-4 text-center border border-dashed border-neutral-800 rounded-xl">No members found. Log availability to appear here.</div> :
+                                <div className="text-neutral-500 text-xs italic p-4 text-center border border-dashed border-neutral-800 rounded-xl">No members found for this team filter.</div> :
                                 sortedMembers.map(m => (
                                     <div key={m} onClick={() => {
                                         setSelectedMember(m);
@@ -6271,8 +6394,12 @@ function RosterManager({ members, events, canManageRoster = false, teamId = DEFA
                                         setGameId(rosterData[m]?.gameId || '');
                                         setPfp(rosterData[m]?.pfp || '');
                                         setIngameRole(rosterData[m]?.ingameRole || 'Flex');
+                                        setAssignedTeamId(rosterData[m]?.teamId || DEFAULT_TEAM_ID);
                                     }} className={`p-3 rounded-xl cursor-pointer border transition-all flex justify-between items-center ${selectedMember === m ? 'bg-red-900/20 border-red-600' : 'bg-black border-neutral-800'}`}>
-                                        <span className="text-white font-bold flex items-center gap-2">{m} {mvpCounts[m] > 0 && <span className="text-[9px] bg-yellow-500/20 text-yellow-500 px-1 rounded border border-yellow-500/20">🏆 x{mvpCounts[m]}</span>}</span>
+                                        <div className="min-w-0">
+                                            <span className="text-white font-bold flex items-center gap-2 truncate">{m} {mvpCounts[m] > 0 && <span className="text-[9px] bg-yellow-500/20 text-yellow-500 px-1 rounded border border-yellow-500/20">MVP x{mvpCounts[m]}</span>}</span>
+                                            <div className="mt-1 text-[10px] text-neutral-500 uppercase truncate">{teamNameById[rosterData[m]?.teamId || DEFAULT_TEAM_ID] || 'Syrix Red'}</div>
+                                        </div>
                                         <span className="text-xs text-neutral-500 uppercase">{rosterData[m]?.role}</span>
                                     </div>
                                 ))
@@ -6285,6 +6412,17 @@ function RosterManager({ members, events, canManageRoster = false, teamId = DEFA
                         {selectedMember ? (
                             <div className="space-y-6">
                                 <h3 className="text-2xl font-black text-white">Managing: <span className="text-red-500">{selectedMember}</span></h3>
+
+                                <div className="rounded-xl border border-white/10 bg-black/35 p-4">
+                                    <label className="block text-xs font-bold text-neutral-500 mb-2 uppercase">Assigned Team</label>
+                                    <div className="grid grid-cols-1 md:grid-cols-[1fr_auto] gap-3">
+                                        <Select value={assignedTeamId} onChange={e => setAssignedTeamId(e.target.value)}>
+                                            {teams.map(team => <option key={team.id} value={team.id}>{team.name || team.id}</option>)}
+                                        </Select>
+                                        <ButtonPrimary onClick={() => moveMemberToTeam(selectedMember, assignedTeamId)} className="text-xs py-2">Move Player</ButtonPrimary>
+                                    </div>
+                                    <p className="mt-2 text-[10px] text-neutral-500">Moving a player updates their roster assignment and availability team.</p>
+                                </div>
 
                                 <div className="grid grid-cols-2 gap-4">
                                     <div>
@@ -6354,7 +6492,7 @@ function RosterManager({ members, events, canManageRoster = false, teamId = DEFA
                 <div className="grid grid-cols-2 gap-8 h-full">
                     {[setCompare1, setCompare2].map((setter, i) => (
                         <Card key={i} className="h-full">
-                            <Select onChange={e => setter(e.target.value)} className="mb-6"><option>Select Player</option>{members.map(m => <option key={m}>{m}</option>)}</Select>
+                            <Select onChange={e => setter(e.target.value)} className="mb-6"><option>Select Player</option>{compareMembers.map(m => <option key={m}>{m}</option>)}</Select>
                             {((i === 0 ? compare1 : compare2) && rosterData[i === 0 ? compare1 : compare2]) && (
                                 <div className="space-y-4 text-center">
                                     <div className="w-24 h-24 mx-auto bg-red-600 rounded-full flex items-center justify-center text-3xl font-black text-white border-4 border-black shadow-xl">{(i === 0 ? compare1 : compare2)[0]}</div>
@@ -6362,6 +6500,7 @@ function RosterManager({ members, events, canManageRoster = false, teamId = DEFA
                                     <div className="flex justify-center gap-2">
                                         <span className="bg-neutral-800 px-3 py-1 rounded text-xs font-bold text-white">{rosterData[i === 0 ? compare1 : compare2]?.rank || 'Unranked'}</span>
                                         <span className="bg-red-900/50 px-3 py-1 rounded text-xs font-bold text-red-400">{rosterData[i === 0 ? compare1 : compare2]?.role || 'Member'}</span>
+                                        <span className="bg-blue-950/50 px-3 py-1 rounded text-xs font-bold text-blue-300">{teamNameById[rosterData[i === 0 ? compare1 : compare2]?.teamId || DEFAULT_TEAM_ID] || 'Syrix Red'}</span>
                                     </div>
                                     {mvpCounts[(i === 0 ? compare1 : compare2)] > 0 && <div className="text-yellow-500 font-bold text-sm bg-yellow-900/20 py-1 rounded border border-yellow-500/20">🏆 {mvpCounts[(i === 0 ? compare1 : compare2)]} MVP Awards</div>}
                                     <div className="p-4 bg-black/50 rounded-xl border border-neutral-800 text-left">
@@ -7398,7 +7537,7 @@ function SyrixDashboard({ onBack }) {
                     {activeTab === 'strats' && isStaff && <div className="animate-fade-in h-[85vh]"><StratBook teamId={activeTeamId} /></div>}
                     {activeTab === 'stratlibrary' && <StratLibrary teamId={activeTeamId} />}
                     {activeTab === 'lineups' && <div className="animate-fade-in h-[85vh]"><LineupLibrary teamId={activeTeamId} /></div>}
-                    {activeTab === 'roster' && isAdmin && <div className="animate-fade-in h-full flex-1 flex flex-col"><RosterManager members={dynamicMembers} events={events} canManageRoster={isAdmin} teamId={activeTeamId} /></div>}
+                    {activeTab === 'roster' && isAdmin && <div className="animate-fade-in h-full flex-1 flex flex-col"><RosterManager members={dynamicMembers} events={events} canManageRoster={isAdmin} teamId={activeTeamId} teams={teams} /></div>}
                     {activeTab === 'prep' && isStaff && <MatchPrep members={dynamicMembers} events={events} currentUserName={rosterName || currentUser.displayName || 'Unknown'} />}
                     {activeTab === 'pipeline' && isStaff && <ScrimPipeline currentUserName={rosterName || currentUser.displayName || 'Staff'} />}
                     {activeTab === 'tasks' && <ActionItems members={dynamicMembers} teamId={activeTeamId} />}
