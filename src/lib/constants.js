@@ -10,10 +10,14 @@ export const RANKS = ["Unranked", "Iron", "Bronze", "Silver", "Gold", "Platinum"
 export const AGENT_NAMES = ["Jett", "Raze", "Reyna", "Yoru", "Phoenix", "Neon", "Iso", "Tejo", "Vyse", "Waylay", "Omen", "Astra", "Brimstone", "Viper", "Harbor", "Clove", "Sova", "Fade", "Skye", "Breach", "KAY/O", "Gekko", "Killjoy", "Cypher", "Sage", "Chamber", "Deadlock", "Miks", "Veto"];
 export const ROLE_ABBREVIATIONS = { Flex: "FLX", Duelist: "DUEL", Initiator: "INIT", Controller: "CTRL", Sentinel: "SENT", Coach: "C", "Head Coach": "HC", Manager: "MGR" };
 export const TEAM_LOGO = "/syrix-logo.jpeg";
+export const TEAM_LOGOS = {
+    red: "/syrix-logo.jpeg",
+    blue: "/syrix-blue-logo.png"
+};
 export const DEFAULT_TEAM_ID = "red";
 export const DEFAULT_TEAMS = [
-    { id: "red", name: "Syrix Red", color: "#dc2626", isDefault: true },
-    { id: "blue", name: "Syrix Blue", color: "#2563eb" }
+    { id: "red", name: "Syrix Red", color: "#dc2626", logo: TEAM_LOGOS.red, isDefault: true },
+    { id: "blue", name: "Syrix Blue", color: "#2563eb", logo: TEAM_LOGOS.blue }
 ];
 
 export const UTILITY_TYPES = [

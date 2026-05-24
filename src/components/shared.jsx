@@ -1,8 +1,16 @@
-import { TEAM_LOGO } from '../lib/constants';
+import { TEAM_LOGO, TEAM_LOGOS } from '../lib/constants';
 
-export const TeamLogo = ({ className = "", imageClassName = "" }) => (
+export const TeamLogo = ({ className = "", imageClassName = "", logo = "", teamId = "red" }) => (
     <span className={`relative inline-flex shrink-0 overflow-hidden bg-black border border-white/15 ${className}`}>
-        <img src={TEAM_LOGO} alt="SYRIX logo" className={`h-full w-full object-cover ${imageClassName}`} />
+        <img
+            src={logo || TEAM_LOGOS[teamId] || TEAM_LOGO}
+            alt="SYRIX logo"
+            className={`h-full w-full object-cover ${imageClassName}`}
+            onError={(event) => {
+                if (event.currentTarget.src.endsWith(TEAM_LOGO)) return;
+                event.currentTarget.src = TEAM_LOGO;
+            }}
+        />
     </span>
 );
 

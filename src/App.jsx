@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react'
 import { collection, onSnapshot, doc, setDoc, deleteDoc, addDoc, updateDoc, query, where, getDoc, getDocs } from 'firebase/firestore';
 import { onAuthStateChanged, signInWithPopup, signOut, OAuthProvider } from 'firebase/auth';
 import { auth, db, discordWebhookUrl } from './lib/firebase';
-import { ADMIN_ACCESS_ROLES, ADMIN_ROLES, ADMIN_UIDS, AGENT_NAMES, DAYS, DEFAULT_TEAM_ID, MAPS, RANKS, ROLE_ABBREVIATIONS, ROLES, SHORT_DAYS, STAFF_ACCESS_ROLES, UTILITY_TYPES, timezones } from './lib/constants';
+import { ADMIN_ACCESS_ROLES, ADMIN_ROLES, ADMIN_UIDS, AGENT_NAMES, DAYS, DEFAULT_TEAM_ID, MAPS, RANKS, ROLE_ABBREVIATIONS, ROLES, SHORT_DAYS, STAFF_ACCESS_ROLES, TEAM_LOGOS, UTILITY_TYPES, timezones } from './lib/constants';
 import { convertFromGMT, convertToGMT, mergeDefaultTeams, normalizeAvailabilitySlots, safeDocId, sortRosterByRole, teamMatches, timeToMinutes, writeAuditLog } from './lib/utils';
 import { Background, ButtonPrimary, ButtonSecondary, Card, GlobalStyles, Input, Modal, Select, TeamLogo } from './components/shared';
 import { ToastProvider } from './components/ToastProvider';
@@ -7373,7 +7373,7 @@ function SyrixDashboard({ onBack }) {
             <aside className={`relative z-40 hidden lg:flex ${sidebarCollapsed ? 'w-20' : 'w-72'} flex-none flex-col border-r border-white/10 bg-[#050506]/95 backdrop-blur-xl transition-[width] duration-200`}>
                 <div className={`${sidebarCollapsed ? 'p-3' : 'p-5'} border-b border-white/10`}>
                     <button onClick={onBack} className={`flex items-center ${sidebarCollapsed ? 'justify-center' : 'gap-3'} text-white hover:text-red-400 transition w-full`}>
-                        <TeamLogo className="h-10 w-10 rounded-sm shadow-lg shadow-red-950/30" />
+                        <TeamLogo teamId={activeTeamId} logo={activeTeam.logo || TEAM_LOGOS[activeTeamId]} className="h-10 w-10 rounded-sm shadow-lg shadow-red-950/30" />
                         {!sidebarCollapsed && <span className="org-wordmark text-3xl font-black tracking-tight italic">SYRIX</span>}
                     </button>
                     <button onClick={() => setSidebarCollapsed(value => !value)} className="mt-3 w-full bg-white/5 hover:bg-white/10 border border-white/10 text-neutral-400 hover:text-white py-2 text-[10px] font-black uppercase tracking-widest">
