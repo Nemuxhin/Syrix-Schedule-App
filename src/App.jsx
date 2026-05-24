@@ -6964,6 +6964,10 @@ function SyrixDashboard({ onBack }) {
     useEffect(() => { return onAuthStateChanged(auth, user => { setCurrentUser(user); setAuthLoading(false); }); }, []);
     const signIn = async () => { try { await signInWithPopup(auth, new OAuthProvider('oidc.discord')); } catch (e) { console.error(e); } };
     const handleSignOut = async () => await signOut(auth);
+    const dbAdminRole = adminAccess?.active === false ? '' : adminAccess?.role;
+    const isRosterManager = ADMIN_ROLES.includes(currentUserRole);
+    const isDbAdmin = ADMIN_ACCESS_ROLES.includes(dbAdminRole);
+    const canSwitchPortals = Boolean(currentUser && (ADMIN_UIDS.includes(currentUser.uid) || isRosterManager || ['Owner', 'Manager'].includes(dbAdminRole)));
 
     useEffect(() => {
         const unsub = onSnapshot(collection(db, 'teams'), (snap) => {
@@ -6985,7 +6989,11 @@ function SyrixDashboard({ onBack }) {
         }
         return onSnapshot(doc(db, 'admin_users', currentUser.uid), (snapshot) => {
             if (snapshot.exists() && snapshot.data().active !== false) {
-                setAdminAccess({ id: snapshot.id, ...snapshot.data() });
+                const access = { id: snapshot.id, ...snapshot.data() };
+                setAdminAccess(access);
+                if (!ADMIN_UIDS.includes(currentUser.uid) && !ADMIN_ACCESS_ROLES.includes(access.role) && access.teamId) {
+                    setActiveTeamId(access.teamId);
+                }
                 setIsMember(true);
             } else {
                 setAdminAccess(null);
@@ -7000,7 +7008,16 @@ function SyrixDashboard({ onBack }) {
         const memberQuery = query(collection(db, 'roster'), where("uid", "==", currentUser.uid));
         const unsub1 = onSnapshot(memberQuery, (snapshot) => {
             if (!snapshot.empty) {
-                const matchingDoc = snapshot.docs.find(item => teamMatches(item.data(), activeTeamId)) || snapshot.docs[0];
+                const adminCanSwitch = ADMIN_UIDS.includes(currentUser.uid) || ['Owner', 'Manager'].includes(adminAccess?.role);
+                const firstProfile = snapshot.docs[0].data();
+                const firstProfileTeamId = firstProfile.teamId || DEFAULT_TEAM_ID;
+                const firstProfileCanSwitch = ADMIN_ROLES.includes(firstProfile.role);
+                if (!adminCanSwitch && !firstProfileCanSwitch && activeTeamId !== firstProfileTeamId) {
+                    setActiveTeamId(firstProfileTeamId);
+                }
+                const matchingDoc = (adminCanSwitch || firstProfileCanSwitch)
+                    ? (snapshot.docs.find(item => teamMatches(item.data(), activeTeamId)) || snapshot.docs[0])
+                    : snapshot.docs[0];
                 const profile = matchingDoc.data();
                 setRosterName(matchingDoc.id);
                 setCurrentUserRole(profile.role || '');
@@ -7204,14 +7221,11 @@ function SyrixDashboard({ onBack }) {
         </div>
     );
 
-    const isRosterManager = ADMIN_ROLES.includes(currentUserRole);
-    const dbAdminRole = adminAccess?.active === false ? '' : adminAccess?.role;
-    const isDbAdmin = ADMIN_ACCESS_ROLES.includes(dbAdminRole);
     const isAdmin = currentUser && (ADMIN_UIDS.includes(currentUser.uid) || isRosterManager || isDbAdmin);
     const isCoachRole = ['Coach', 'Head Coach'].includes(currentUserRole) || ['Coach', 'Head Coach'].includes(dbAdminRole);
     const isStaff = Boolean(isAdmin || isCoachRole);
     const accessLabel = ADMIN_UIDS.includes(currentUser.uid) ? 'Owner' : dbAdminRole || (isRosterManager ? 'Manager' : 'Member');
-    const visibleTeams = isStaff ? teams : teams.filter(team => team.id === activeTeamId || team.id === DEFAULT_TEAM_ID);
+    const visibleTeams = canSwitchPortals ? teams : teams.filter(team => team.id === activeTeamId);
     const activeTeam = teams.find(team => team.id === activeTeamId) || teams.find(team => team.id === DEFAULT_TEAM_ID) || { id: DEFAULT_TEAM_ID, name: 'Syrix Red', color: '#dc2626' };
     const createTeam = async ({ name, id, color }) => {
         if (!isAdmin) return addToast('Only admins can create team hubs', 'error');
@@ -7389,7 +7403,7 @@ function SyrixDashboard({ onBack }) {
                             <div className="mt-1 text-sm font-black text-white truncate">{activeTeam.name}</div>
                         </div>
                     </div>}
-                    {!sidebarCollapsed && isStaff && <div className="mt-3"><TeamSwitcher teams={visibleTeams} activeTeamId={activeTeamId} onSelectTeam={setActiveTeamId} /></div>}
+                    {!sidebarCollapsed && canSwitchPortals && <div className="mt-3"><TeamSwitcher teams={visibleTeams} activeTeamId={activeTeamId} onSelectTeam={setActiveTeamId} /></div>}
                 </div>
 
                 <nav className={`flex-1 overflow-y-auto ${sidebarCollapsed ? 'p-2 space-y-3' : 'p-4 space-y-6'} custom-scrollbar`}>
@@ -7452,7 +7466,7 @@ function SyrixDashboard({ onBack }) {
                         </div>
                     </div>
                     <div className="flex items-center gap-4">
-                        {isStaff && <TeamSwitcher teams={visibleTeams} activeTeamId={activeTeamId} onSelectTeam={setActiveTeamId} />}
+                        {canSwitchPortals && <TeamSwitcher teams={visibleTeams} activeTeamId={activeTeamId} onSelectTeam={setActiveTeamId} />}
                         <div className="text-right hidden md:block">
                             <div className="text-sm font-bold text-white">
                                 {rosterName || currentUser.displayName || 'Guest'}
