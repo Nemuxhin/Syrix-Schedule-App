@@ -6173,7 +6173,7 @@ function AuditLog() {
     );
 }
 
-function RosterManager({ members, events, canManageRoster = false, teamId = DEFAULT_TEAM_ID, teams = mergeDefaultTeams([]) }) {
+function RosterManager({ members, events, canManageRoster = false, canRemoveHubAccess = false, teamId = DEFAULT_TEAM_ID, teams = mergeDefaultTeams([]) }) {
     const ORG_TEAM_ID = 'org';
     const [rosterData, setRosterData] = useState({});
     const [mode, setMode] = useState(canManageRoster ? 'edit' : 'compare');
@@ -6284,6 +6284,50 @@ function RosterManager({ members, events, canManageRoster = false, teamId = DEFA
         } catch (error) {
             console.error('Move member failed:', error);
             addToast('Unable to move player', 'error');
+        }
+    };
+
+    const removeMemberAccess = async () => {
+        if (!canRemoveHubAccess || !selectedMember) return;
+        const profile = rosterData[selectedMember] || {};
+        const uid = profile.uid || '';
+        const confirm = window.confirm(
+            `Remove ${selectedMember} from the hub?\n\n` +
+            `This will delete their roster profile and availability, and deactivate their team membership access.`
+        );
+        if (!confirm) return;
+
+        try {
+            await deleteDoc(doc(db, 'roster', selectedMember));
+            await deleteDoc(doc(db, 'availabilities', selectedMember));
+
+            if (uid) {
+                await syncTeamMember({
+                    uid,
+                    teamId: rosterTeamId(profile),
+                    name: selectedMember,
+                    role: profile.role || 'Player',
+                    rosterRole: profile.role || 'Player',
+                    active: false
+                });
+
+                const accessRef = doc(db, 'admin_users', uid);
+                const accessSnap = await getDoc(accessRef);
+                if (accessSnap.exists()) {
+                    await setDoc(accessRef, {
+                        active: false,
+                        removedAt: new Date().toISOString()
+                    }, { merge: true });
+                }
+            }
+
+            await writeAuditLog('Hub access removed', `${selectedMember}${uid ? ` (${uid})` : ''}`, 'Roster Manager');
+            setSelectedMember(null);
+            setRenameInput('');
+            addToast(`${selectedMember} removed from hub access`);
+        } catch (error) {
+            console.error('Remove member access failed:', error);
+            addToast('Unable to remove hub access', 'error');
         }
     };
 
@@ -6527,6 +6571,25 @@ function RosterManager({ members, events, canManageRoster = false, teamId = DEFA
                                         This moves their Roster Profile and Availability slots to the new ID.
                                     </p>
                                 </div>
+
+                                {canRemoveHubAccess && (
+                                    <div className="mt-6 pt-6 border-t border-red-950/50">
+                                        <label className="block text-xs font-bold text-red-500 mb-2 uppercase tracking-widest">
+                                            Owner / Manager: Remove Hub Access
+                                        </label>
+                                        <div className="rounded-xl border border-red-900/40 bg-red-950/10 p-4">
+                                            <p className="text-sm text-neutral-400 mb-4">
+                                                Deletes this roster profile and availability, then deactivates their team membership access.
+                                            </p>
+                                            <button
+                                                onClick={removeMemberAccess}
+                                                className="bg-red-700 hover:bg-red-600 text-white border border-red-500 font-black px-4 py-3 rounded-xl text-xs uppercase tracking-wider transition-colors"
+                                            >
+                                                Remove Player Access
+                                            </button>
+                                        </div>
+                                    </div>
+                                )}
 
                             </div>
                         ) : <div className="h-full flex items-center justify-center text-neutral-500">Select a player</div>}
@@ -7596,7 +7659,7 @@ function SyrixDashboard({ onBack }) {
                     {activeTab === 'strats' && isStaff && <div className="animate-fade-in h-[85vh]"><StratBook teamId={activeTeamId} /></div>}
                     {activeTab === 'stratlibrary' && <StratLibrary teamId={activeTeamId} />}
                     {activeTab === 'lineups' && <div className="animate-fade-in h-[85vh]"><LineupLibrary teamId={activeTeamId} /></div>}
-                    {activeTab === 'roster' && isAdmin && <div className="animate-fade-in h-full flex-1 flex flex-col"><RosterManager members={dynamicMembers} events={events} canManageRoster={isAdmin} teamId={activeTeamId} teams={teams} /></div>}
+                    {activeTab === 'roster' && isAdmin && <div className="animate-fade-in h-full flex-1 flex flex-col"><RosterManager members={dynamicMembers} events={events} canManageRoster={isAdmin} canRemoveHubAccess={canSwitchPortals} teamId={activeTeamId} teams={teams} /></div>}
                     {activeTab === 'prep' && isStaff && <MatchPrep members={dynamicMembers} events={events} currentUserName={rosterName || currentUser.displayName || 'Unknown'} />}
                     {activeTab === 'pipeline' && isStaff && <ScrimPipeline currentUserName={rosterName || currentUser.displayName || 'Staff'} />}
                     {activeTab === 'tasks' && <ActionItems members={dynamicMembers} teamId={activeTeamId} />}
