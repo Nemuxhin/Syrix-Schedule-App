@@ -90,22 +90,23 @@ const LandingPage = ({ onEnterHub }) => {
         };
     }, []);
 
+    const orgManagementStaff = useMemo(() => sortRosterByRole(roster.filter(player => player.role === 'Manager')), [roster]);
+
     const groupedRosters = useMemo(() => teams.map(team => {
-        const teamRoster = sortRosterByRole(roster.filter(player => teamMatches(player, team.id)));
+        const teamRoster = sortRosterByRole(roster.filter(player => player.role !== 'Manager' && teamMatches(player, team.id)));
         const coachingRoles = ["Head Coach", "Coach"];
-        const managementRoles = ["Manager"];
-        const staffRoles = [...managementRoles, ...coachingRoles];
+        const staffRoles = [...coachingRoles];
 
         return {
             team,
-            managementStaff: teamRoster.filter(p => managementRoles.includes(p.role)),
             coachingStaff: teamRoster.filter(p => coachingRoles.includes(p.role)),
             activePlayers: teamRoster.filter(p => !staffRoles.includes(p.role))
         };
     }), [roster, teams]);
 
-    const primaryRosterGroup = groupedRosters.find(group => group.team.id === DEFAULT_TEAM_ID) || groupedRosters[0] || { activePlayers: [], coachingStaff: [], managementStaff: [] };
-    const { activePlayers, coachingStaff, managementStaff } = primaryRosterGroup;
+    const primaryRosterGroup = groupedRosters.find(group => group.team.id === DEFAULT_TEAM_ID) || groupedRosters[0] || { activePlayers: [], coachingStaff: [] };
+    const { activePlayers, coachingStaff } = primaryRosterGroup;
+    const managementStaff = orgManagementStaff;
 
     // --- NEW STATS CALCULATION ---
     const teamStats = useMemo(() => {
@@ -224,7 +225,7 @@ const LandingPage = ({ onEnterHub }) => {
 
     const TeamRosterSection = ({ group, index }) => {
         const color = group.team.color || (group.team.id === 'blue' ? '#0f6bff' : '#dc2626');
-        const hasRoster = group.activePlayers.length || group.managementStaff.length || group.coachingStaff.length;
+        const hasRoster = group.activePlayers.length || group.coachingStaff.length;
         return (
             <div className={index > 0 ? 'border-t border-white/10 pt-12 mt-12' : ''}>
                 <div className="mb-7 flex flex-col lg:flex-row lg:items-end lg:justify-between gap-5" data-aos="fade-up">
@@ -242,7 +243,7 @@ const LandingPage = ({ onEnterHub }) => {
                         </div>
                         <div className="border border-white/10 bg-black/35 p-3">
                             <div className="text-[9px] uppercase tracking-widest text-neutral-500 font-black">Staff</div>
-                            <div className="mt-1 text-2xl font-black text-white">{group.managementStaff.length + group.coachingStaff.length}</div>
+                            <div className="mt-1 text-2xl font-black text-white">{group.coachingStaff.length}</div>
                         </div>
                         <div className="border border-white/10 bg-black/35 p-3">
                             <div className="text-[9px] uppercase tracking-widest text-neutral-500 font-black">Team</div>
@@ -256,14 +257,6 @@ const LandingPage = ({ onEnterHub }) => {
                         <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-5 mb-12">
                             {group.activePlayers.map((p, i) => <PlayerCard key={`${group.team.id}-${p.id}`} player={p} delay={i * 50} />)}
                         </div>
-                        {group.managementStaff.length > 0 && (
-                            <div className="border-t border-white/10 pt-10 mb-10">
-                                <SectionHeading kicker="Management" title={`${group.team.name || group.team.id} Management`} copy="Staff supporting this roster with scheduling, updates, and operations." />
-                                <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-5">
-                                    {group.managementStaff.map((p, i) => <PlayerCard key={`${group.team.id}-management-${p.id}`} player={p} delay={i * 50} />)}
-                                </div>
-                            </div>
-                        )}
                         {group.coachingStaff.length > 0 && (
                             <div className="border-t border-white/10 pt-10">
                                 <SectionHeading kicker="Coaching" title={`${group.team.name || group.team.id} Coaching`} copy="The people helping this squad review, prepare, and improve." />
@@ -443,6 +436,14 @@ const LandingPage = ({ onEnterHub }) => {
                 <section id="roster" className="w-full py-16 relative flex flex-col items-center">
                     <div className="max-w-[1480px] w-full px-5 md:px-8">
                         <SectionHeading kicker="The Squads" title="Syrix Rosters" copy="Red, Blue, and every future Syrix team each get their own roster section so players are easy to follow without mixing squads together." />
+                        {orgManagementStaff.length > 0 && (
+                            <div className="mb-12">
+                                <SectionHeading kicker="Organization" title="Syrix Management" copy="Management supports the whole organization, not one individual roster." />
+                                <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-5">
+                                    {orgManagementStaff.map((p, i) => <PlayerCard key={`org-management-${p.id}`} player={p} delay={i * 50} />)}
+                                </div>
+                            </div>
+                        )}
                         {groupedRosters.map((group, index) => <TeamRosterSection key={group.team.id} group={group} index={index} />)}
                     </div>
                 </section>
@@ -6173,6 +6174,7 @@ function AuditLog() {
 }
 
 function RosterManager({ members, events, canManageRoster = false, teamId = DEFAULT_TEAM_ID, teams = mergeDefaultTeams([]) }) {
+    const ORG_TEAM_ID = 'org';
     const [rosterData, setRosterData] = useState({});
     const [mode, setMode] = useState(canManageRoster ? 'edit' : 'compare');
     const [teamFilter, setTeamFilter] = useState('all');
@@ -6212,18 +6214,22 @@ function RosterManager({ members, events, canManageRoster = false, teamId = DEFA
     }, [teamId]);
 
     const teamNameById = useMemo(() => {
-        const found = {};
+        const found = { [ORG_TEAM_ID]: 'Organization Management' };
         teams.forEach(team => { found[team.id] = team.name || team.id; });
         return found;
     }, [teams]);
 
+    const rosterTeamId = useCallback((player = {}) => player.role === 'Manager' ? ORG_TEAM_ID : (player.teamId || DEFAULT_TEAM_ID), []);
+
     // Save Changes Handler
     const handleSave = async () => {
         if (!selectedMember) return;
+        const nextTeamId = role === 'Manager' ? ORG_TEAM_ID : assignedTeamId;
         try {
             await setDoc(doc(db, 'roster', selectedMember), {
                 role,
-                teamId: assignedTeamId,
+                teamId: nextTeamId,
+                organizationScope: role === 'Manager',
                 rank,
                 notes,
                 gameId,
@@ -6232,10 +6238,11 @@ function RosterManager({ members, events, canManageRoster = false, teamId = DEFA
             }, { merge: true });
             await syncTeamMember({
                 uid: rosterData[selectedMember]?.uid,
-                teamId: assignedTeamId,
+                teamId: nextTeamId,
                 name: selectedMember,
                 role: ['Manager', 'Head Coach', 'Coach'].includes(role) ? role : 'Player',
-                rosterRole: role
+                rosterRole: role,
+                active: role !== 'Manager'
             });
             addToast('Player Updated Successfully');
         } catch (error) {
@@ -6246,7 +6253,8 @@ function RosterManager({ members, events, canManageRoster = false, teamId = DEFA
 
     const moveMemberToTeam = async (member, nextTeamId) => {
         if (!member || !nextTeamId) return;
-        const previousTeamId = rosterData[member]?.teamId || DEFAULT_TEAM_ID;
+        if (rosterData[member]?.role === 'Manager') return addToast('Management is organization-wide and cannot be moved between team rosters', 'error');
+        const previousTeamId = rosterTeamId(rosterData[member]);
         if (previousTeamId === nextTeamId) return addToast(`${member} is already on ${teamNameById[nextTeamId] || nextTeamId}`, 'error');
         try {
             await setDoc(doc(db, 'roster', member), {
@@ -6293,6 +6301,7 @@ function RosterManager({ members, events, canManageRoster = false, teamId = DEFA
         if (!confirm) return;
 
         try {
+            const nextTeamId = role === 'Manager' ? ORG_TEAM_ID : assignedTeamId;
             // 1. Fetch Old Data
             const oldRosterRef = doc(db, 'roster', selectedMember);
             const oldAvailRef = doc(db, 'availabilities', selectedMember);
@@ -6302,23 +6311,24 @@ function RosterManager({ members, events, canManageRoster = false, teamId = DEFA
 
             // 2. Create NEW Roster Document
             if (rosterSnap.exists()) {
-                await setDoc(doc(db, 'roster', renameInput), { ...rosterSnap.data(), teamId: assignedTeamId });
+                await setDoc(doc(db, 'roster', renameInput), { ...rosterSnap.data(), teamId: nextTeamId, organizationScope: role === 'Manager' });
                 await deleteDoc(oldRosterRef); // Delete old
             } else {
-                await setDoc(doc(db, 'roster', renameInput), { role: 'Tryout', rank: 'Unranked', notes: 'Renamed user', teamId: assignedTeamId });
+                await setDoc(doc(db, 'roster', renameInput), { role: 'Tryout', rank: 'Unranked', notes: 'Renamed user', teamId: nextTeamId, organizationScope: role === 'Manager' });
             }
 
             // 3. Create NEW Availability Document (if it exists)
             if (availSnap.exists()) {
-                await setDoc(doc(db, 'availabilities', renameInput), { ...availSnap.data(), teamId: assignedTeamId });
+                await setDoc(doc(db, 'availabilities', renameInput), { ...availSnap.data(), teamId: nextTeamId });
                 await deleteDoc(oldAvailRef); // Delete old
             }
             await syncTeamMember({
                 uid: rosterSnap.exists() ? rosterSnap.data().uid : '',
-                teamId: assignedTeamId,
+                teamId: nextTeamId,
                 name: renameInput,
                 role: ['Manager', 'Head Coach', 'Coach'].includes(role) ? role : 'Player',
-                rosterRole: role
+                rosterRole: role,
+                active: role !== 'Manager'
             });
 
             addToast(`Successfully renamed to ${renameInput}`);
@@ -6333,9 +6343,9 @@ function RosterManager({ members, events, canManageRoster = false, teamId = DEFA
 
     // Sorted Members for Sidebar
     const sortedMembers = useMemo(() => {
-        const names = Object.keys(rosterData).filter(name => teamFilter === 'all' || (rosterData[name]?.teamId || DEFAULT_TEAM_ID) === teamFilter);
+        const names = Object.keys(rosterData).filter(name => teamFilter === 'all' || rosterTeamId(rosterData[name]) === teamFilter);
         return sortRosterByRole(names, rosterData);
-    }, [rosterData, teamFilter]);
+    }, [rosterData, rosterTeamId, teamFilter]);
 
     const compareMembers = useMemo(() => {
         const provided = members?.length ? members : Object.keys(rosterData);
@@ -6344,13 +6354,14 @@ function RosterManager({ members, events, canManageRoster = false, teamId = DEFA
 
     const rosterCounts = useMemo(() => {
         const counts = {};
+        counts[ORG_TEAM_ID] = 0;
         teams.forEach(team => { counts[team.id] = 0; });
         Object.values(rosterData).forEach(player => {
-            const id = player.teamId || DEFAULT_TEAM_ID;
+            const id = rosterTeamId(player);
             counts[id] = (counts[id] || 0) + 1;
         });
         return counts;
-    }, [rosterData, teams]);
+    }, [rosterData, rosterTeamId, teams]);
 
     // MVP Calculations
     const mvpCounts = useMemo(() => {
@@ -6381,6 +6392,7 @@ function RosterManager({ members, events, canManageRoster = false, teamId = DEFA
                     {mode === 'edit' && (
                         <Select value={teamFilter} onChange={e => setTeamFilter(e.target.value)} className="max-w-56 text-xs py-2">
                             <option value="all">All Teams</option>
+                            <option value={ORG_TEAM_ID}>Organization Management ({rosterCounts[ORG_TEAM_ID] || 0})</option>
                             {teams.map(team => <option key={team.id} value={team.id}>{team.name || team.id} ({rosterCounts[team.id] || 0})</option>)}
                         </Select>
                     )}
@@ -6396,6 +6408,10 @@ function RosterManager({ members, events, canManageRoster = false, teamId = DEFA
                             <span className="text-[10px] uppercase tracking-widest text-neutral-500">{sortedMembers.length} shown</span>
                         </div>
                         <div className="grid grid-cols-2 gap-2 mb-4">
+                            <button onClick={() => setTeamFilter(ORG_TEAM_ID)} className={`rounded-lg border p-3 text-left ${teamFilter === ORG_TEAM_ID ? 'bg-white text-black border-white' : 'bg-black/40 border-white/10 text-neutral-400 hover:text-white'}`}>
+                                <div className="text-[9px] uppercase tracking-widest font-black truncate">Organization</div>
+                                <div className="mt-1 text-xl font-black">{rosterCounts[ORG_TEAM_ID] || 0}</div>
+                            </button>
                             {teams.map(team => (
                                 <button key={team.id} onClick={() => setTeamFilter(team.id)} className={`rounded-lg border p-3 text-left ${teamFilter === team.id ? 'bg-white text-black border-white' : 'bg-black/40 border-white/10 text-neutral-400 hover:text-white'}`}>
                                     <div className="text-[9px] uppercase tracking-widest font-black truncate">{team.name || team.id}</div>
@@ -6415,11 +6431,11 @@ function RosterManager({ members, events, canManageRoster = false, teamId = DEFA
                                         setGameId(rosterData[m]?.gameId || '');
                                         setPfp(rosterData[m]?.pfp || '');
                                         setIngameRole(rosterData[m]?.ingameRole || 'Flex');
-                                        setAssignedTeamId(rosterData[m]?.teamId || DEFAULT_TEAM_ID);
+                                        setAssignedTeamId(rosterTeamId(rosterData[m]) === ORG_TEAM_ID ? DEFAULT_TEAM_ID : rosterTeamId(rosterData[m]));
                                     }} className={`p-3 rounded-xl cursor-pointer border transition-all flex justify-between items-center ${selectedMember === m ? 'bg-red-900/20 border-red-600' : 'bg-black border-neutral-800'}`}>
                                         <div className="min-w-0">
                                             <span className="text-white font-bold flex items-center gap-2 truncate">{m} {mvpCounts[m] > 0 && <span className="text-[9px] bg-yellow-500/20 text-yellow-500 px-1 rounded border border-yellow-500/20">MVP x{mvpCounts[m]}</span>}</span>
-                                            <div className="mt-1 text-[10px] text-neutral-500 uppercase truncate">{teamNameById[rosterData[m]?.teamId || DEFAULT_TEAM_ID] || 'Syrix Red'}</div>
+                                            <div className="mt-1 text-[10px] text-neutral-500 uppercase truncate">{teamNameById[rosterTeamId(rosterData[m])] || 'Syrix Red'}</div>
                                         </div>
                                         <span className="text-xs text-neutral-500 uppercase">{rosterData[m]?.role}</span>
                                     </div>
@@ -6434,16 +6450,24 @@ function RosterManager({ members, events, canManageRoster = false, teamId = DEFA
                             <div className="space-y-6">
                                 <h3 className="text-2xl font-black text-white">Managing: <span className="text-red-500">{selectedMember}</span></h3>
 
-                                <div className="rounded-xl border border-white/10 bg-black/35 p-4">
-                                    <label className="block text-xs font-bold text-neutral-500 mb-2 uppercase">Assigned Team</label>
-                                    <div className="grid grid-cols-1 md:grid-cols-[1fr_auto] gap-3">
-                                        <Select value={assignedTeamId} onChange={e => setAssignedTeamId(e.target.value)}>
-                                            {teams.map(team => <option key={team.id} value={team.id}>{team.name || team.id}</option>)}
-                                        </Select>
-                                        <ButtonPrimary onClick={() => moveMemberToTeam(selectedMember, assignedTeamId)} className="text-xs py-2">Move Player</ButtonPrimary>
+                                {role === 'Manager' ? (
+                                    <div className="rounded-xl border border-white/10 bg-black/35 p-4">
+                                        <label className="block text-xs font-bold text-neutral-500 mb-2 uppercase">Assigned Scope</label>
+                                        <div className="text-lg font-black text-white uppercase">Organization Management</div>
+                                        <p className="mt-2 text-[10px] text-neutral-500">Managers support the whole organization and are not assigned to a single team roster.</p>
                                     </div>
-                                    <p className="mt-2 text-[10px] text-neutral-500">Moving a player updates their roster assignment and availability team.</p>
-                                </div>
+                                ) : (
+                                    <div className="rounded-xl border border-white/10 bg-black/35 p-4">
+                                        <label className="block text-xs font-bold text-neutral-500 mb-2 uppercase">Assigned Team</label>
+                                        <div className="grid grid-cols-1 md:grid-cols-[1fr_auto] gap-3">
+                                            <Select value={assignedTeamId} onChange={e => setAssignedTeamId(e.target.value)}>
+                                                {teams.map(team => <option key={team.id} value={team.id}>{team.name || team.id}</option>)}
+                                            </Select>
+                                            <ButtonPrimary onClick={() => moveMemberToTeam(selectedMember, assignedTeamId)} className="text-xs py-2">Move Player</ButtonPrimary>
+                                        </div>
+                                        <p className="mt-2 text-[10px] text-neutral-500">Moving a player updates their roster assignment and availability team.</p>
+                                    </div>
+                                )}
 
                                 <div className="grid grid-cols-2 gap-4">
                                     <div>
@@ -6521,7 +6545,7 @@ function RosterManager({ members, events, canManageRoster = false, teamId = DEFA
                                     <div className="flex justify-center gap-2">
                                         <span className="bg-neutral-800 px-3 py-1 rounded text-xs font-bold text-white">{rosterData[i === 0 ? compare1 : compare2]?.rank || 'Unranked'}</span>
                                         <span className="bg-red-900/50 px-3 py-1 rounded text-xs font-bold text-red-400">{rosterData[i === 0 ? compare1 : compare2]?.role || 'Member'}</span>
-                                        <span className="bg-blue-950/50 px-3 py-1 rounded text-xs font-bold text-blue-300">{teamNameById[rosterData[i === 0 ? compare1 : compare2]?.teamId || DEFAULT_TEAM_ID] || 'Syrix Red'}</span>
+                                        <span className="bg-blue-950/50 px-3 py-1 rounded text-xs font-bold text-blue-300">{teamNameById[rosterTeamId(rosterData[i === 0 ? compare1 : compare2])] || 'Syrix Red'}</span>
                                     </div>
                                     {mvpCounts[(i === 0 ? compare1 : compare2)] > 0 && <div className="text-yellow-500 font-bold text-sm bg-yellow-900/20 py-1 rounded border border-yellow-500/20">🏆 {mvpCounts[(i === 0 ? compare1 : compare2)]} MVP Awards</div>}
                                     <div className="p-4 bg-black/50 rounded-xl border border-neutral-800 text-left">
