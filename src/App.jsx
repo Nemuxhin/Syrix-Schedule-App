@@ -5167,7 +5167,7 @@ function PlayerProfile({ members, currentMemberName, displayAvail, events, reque
     }, [currentMemberName, isStaff, members]);
 
     useEffect(() => {
-        const unsubRoster = onSnapshot(collection(db, 'roster'), (snap) => {
+        const unsubRoster = onSnapshot(query(collection(db, 'roster'), where('teamId', '==', teamId)), (snap) => {
             const rows = [];
             snap.forEach(d => rows.push({ id: d.id, ...d.data() }));
             setProfiles(sortRosterByRole(rows));
@@ -6652,23 +6652,24 @@ function PartnerDirectory() {
     );
 }
 
-function MapVeto() {
+function MapVeto({ teamId = DEFAULT_TEAM_ID }) {
     const [vetoState, setVetoState] = useState({});
     const addToast = useToast();
+    const vetoDocId = `map_veto_${teamId}`;
 
     useEffect(() => {
-        const unsub = onSnapshot(doc(db, 'general', 'map_veto'), (snap) => {
+        const unsub = onSnapshot(doc(db, 'general', vetoDocId), (snap) => {
             setVetoState(snap.exists() ? snap.data() : {});
         });
         return () => unsub();
-    }, []);
+    }, [vetoDocId]);
 
     const statusOrder = ['neutral', 'ban', 'pick', 'inactive'];
     const activeMaps = MAPS.filter(map => (vetoState[map] || 'neutral') !== 'inactive');
     const inactiveMaps = MAPS.filter(map => (vetoState[map] || 'neutral') === 'inactive');
 
     const setMapStatus = async (map, status) => {
-        await setDoc(doc(db, 'general', 'map_veto'), { ...vetoState, [map]: status });
+        await setDoc(doc(db, 'general', vetoDocId), { ...vetoState, teamId, [map]: status });
     };
 
     const toggleMap = async (map) => {
@@ -6678,7 +6679,7 @@ function MapVeto() {
     };
 
     const resetVeto = async () => {
-        await setDoc(doc(db, 'general', 'map_veto'), {});
+        await setDoc(doc(db, 'general', vetoDocId), { teamId });
         addToast('Map veto board reset');
     };
 
@@ -6937,7 +6938,7 @@ function CaptainsMessage() {
     );
 }
 
-function LeaveLogger({ members, rosterName }) {
+function LeaveLogger({ members, rosterName, teamId = DEFAULT_TEAM_ID }) {
     const [selectedMember, setSelectedMember] = useState(rosterName || '');
     const [note, setNote] = useState('');
     const [saving, setSaving] = useState(false);
@@ -6953,6 +6954,7 @@ function LeaveLogger({ members, rosterName }) {
         try {
             await addDoc(collection(db, 'leave_logs'), {
                 member: selectedMember,
+                teamId,
                 note: note.trim(),
                 createdAt: new Date().toISOString()
             });
@@ -7668,7 +7670,7 @@ function SyrixDashboard({ onBack }) {
                     {activeTab === 'teamrequests' && <TeamRequestCenter mode="team" members={dynamicMembers} currentUserName={currentMemberName} currentUserUid={currentUser.uid} isStaff={isStaff} teamId={activeTeamId} />}
                     {activeTab === 'coachrequests' && <TeamRequestCenter mode="coach" members={dynamicMembers} currentUserName={currentMemberName} currentUserUid={currentUser.uid} isStaff={isStaff} teamId={activeTeamId} />}
                     {activeTab === 'meetings' && <TeamRequestCenter mode="meetings" members={dynamicMembers} currentUserName={currentMemberName} currentUserUid={currentUser.uid} isStaff={isStaff} teamId={activeTeamId} />}
-                    {activeTab === 'availability' && <div className="animate-fade-in space-y-6"><div className="grid grid-cols-1 xl:grid-cols-[0.7fr_1.3fr] gap-6"><div className="space-y-6"><Card className="border-red-900/20"><div className="absolute top-0 left-0 w-1 h-full bg-red-600/50"></div><div className="text-[10px] uppercase tracking-[0.28em] text-red-400 font-black mb-3">Your Week</div><h2 className="text-2xl font-black text-white uppercase italic mb-5">Availability Editor</h2><div className="space-y-4"><div><label className="text-[10px] font-black text-red-500 uppercase mb-1 block">Day</label><Select value={day} onChange={e => setDay(e.target.value)}>{DAYS.map(d => <option key={d} value={d}>{d}</option>)}</Select><div className="mt-2 text-[11px] text-neutral-500">Editing availability for <span className="text-neutral-300 font-bold">{currentMemberName}</span> in <span className="text-neutral-300 font-bold">{userTimezone}</span>.</div></div><div className="grid grid-cols-2 gap-3"><div><label className="text-[10px] font-black text-red-500 uppercase mb-1 block">Start</label><Input type="time" value={start} onChange={e => setStart(e.target.value)} className="[color-scheme:dark]" /></div><div><label className="text-[10px] font-black text-red-500 uppercase mb-1 block">End</label><Input type="time" value={end} onChange={e => setEnd(e.target.value)} className="[color-scheme:dark]" /></div></div><div><label className="text-[10px] font-black text-red-500 uppercase mb-1 block">Pref. Role</label><div className="flex gap-2 overflow-x-auto pb-2 scrollbar-hide">{ROLES.map(r => (<button key={r} onClick={() => setRole(r)} className={`px-3 py-2 rounded-lg text-xs font-black border transition-all whitespace-nowrap flex items-center justify-center ${role === r ? 'bg-red-600 text-white border-red-500' : 'bg-black/50 border-neutral-800 text-neutral-500 hover:text-white'}`}>{ROLE_ABBREVIATIONS[r] || r}</button>))}</div></div><div className="pt-2 flex gap-2"><ButtonPrimary onClick={saveAvail} disabled={saveStatus !== 'idle'} className="flex-1">{saveStatus === 'idle' ? 'Save Slot' : 'Saving...'}</ButtonPrimary><ButtonSecondary onClick={() => openModal('Clear Day', `Clear all for ${day}?`, clearDay)}>Clear</ButtonSecondary></div></div></Card><LeaveLogger members={dynamicMembers} rosterName={rosterName} /></div><div className="space-y-6"><div className="grid grid-cols-1 xl:grid-cols-2 gap-6"><Card><h2 className="text-lg font-bold text-white mb-4 uppercase tracking-wide">Team Heatmap</h2><AvailabilityHeatmap availabilities={displayAvail} members={dynamicMembers} /></Card><Card><div className="text-[10px] uppercase tracking-[0.28em] text-neutral-500 font-black mb-3">Today</div><div className="text-4xl font-black text-white">{availableToday}/{dynamicMembers.length}</div><div className="mt-2 text-sm text-neutral-400">members have availability logged for {todayName}.</div><div className="mt-5 pt-4 border-t border-white/10 text-xs text-neutral-500">Keep this current before scrims so captains can plan realistic blocks.</div></Card></div><Card><h2 className="text-xl font-bold text-white mb-6 uppercase tracking-wide">Weekly Timeline <span className="text-neutral-500 text-sm normal-case">({userTimezone})</span></h2><div className="overflow-x-auto scrollbar-thin scrollbar-thumb-neutral-700"><table className="w-full text-left border-collapse min-w-[600px]"><thead><tr className="border-b border-neutral-800"><th className="p-3 text-xs font-bold text-neutral-500 uppercase tracking-wider w-32">Team Member</th>{SHORT_DAYS.map(day => (<th key={day} className="p-3 text-xs font-bold text-red-600 uppercase tracking-wider text-center border-l border-neutral-800">{day}</th>))}</tr></thead><tbody className="divide-y divide-neutral-800/50">{dynamicMembers.map(member => (<tr key={member} className="hover:bg-neutral-800/30 transition-colors group"><td className="p-4 font-bold text-white text-sm flex items-center gap-2"><div className="w-2 h-2 rounded-full bg-red-500 shadow-red-500/50 shadow-sm"></div>{member}</td>{DAYS.map((day) => { const slots = (displayAvail[member] || []).filter(s => s.day === day); return (<td key={day} className="p-2 align-middle border-l border-neutral-800/50"><div className="flex flex-col gap-1 items-center justify-center">{slots.length > 0 ? slots.map((s, i) => (<div key={i} className="bg-gradient-to-br from-red-600 to-red-700 text-white text-[10px] font-bold px-2 py-1 rounded w-full text-center shadow-md whitespace-nowrap flex items-center justify-center gap-1">{s.start}-{s.end}<span className="opacity-75 ml-1 text-[9px] border border-white/20 px-1 rounded bg-black/20">{ROLE_ABBREVIATIONS[s.role] || s.role}</span></div>)) : <div className="h-1 w-4 bg-neutral-800 rounded-full"></div>}</div></td>); })}</tr>))}</tbody></table></div></Card></div></div></div>}
+                    {activeTab === 'availability' && <div className="animate-fade-in space-y-6"><div className="grid grid-cols-1 xl:grid-cols-[0.7fr_1.3fr] gap-6"><div className="space-y-6"><Card className="border-red-900/20"><div className="absolute top-0 left-0 w-1 h-full bg-red-600/50"></div><div className="text-[10px] uppercase tracking-[0.28em] text-red-400 font-black mb-3">Your Week</div><h2 className="text-2xl font-black text-white uppercase italic mb-5">Availability Editor</h2><div className="space-y-4"><div><label className="text-[10px] font-black text-red-500 uppercase mb-1 block">Day</label><Select value={day} onChange={e => setDay(e.target.value)}>{DAYS.map(d => <option key={d} value={d}>{d}</option>)}</Select><div className="mt-2 text-[11px] text-neutral-500">Editing availability for <span className="text-neutral-300 font-bold">{currentMemberName}</span> in <span className="text-neutral-300 font-bold">{userTimezone}</span>.</div></div><div className="grid grid-cols-2 gap-3"><div><label className="text-[10px] font-black text-red-500 uppercase mb-1 block">Start</label><Input type="time" value={start} onChange={e => setStart(e.target.value)} className="[color-scheme:dark]" /></div><div><label className="text-[10px] font-black text-red-500 uppercase mb-1 block">End</label><Input type="time" value={end} onChange={e => setEnd(e.target.value)} className="[color-scheme:dark]" /></div></div><div><label className="text-[10px] font-black text-red-500 uppercase mb-1 block">Pref. Role</label><div className="flex gap-2 overflow-x-auto pb-2 scrollbar-hide">{ROLES.map(r => (<button key={r} onClick={() => setRole(r)} className={`px-3 py-2 rounded-lg text-xs font-black border transition-all whitespace-nowrap flex items-center justify-center ${role === r ? 'bg-red-600 text-white border-red-500' : 'bg-black/50 border-neutral-800 text-neutral-500 hover:text-white'}`}>{ROLE_ABBREVIATIONS[r] || r}</button>))}</div></div><div className="pt-2 flex gap-2"><ButtonPrimary onClick={saveAvail} disabled={saveStatus !== 'idle'} className="flex-1">{saveStatus === 'idle' ? 'Save Slot' : 'Saving...'}</ButtonPrimary><ButtonSecondary onClick={() => openModal('Clear Day', `Clear all for ${day}?`, clearDay)}>Clear</ButtonSecondary></div></div></Card><LeaveLogger members={dynamicMembers} rosterName={rosterName} teamId={activeTeamId} /></div><div className="space-y-6"><div className="grid grid-cols-1 xl:grid-cols-2 gap-6"><Card><h2 className="text-lg font-bold text-white mb-4 uppercase tracking-wide">Team Heatmap</h2><AvailabilityHeatmap availabilities={displayAvail} members={dynamicMembers} /></Card><Card><div className="text-[10px] uppercase tracking-[0.28em] text-neutral-500 font-black mb-3">Today</div><div className="text-4xl font-black text-white">{availableToday}/{dynamicMembers.length}</div><div className="mt-2 text-sm text-neutral-400">members have availability logged for {todayName}.</div><div className="mt-5 pt-4 border-t border-white/10 text-xs text-neutral-500">Keep this current before scrims so captains can plan realistic blocks.</div></Card></div><Card><h2 className="text-xl font-bold text-white mb-6 uppercase tracking-wide">Weekly Timeline <span className="text-neutral-500 text-sm normal-case">({userTimezone})</span></h2><div className="overflow-x-auto scrollbar-thin scrollbar-thumb-neutral-700"><table className="w-full text-left border-collapse min-w-[600px]"><thead><tr className="border-b border-neutral-800"><th className="p-3 text-xs font-bold text-neutral-500 uppercase tracking-wider w-32">Team Member</th>{SHORT_DAYS.map(day => (<th key={day} className="p-3 text-xs font-bold text-red-600 uppercase tracking-wider text-center border-l border-neutral-800">{day}</th>))}</tr></thead><tbody className="divide-y divide-neutral-800/50">{dynamicMembers.map(member => (<tr key={member} className="hover:bg-neutral-800/30 transition-colors group"><td className="p-4 font-bold text-white text-sm flex items-center gap-2"><div className="w-2 h-2 rounded-full bg-red-500 shadow-red-500/50 shadow-sm"></div>{member}</td>{DAYS.map((day) => { const slots = (displayAvail[member] || []).filter(s => s.day === day); return (<td key={day} className="p-2 align-middle border-l border-neutral-800/50"><div className="flex flex-col gap-1 items-center justify-center">{slots.length > 0 ? slots.map((s, i) => (<div key={i} className="bg-gradient-to-br from-red-600 to-red-700 text-white text-[10px] font-bold px-2 py-1 rounded w-full text-center shadow-md whitespace-nowrap flex items-center justify-center gap-1">{s.start}-{s.end}<span className="opacity-75 ml-1 text-[9px] border border-white/20 px-1 rounded bg-black/20">{ROLE_ABBREVIATIONS[s.role] || s.role}</span></div>)) : <div className="h-1 w-4 bg-neutral-800 rounded-full"></div>}</div></td>); })}</tr>))}</tbody></table></div></Card></div></div></div>}
                     {activeTab === 'coachroom' && isStaff && <CoachRoom members={dynamicMembers} currentUserName={rosterName || currentUser.displayName || 'Coach'} teamId={activeTeamId} />}
                     {activeTab === 'practice' && isStaff && <PracticePlanner members={dynamicMembers} currentUserName={rosterName || currentUser.displayName || 'Unknown'} teamId={activeTeamId} />}
                     {activeTab === 'reviews' && isStaff && <PracticeReview members={dynamicMembers} currentUserName={rosterName || currentUser.displayName || 'Coach'} teamId={activeTeamId} />}
@@ -7687,7 +7689,7 @@ function SyrixDashboard({ onBack }) {
                     {activeTab === 'content' && isAdmin && <div className="animate-fade-in h-full"><ContentManager /></div>}
                     {activeTab === 'audit' && isAdmin && <AuditLog />}
                     {activeTab === 'admin' && isAdmin && <div className="animate-fade-in h-full"><AdminPanel activeTeam={activeTeam} teams={teams} onSelectTeam={setActiveTeamId} onCreateTeam={createTeam} /></div>}
-                    {activeTab === 'mapveto' && isStaff && <div className="animate-fade-in h-[80vh]"><MapVeto /></div>}
+                    {activeTab === 'mapveto' && isStaff && <div className="animate-fade-in h-[80vh]"><MapVeto teamId={activeTeamId} /></div>}
 
                 </div>
             </main>
