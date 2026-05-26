@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { collection, onSnapshot, doc, setDoc, deleteDoc, addDoc, updateDoc, query, where, getDoc, getDocs } from 'firebase/firestore';
-import { onAuthStateChanged, signInWithPopup, signOut, OAuthProvider } from 'firebase/auth';
-import { auth, db, discordWebhookUrl } from './lib/firebase';
+import { onAuthStateChanged, signInWithPopup, signOut, OAuthProvider, GoogleAuthProvider } from 'firebase/auth';
+import { auth, db } from './lib/firebase';
 import { ADMIN_ACCESS_ROLES, ADMIN_ROLES, ADMIN_UIDS, AGENT_NAMES, DAYS, DEFAULT_TEAM_ID, MAPS, RANKS, ROLE_ABBREVIATIONS, ROLES, SHORT_DAYS, STAFF_ACCESS_ROLES, TEAM_LOGOS, UTILITY_TYPES, timezones } from './lib/constants';
 import { convertFromGMT, convertToGMT, mergeDefaultTeams, normalizeAvailabilitySlots, safeDocId, sortRosterByRole, syncTeamMember, teamMatches, timeToMinutes, writeAuditLog } from './lib/utils';
 import { Background, ButtonPrimary, ButtonSecondary, Card, GlobalStyles, Input, Modal, Select, TeamLogo } from './components/shared';
@@ -16,8 +16,8 @@ import { useToast } from './hooks/useToast';
 const LandingPage = ({ onEnterHub }) => {
     const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
     const [roster, setRoster] = useState([]);
-    const [matches, setMatches] = useState([]);
-    const [allEvents, setAllEvents] = useState([]); // Added to store all events for stats
+    const matches = useMemo(() => [], []);
+    const allEvents = useMemo(() => [], []);
     const [newsData, setNewsData] = useState([]);
     const [intelData, setIntelData] = useState([]);
     const [merchData, setMerchData] = useState([]);
@@ -36,28 +36,6 @@ const LandingPage = ({ onEnterHub }) => {
             snap.forEach(doc => r.push({ id: doc.id, ...doc.data() }));
             setRoster(r);
         });
-        const unsubEvents = onSnapshot(collection(db, 'events'), (snap) => {
-            const e = [];
-            snap.forEach(doc => {
-                const data = { id: doc.id, ...doc.data() };
-                if (teamMatches(data, DEFAULT_TEAM_ID)) e.push(data);
-            });
-            setAllEvents(e);
-
-            // FIX: Filter for events that are TODAY or in the FUTURE
-            const now = new Date();
-            now.setHours(0, 0, 0, 0); // Set to start of today
-
-            const futureMatches = e
-                .filter(m => {
-                    const eventDate = new Date(m.date);
-                    return eventDate >= now && !m.result; // Hide if date passed OR if it has a result
-                })
-                .sort((a, b) => new Date(a.date) - new Date(b.date));
-
-            setMatches(futureMatches);
-        });
-
         // News Listener
         const unsubNews = onSnapshot(query(collection(db, 'news')), (snap) => {
             const n = []; snap.forEach(doc => n.push({ id: doc.id, ...doc.data() }));
@@ -86,7 +64,7 @@ const LandingPage = ({ onEnterHub }) => {
         });
 
         return () => {
-            unsubTeams(); unsubRoster(); unsubEvents(); unsubNews(); unsubIntel(); unsubMerch(); unsubAchieve();
+            unsubTeams(); unsubRoster(); unsubNews(); unsubIntel(); unsubMerch(); unsubAchieve();
         };
     }, []);
 
@@ -1046,10 +1024,6 @@ function ApplicationForm({ currentUser, teams = mergeDefaultTeams([]), activeTea
         try {
             await addDoc(collection(db, 'applications'), appData);
 
-            // Discord Webhook
-            const content = { embeds: [{ title: `New App: ${finalUsername}`, color: 16776960, fields: [{ name: 'Rank', value: form.rank }, { name: 'Role', value: form.role }] }] };
-            fetch(discordWebhookUrl, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(content) }).catch(console.error);
-
             setStatus('success');
             addToast("Application Submitted Successfully");
         } catch (e) {
@@ -1298,7 +1272,7 @@ function TeamComps({ members, teamId = DEFAULT_TEAM_ID }) {
         return null;
     };
 
-    useEffect(() => { const unsub = onSnapshot(collection(db, 'comps'), (snap) => { const c = []; snap.forEach(doc => { const data = { id: doc.id, ...doc.data() }; if (teamMatches(data, teamId)) c.push(data); }); setComps(c); }); return () => unsub(); }, [teamId]);
+    useEffect(() => { const unsub = onSnapshot(query(collection(db, 'comps'), where('teamId', '==', teamId)), (snap) => { const c = []; snap.forEach(doc => { c.push({ id: doc.id, ...doc.data() }); }); setComps(c); }); return () => unsub(); }, [teamId]);
     const saveComp = async () => { if (newComp.agents.some(a => !a)) return addToast('Please select all 5 agents', 'error'); await addDoc(collection(db, 'comps'), { map: selectedMap, teamId, ...newComp }); setNewComp({ agents: Array(5).fill(''), players: Array(5).fill('') }); addToast('Composition Saved'); };
     const deleteComp = async (id) => { await deleteDoc(doc(db, 'comps', id)); addToast('Composition Deleted'); };
     const currentMapComps = comps.filter(c => c.map === selectedMap);
@@ -3416,11 +3390,11 @@ function MatchHistory({ currentUser, members, teamId = DEFAULT_TEAM_ID }) {
 
     // Load Events
     useEffect(() => {
-        const unsub = onSnapshot(collection(db, 'events'), (snap) => {
+        const unsub = onSnapshot(query(collection(db, 'events'), where('teamId', '==', teamId)), (snap) => {
             const evs = [];
             snap.forEach(doc => {
                 const data = { id: doc.id, ...doc.data() };
-                if (teamMatches(data, teamId)) evs.push(data);
+                evs.push(data);
             });
             setHistory(evs.filter(e => e.result).sort((a, b) => new Date(b.date) - new Date(a.date)));
             setPending(evs.filter(e => !e.result).sort((a, b) => new Date(a.date) - new Date(b.date)));
@@ -3799,11 +3773,11 @@ function ActionItems({ members, teamId = DEFAULT_TEAM_ID }) {
     const addToast = useToast();
 
     useEffect(() => {
-        const unsub = onSnapshot(collection(db, 'tasks'), (snap) => {
+        const unsub = onSnapshot(query(collection(db, 'tasks'), where('teamId', '==', teamId)), (snap) => {
             const rows = [];
             snap.forEach(d => {
                 const data = { id: d.id, ...d.data() };
-                if (teamMatches(data, teamId)) rows.push(data);
+                rows.push(data);
             });
             setTasks(rows.sort((a, b) => {
                 if (Boolean(a.done) !== Boolean(b.done)) return a.done ? 1 : -1;
@@ -4128,20 +4102,20 @@ function TeamCalendar({ events, currentUserName, currentUserUid, isStaff }) {
     );
 }
 
-function PracticePlanner({ members, currentUserName }) {
+function PracticePlanner({ members, currentUserName, teamId = DEFAULT_TEAM_ID }) {
     const [sessions, setSessions] = useState([]);
     const [form, setForm] = useState({ title: '', date: new Date().toISOString().split('T')[0], map: MAPS[0], focus: 'Defaults', players: [], drills: '', goals: '', vod: '' });
     const [saving, setSaving] = useState(false);
     const addToast = useToast();
 
     useEffect(() => {
-        const unsub = onSnapshot(collection(db, 'practice_sessions'), (snap) => {
+        const unsub = onSnapshot(query(collection(db, 'practice_sessions'), where('teamId', '==', teamId)), (snap) => {
             const rows = [];
             snap.forEach(d => rows.push({ id: d.id, ...d.data() }));
             setSessions(rows.sort((a, b) => new Date(b.date || 0) - new Date(a.date || 0)));
         });
         return () => unsub();
-    }, []);
+    }, [teamId]);
 
     const togglePlayer = (member) => {
         setForm(prev => ({
@@ -4160,6 +4134,7 @@ function PracticePlanner({ members, currentUserName }) {
                 drills: form.drills.trim(),
                 goals: form.goals.trim(),
                 vod: form.vod.trim(),
+                teamId,
                 status: 'Planned',
                 createdAt: new Date().toISOString(),
                 createdBy: currentUserName || 'Unknown'
@@ -4250,7 +4225,7 @@ function PracticePlanner({ members, currentUserName }) {
     );
 }
 
-function MatchPrep({ members, events, currentUserName }) {
+function MatchPrep({ members, events, currentUserName, teamId = DEFAULT_TEAM_ID }) {
     const [preps, setPreps] = useState([]);
     const [appStrats, setAppStrats] = useState([]);
     const [externalStrats, setExternalStrats] = useState([]);
@@ -4259,27 +4234,27 @@ function MatchPrep({ members, events, currentUserName }) {
     const addToast = useToast();
 
     useEffect(() => {
-        const unsub = onSnapshot(collection(db, 'match_prep'), (snap) => {
+        const unsub = onSnapshot(query(collection(db, 'match_prep'), where('teamId', '==', teamId)), (snap) => {
             const rows = [];
             snap.forEach(d => rows.push({ id: d.id, ...d.data() }));
             setPreps(rows.sort((a, b) => new Date(b.updatedAt || b.createdAt || 0) - new Date(a.updatedAt || a.createdAt || 0)));
         });
         return () => unsub();
-    }, []);
+    }, [teamId]);
 
     useEffect(() => {
-        const unsubStrats = onSnapshot(collection(db, 'strats'), (snap) => {
+        const unsubStrats = onSnapshot(query(collection(db, 'strats'), where('teamId', '==', teamId)), (snap) => {
             const rows = [];
             snap.forEach(d => rows.push({ id: d.id, kind: 'app', title: d.data().name || d.data().title || 'Untitled strategy', ...d.data() }));
             setAppStrats(rows);
         });
-        const unsubExternal = onSnapshot(collection(db, 'external_strats'), (snap) => {
+        const unsubExternal = onSnapshot(query(collection(db, 'external_strats'), where('teamId', '==', teamId)), (snap) => {
             const rows = [];
             snap.forEach(d => rows.push({ id: d.id, kind: 'external', title: d.data().title || 'Uploaded plan', ...d.data() }));
             setExternalStrats(rows);
         });
         return () => { unsubStrats(); unsubExternal(); };
-    }, []);
+    }, [teamId]);
 
     const selectedEvent = events.find(event => event.id === form.eventId);
     useEffect(() => {
@@ -4325,6 +4300,7 @@ function MatchPrep({ members, events, currentUserName }) {
             await addDoc(collection(db, 'match_prep'), {
                 ...form,
                 opponent: form.opponent.trim(),
+                teamId,
                 createdAt: new Date().toISOString(),
                 updatedAt: new Date().toISOString(),
                 createdBy: currentUserName || 'Unknown'
@@ -4460,7 +4436,7 @@ function MatchPrep({ members, events, currentUserName }) {
     );
 }
 
-function CoachRoom({ members, currentUserName }) {
+function CoachRoom({ members, currentUserName, teamId = DEFAULT_TEAM_ID }) {
     const [plans, setPlans] = useState([]);
     const [saving, setSaving] = useState(false);
     const [form, setForm] = useState({
@@ -4483,13 +4459,13 @@ function CoachRoom({ members, currentUserName }) {
     const addToast = useToast();
 
     useEffect(() => {
-        const unsub = onSnapshot(collection(db, 'coach_practice_plans'), (snap) => {
+        const unsub = onSnapshot(query(collection(db, 'coach_practice_plans'), where('teamId', '==', teamId)), (snap) => {
             const rows = [];
             snap.forEach(d => rows.push({ id: d.id, ...d.data() }));
             setPlans(rows.sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0)));
         });
         return () => unsub();
-    }, []);
+    }, [teamId]);
 
     useEffect(() => {
         if (!form.player && members.length) setForm(prev => ({ ...prev, player: members[0] }));
@@ -4503,6 +4479,7 @@ function CoachRoom({ members, currentUserName }) {
             await addDoc(collection(db, 'coach_practice_plans'), {
                 ...form,
                 title: form.title.trim(),
+                teamId,
                 createdAt: new Date().toISOString(),
                 updatedAt: new Date().toISOString(),
                 createdBy: currentUserName || 'Coach'
@@ -4679,11 +4656,11 @@ function TeamBulletinBoard({ currentUserName, currentUserUid, isAdmin, teamId = 
     }), []);
 
     useEffect(() => {
-        const unsub = onSnapshot(collection(db, 'team_bulletins'), (snap) => {
+        const unsub = onSnapshot(query(collection(db, 'team_bulletins'), where('teamId', '==', teamId)), (snap) => {
             const rows = [];
             snap.forEach(d => {
                 const data = { id: d.id, ...d.data() };
-                if (teamMatches(data, teamId)) rows.push(normalizePost(data));
+                rows.push(normalizePost(data));
             });
             setPosts(rows.sort((a, b) => {
                 const statusWeight = (item) => item.status === 'Open' ? 0 : item.status === 'Reviewing' ? 1 : item.status === 'Done' ? 2 : 3;
@@ -5144,7 +5121,7 @@ function RoleHome({ type, members, events, requests, openTaskCount, availableTod
     );
 }
 
-function PlayerProfile({ members, currentMemberName, displayAvail, events, requests, isStaff }) {
+function PlayerProfile({ members, currentMemberName, displayAvail, events, requests, isStaff, teamId = DEFAULT_TEAM_ID }) {
     const [profiles, setProfiles] = useState([]);
     const [selected, setSelected] = useState(currentMemberName);
     const [publicNotes, setPublicNotes] = useState([]);
@@ -5159,13 +5136,13 @@ function PlayerProfile({ members, currentMemberName, displayAvail, events, reque
             snap.forEach(d => rows.push({ id: d.id, ...d.data() }));
             setProfiles(sortRosterByRole(rows));
         });
-        const unsubNotes = onSnapshot(collection(db, 'admin_player_notes'), (snap) => {
+        const unsubNotes = onSnapshot(query(collection(db, 'admin_player_notes'), where('teamId', '==', teamId)), (snap) => {
             const rows = [];
             snap.forEach(d => rows.push({ id: d.id, ...d.data() }));
             setPublicNotes(rows.filter(note => note.visibleToPlayer === true));
         }, () => setPublicNotes([]));
         return () => { unsubRoster(); unsubNotes(); };
-    }, []);
+    }, [teamId]);
 
     const profile = profiles.find(item => item.id === selected) || { id: selected };
     const profileEvents = events.filter(event => !event.players || event.players?.includes(selected)).slice(0, 5);
@@ -5248,20 +5225,20 @@ function PlayerProfile({ members, currentMemberName, displayAvail, events, reque
     );
 }
 
-function PracticeReview({ members, currentUserName }) {
+function PracticeReview({ members, currentUserName, teamId = DEFAULT_TEAM_ID }) {
     const [reviews, setReviews] = useState([]);
     const [saving, setSaving] = useState(false);
     const [form, setForm] = useState({ title: '', date: new Date().toISOString().split('T')[0], map: MAPS[0], rating: '7', attendees: [], happened: '', improved: '', needsWork: '', nextFocus: '', vod: '' });
     const addToast = useToast();
 
     useEffect(() => {
-        const unsub = onSnapshot(collection(db, 'practice_reviews'), (snap) => {
+        const unsub = onSnapshot(query(collection(db, 'practice_reviews'), where('teamId', '==', teamId)), (snap) => {
             const rows = [];
             snap.forEach(d => rows.push({ id: d.id, ...d.data() }));
             setReviews(rows.sort((a, b) => new Date(b.date || b.createdAt || 0) - new Date(a.date || a.createdAt || 0)));
         });
         return () => unsub();
-    }, []);
+    }, [teamId]);
 
     const toggleAttendee = (member) => setForm(prev => ({ ...prev, attendees: prev.attendees.includes(member) ? prev.attendees.filter(name => name !== member) : [...prev.attendees, member] }));
     const saveReview = async () => {
@@ -5271,6 +5248,7 @@ function PracticeReview({ members, currentUserName }) {
             await addDoc(collection(db, 'practice_reviews'), {
                 ...form,
                 title: form.title.trim(),
+                teamId,
                 rating: Number(form.rating) || 0,
                 createdBy: currentUserName || 'Coach',
                 createdAt: new Date().toISOString(),
@@ -5341,7 +5319,7 @@ function PracticeReview({ members, currentUserName }) {
     );
 }
 
-function PlayerGoals({ members, currentUserName, currentUserUid, isStaff }) {
+function PlayerGoals({ members, currentUserName, currentUserUid, isStaff, teamId = DEFAULT_TEAM_ID }) {
     const [goals, setGoals] = useState([]);
     const [filter, setFilter] = useState(isStaff ? 'All' : currentUserName);
     const [saving, setSaving] = useState(false);
@@ -5357,7 +5335,7 @@ function PlayerGoals({ members, currentUserName, currentUserUid, isStaff }) {
     const addToast = useToast();
 
     useEffect(() => {
-        const unsub = onSnapshot(collection(db, 'player_goals'), (snap) => {
+        const unsub = onSnapshot(query(collection(db, 'player_goals'), where('teamId', '==', teamId)), (snap) => {
             const rows = [];
             snap.forEach(d => rows.push({ id: d.id, ...d.data() }));
             setGoals(rows.sort((a, b) => {
@@ -5366,7 +5344,7 @@ function PlayerGoals({ members, currentUserName, currentUserUid, isStaff }) {
             }));
         });
         return () => unsub();
-    }, []);
+    }, [teamId]);
 
     useEffect(() => {
         if (!isStaff) {
@@ -5390,6 +5368,7 @@ function PlayerGoals({ members, currentUserName, currentUserUid, isStaff }) {
             await addDoc(collection(db, 'player_goals'), {
                 ...form,
                 title: form.title.trim(),
+                teamId,
                 target: form.target.trim(),
                 progress: Number(form.progress) || 0,
                 status: 'Active',
@@ -5511,7 +5490,7 @@ function PlayerGoals({ members, currentUserName, currentUserUid, isStaff }) {
     );
 }
 
-function ScrimPipeline({ currentUserName }) {
+function ScrimPipeline({ currentUserName, teamId = DEFAULT_TEAM_ID }) {
     const stages = ['Requested', 'Contacted', 'Confirmed', 'Completed', 'Reviewed'];
     const [items, setItems] = useState([]);
     const [form, setForm] = useState({ opponent: '', date: '', time: '', map: 'TBD', contact: '', notes: '' });
@@ -5519,19 +5498,19 @@ function ScrimPipeline({ currentUserName }) {
     const addToast = useToast();
 
     useEffect(() => {
-        const unsub = onSnapshot(collection(db, 'scrim_pipeline'), (snap) => {
+        const unsub = onSnapshot(query(collection(db, 'scrim_pipeline'), where('teamId', '==', teamId)), (snap) => {
             const rows = [];
             snap.forEach(d => rows.push({ id: d.id, ...d.data() }));
             setItems(rows.sort((a, b) => new Date(a.date || '2999-12-31') - new Date(b.date || '2999-12-31')));
         });
         return () => unsub();
-    }, []);
+    }, [teamId]);
 
     const createLead = async () => {
         if (!form.opponent.trim()) return addToast('Opponent is required', 'error');
         setSaving(true);
         try {
-            await addDoc(collection(db, 'scrim_pipeline'), { ...form, opponent: form.opponent.trim(), stage: 'Requested', createdBy: currentUserName || 'Staff', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() });
+            await addDoc(collection(db, 'scrim_pipeline'), { ...form, teamId, opponent: form.opponent.trim(), stage: 'Requested', createdBy: currentUserName || 'Staff', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() });
             await writeAuditLog('Scrim lead added', form.opponent.trim(), currentUserName || 'Staff');
             setForm({ opponent: '', date: '', time: '', map: 'TBD', contact: '', notes: '' });
             addToast('Scrim lead added');
@@ -5739,20 +5718,20 @@ function ArchiveHistory({ isStaff, isAdmin }) {
     );
 }
 
-function Announcements({ currentUserName }) {
+function Announcements({ currentUserName, teamId = DEFAULT_TEAM_ID }) {
     const [announcements, setAnnouncements] = useState([]);
     const [form, setForm] = useState({ title: '', body: '', level: 'Team', pinned: false });
     const [saving, setSaving] = useState(false);
     const addToast = useToast();
 
     useEffect(() => {
-        const unsub = onSnapshot(collection(db, 'announcements'), (snap) => {
+        const unsub = onSnapshot(query(collection(db, 'announcements'), where('teamId', '==', teamId)), (snap) => {
             const rows = [];
             snap.forEach(d => rows.push({ id: d.id, ...d.data() }));
             setAnnouncements(rows.sort((a, b) => Number(Boolean(b.pinned)) - Number(Boolean(a.pinned)) || new Date(b.createdAt || 0) - new Date(a.createdAt || 0)));
         });
         return () => unsub();
-    }, []);
+    }, [teamId]);
 
     const postAnnouncement = async () => {
         if (!form.title.trim() || !form.body.trim()) return addToast('Title and message are required', 'error');
@@ -5762,6 +5741,7 @@ function Announcements({ currentUserName }) {
                 ...form,
                 title: form.title.trim(),
                 body: form.body.trim(),
+                teamId,
                 author: currentUserName || 'Unknown',
                 createdAt: new Date().toISOString()
             });
@@ -5822,23 +5802,23 @@ function Announcements({ currentUserName }) {
     );
 }
 
-function NotificationCenter({ events, requests = [], setActiveTab }) {
+function NotificationCenter({ events, requests = [], setActiveTab, teamId = DEFAULT_TEAM_ID }) {
     const [tasks, setTasks] = useState([]);
     const [announcements, setAnnouncements] = useState([]);
 
     useEffect(() => {
-        const unsubTasks = onSnapshot(collection(db, 'tasks'), (snap) => {
+        const unsubTasks = onSnapshot(query(collection(db, 'tasks'), where('teamId', '==', teamId)), (snap) => {
             const rows = [];
             snap.forEach(d => rows.push({ id: d.id, ...d.data() }));
             setTasks(rows);
         });
-        const unsubAnnouncements = onSnapshot(collection(db, 'announcements'), (snap) => {
+        const unsubAnnouncements = onSnapshot(query(collection(db, 'announcements'), where('teamId', '==', teamId)), (snap) => {
             const rows = [];
             snap.forEach(d => rows.push({ id: d.id, ...d.data() }));
             setAnnouncements(rows);
         });
         return () => { unsubTasks(); unsubAnnouncements(); };
-    }, []);
+    }, [teamId]);
 
     const now = Date.now();
     const upcomingEvents = events.filter(event => event.date && new Date(`${event.date}T${event.time || '00:00'}`).getTime() <= now + 1000 * 60 * 60 * 24 * 7);
@@ -5887,7 +5867,7 @@ function NotificationCenter({ events, requests = [], setActiveTab }) {
     );
 }
 
-function PlayerAdminNotes({ members, currentUserName }) {
+function PlayerAdminNotes({ members, currentUserName, teamId = DEFAULT_TEAM_ID }) {
     const [notes, setNotes] = useState([]);
     const [form, setForm] = useState({
         player: members[0] || '',
@@ -5908,13 +5888,13 @@ function PlayerAdminNotes({ members, currentUserName }) {
     }, [form.player, members]);
 
     useEffect(() => {
-        const unsub = onSnapshot(collection(db, 'admin_player_notes'), (snap) => {
+        const unsub = onSnapshot(query(collection(db, 'admin_player_notes'), where('teamId', '==', teamId)), (snap) => {
             const rows = [];
             snap.forEach(d => rows.push({ id: d.id, ...d.data() }));
             setNotes(rows.sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0)));
         });
         return () => unsub();
-    }, []);
+    }, [teamId]);
 
     const selectedNotes = notes.filter(note => note.player === form.player);
     const averageRating = selectedNotes.length
@@ -5933,6 +5913,7 @@ function PlayerAdminNotes({ members, currentUserName }) {
         try {
             await addDoc(collection(db, 'admin_player_notes'), {
                 player: form.player,
+                teamId,
                 rating,
                 playstyle: form.playstyle.trim(),
                 comms: form.comms.trim(),
@@ -6892,7 +6873,7 @@ function ContentManager() {
     );
 }
 
-function LoginScreen({ signIn, onBack }) {
+function LoginScreen({ signInWithDiscord, signInWithGoogle, onBack }) {
     return (
         <div className="fixed inset-0 bg-black text-white overflow-y-auto flex items-center justify-center p-6">
             <Background />
@@ -6900,8 +6881,11 @@ function LoginScreen({ signIn, onBack }) {
             <div className="relative z-10 w-full max-w-md glass-panel rounded-xl border border-red-900/30 p-8 text-center">
                 <TeamLogo className="mx-auto mb-5 h-20 w-20 rounded-sm border-white/15 shadow-2xl shadow-red-950/40" />
                 <div className="text-5xl font-black italic tracking-tighter mb-2">SYRIX</div>
-                <p className="text-neutral-400 text-sm mb-8">Sign in with Discord to access the team hub.</p>
-                <ButtonPrimary onClick={signIn} className="w-full">Sign In With Discord</ButtonPrimary>
+                <p className="text-neutral-400 text-sm mb-8">Sign in with Discord or Gmail to access the team hub.</p>
+                <div className="space-y-3">
+                    <ButtonPrimary onClick={signInWithDiscord} className="w-full">Sign In With Discord</ButtonPrimary>
+                    <ButtonSecondary onClick={signInWithGoogle} className="w-full py-3">Sign In With Gmail</ButtonSecondary>
+                </div>
             </div>
         </div>
     );
@@ -7070,7 +7054,8 @@ function SyrixDashboard({ onBack }) {
     const [activeTeamId, setActiveTeamId] = useState(() => window.localStorage?.getItem('syrix-active-team') || DEFAULT_TEAM_ID);
 
     useEffect(() => { return onAuthStateChanged(auth, user => { setCurrentUser(user); setAuthLoading(false); }); }, []);
-    const signIn = async () => { try { await signInWithPopup(auth, new OAuthProvider('oidc.discord')); } catch (e) { console.error(e); } };
+    const signInWithDiscord = async () => { try { await signInWithPopup(auth, new OAuthProvider('oidc.discord')); } catch (e) { console.error(e); } };
+    const signInWithGoogle = async () => { try { await signInWithPopup(auth, new GoogleAuthProvider()); } catch (e) { console.error(e); } };
     const handleSignOut = async () => await signOut(auth);
     const dbAdminRole = adminAccess?.active === false ? '' : adminAccess?.role;
     const isRosterManager = ADMIN_ROLES.includes(currentUserRole);
@@ -7138,21 +7123,21 @@ function SyrixDashboard({ onBack }) {
         });
 
         // Listener 2: Get Availabilities (Existing logic)
-        const unsub2 = onSnapshot(collection(db, 'availabilities'), (s) => {
+        const unsub2 = onSnapshot(query(collection(db, 'availabilities'), where('teamId', '==', activeTeamId)), (s) => {
             const d = {};
             s.forEach(doc => {
                 const data = doc.data();
-                if (teamMatches(data, activeTeamId)) d[doc.id] = normalizeAvailabilitySlots(data);
+                d[doc.id] = normalizeAvailabilitySlots(data);
             });
             setAvailabilities(d);
         });
 
         // Listener 3: Get Events (Existing logic)
-        const unsub3 = onSnapshot(collection(db, 'events'), (s) => {
+        const unsub3 = onSnapshot(query(collection(db, 'events'), where('teamId', '==', activeTeamId)), (s) => {
             const e = [];
             s.forEach(d => {
                 const data = { id: d.id, ...d.data() };
-                if (teamMatches(data, activeTeamId)) e.push(data);
+                e.push(data);
             });
             setAllEvents(e);
 
@@ -7169,17 +7154,15 @@ function SyrixDashboard({ onBack }) {
 
         // --- NEW LISTENER 4: FETCH ALL ROSTER NAMES ---
         // This ensures members show up even if they haven't set availability yet
-        const unsub4 = onSnapshot(collection(db, 'roster'), (s) => {
+        const unsub4 = onSnapshot(query(collection(db, 'roster'), where('teamId', '==', activeTeamId)), (s) => {
             const names = [];
-            s.forEach(doc => {
-                if (teamMatches(doc.data(), activeTeamId)) names.push(doc.id);
-            });
+            s.forEach(doc => names.push(doc.id));
             setAllRosterNames(names);
         });
 
-        const unsub5 = onSnapshot(collection(db, 'tasks'), (s) => {
+        const unsub5 = onSnapshot(query(collection(db, 'tasks'), where('teamId', '==', activeTeamId)), (s) => {
             let count = 0;
-            s.forEach(task => { if (teamMatches(task.data(), activeTeamId) && !task.data().done) count += 1; });
+            s.forEach(task => { if (!task.data().done) count += 1; });
             setOpenTaskCount(count);
         });
 
@@ -7193,11 +7176,11 @@ function SyrixDashboard({ onBack }) {
             authorUid: request.authorUid || request.uid || ''
         });
 
-        const unsub6 = onSnapshot(collection(db, 'team_requests'), (s) => {
+        const unsub6 = onSnapshot(query(collection(db, 'team_requests'), where('teamId', '==', activeTeamId)), (s) => {
             const requests = [];
             s.forEach(requestDoc => {
                 const data = { id: requestDoc.id, ...requestDoc.data() };
-                if (teamMatches(data, activeTeamId)) requests.push(normalizeDashboardRequest(data));
+                requests.push(normalizeDashboardRequest(data));
             });
             setTeamRequests(requests);
         });
@@ -7317,7 +7300,7 @@ function SyrixDashboard({ onBack }) {
     if (authLoading) return <div className="fixed inset-0 bg-black flex items-center justify-center"><div className="w-8 h-8 border-4 border-red-600 border-t-transparent rounded-full animate-spin"></div></div>;
 
     // If not logged in, show Login Screen
-    if (!currentUser) return <LoginScreen signIn={signIn} onBack={onBack} />;
+    if (!currentUser) return <LoginScreen signInWithDiscord={signInWithDiscord} signInWithGoogle={signInWithGoogle} onBack={onBack} />;
 
     // If logged in but not a member, show Application
     if (!isMember) return (
@@ -7640,19 +7623,19 @@ function SyrixDashboard({ onBack }) {
                     {activeTab === 'access' && <AccessRolesGuide accessLabel={accessLabel} />}
                     {activeTab === 'managerhome' && isAdmin && <RoleHome type="manager" members={dynamicMembers} events={events} requests={visibleRequestItems} openTaskCount={openTaskCount} availableToday={availableToday} setActiveTab={setActiveTab} />}
                     {activeTab === 'coachhome' && isStaff && <RoleHome type="coach" members={dynamicMembers} events={events} requests={visibleRequestItems} openTaskCount={openTaskCount} availableToday={availableToday} setActiveTab={setActiveTab} />}
-                    {activeTab === 'profile' && <PlayerProfile members={dynamicMembers} currentMemberName={currentMemberName} displayAvail={displayAvail} events={events} requests={visibleRequestItems} isStaff={isStaff} />}
-                    {activeTab === 'goals' && <PlayerGoals members={dynamicMembers} currentUserName={currentMemberName} currentUserUid={currentUser.uid} isStaff={isStaff} />}
+                    {activeTab === 'profile' && <PlayerProfile members={dynamicMembers} currentMemberName={currentMemberName} displayAvail={displayAvail} events={events} requests={visibleRequestItems} isStaff={isStaff} teamId={activeTeamId} />}
+                    {activeTab === 'goals' && <PlayerGoals members={dynamicMembers} currentUserName={currentMemberName} currentUserUid={currentUser.uid} isStaff={isStaff} teamId={activeTeamId} />}
                     {activeTab === 'calendar' && <TeamCalendar events={events} currentUserName={currentMemberName} currentUserUid={currentUser.uid} isStaff={isStaff} />}
                     {activeTab === 'bulletins' && <TeamBulletinBoard currentUserName={rosterName || currentUser.displayName || 'Unknown'} currentUserUid={currentUser.uid} isAdmin={isAdmin} teamId={activeTeamId} />}
-                    {activeTab === 'notifications' && <NotificationCenter events={events} requests={visibleRequestItems} setActiveTab={setActiveTab} />}
-                    {activeTab === 'announcements' && isAdmin && <Announcements currentUserName={rosterName || currentUser.displayName || 'Unknown'} />}
+                    {activeTab === 'notifications' && <NotificationCenter events={events} requests={visibleRequestItems} setActiveTab={setActiveTab} teamId={activeTeamId} />}
+                    {activeTab === 'announcements' && isAdmin && <Announcements currentUserName={rosterName || currentUser.displayName || 'Unknown'} teamId={activeTeamId} />}
                     {activeTab === 'teamrequests' && <TeamRequestCenter mode="team" members={dynamicMembers} currentUserName={currentMemberName} currentUserUid={currentUser.uid} isStaff={isStaff} teamId={activeTeamId} />}
                     {activeTab === 'coachrequests' && <TeamRequestCenter mode="coach" members={dynamicMembers} currentUserName={currentMemberName} currentUserUid={currentUser.uid} isStaff={isStaff} teamId={activeTeamId} />}
                     {activeTab === 'meetings' && <TeamRequestCenter mode="meetings" members={dynamicMembers} currentUserName={currentMemberName} currentUserUid={currentUser.uid} isStaff={isStaff} teamId={activeTeamId} />}
                     {activeTab === 'availability' && <div className="animate-fade-in space-y-6"><div className="grid grid-cols-1 xl:grid-cols-[0.7fr_1.3fr] gap-6"><div className="space-y-6"><Card className="border-red-900/20"><div className="absolute top-0 left-0 w-1 h-full bg-red-600/50"></div><div className="text-[10px] uppercase tracking-[0.28em] text-red-400 font-black mb-3">Your Week</div><h2 className="text-2xl font-black text-white uppercase italic mb-5">Availability Editor</h2><div className="space-y-4"><div><label className="text-[10px] font-black text-red-500 uppercase mb-1 block">Day</label><Select value={day} onChange={e => setDay(e.target.value)}>{DAYS.map(d => <option key={d} value={d}>{d}</option>)}</Select><div className="mt-2 text-[11px] text-neutral-500">Editing availability for <span className="text-neutral-300 font-bold">{currentMemberName}</span> in <span className="text-neutral-300 font-bold">{userTimezone}</span>.</div></div><div className="grid grid-cols-2 gap-3"><div><label className="text-[10px] font-black text-red-500 uppercase mb-1 block">Start</label><Input type="time" value={start} onChange={e => setStart(e.target.value)} className="[color-scheme:dark]" /></div><div><label className="text-[10px] font-black text-red-500 uppercase mb-1 block">End</label><Input type="time" value={end} onChange={e => setEnd(e.target.value)} className="[color-scheme:dark]" /></div></div><div><label className="text-[10px] font-black text-red-500 uppercase mb-1 block">Pref. Role</label><div className="flex gap-2 overflow-x-auto pb-2 scrollbar-hide">{ROLES.map(r => (<button key={r} onClick={() => setRole(r)} className={`px-3 py-2 rounded-lg text-xs font-black border transition-all whitespace-nowrap flex items-center justify-center ${role === r ? 'bg-red-600 text-white border-red-500' : 'bg-black/50 border-neutral-800 text-neutral-500 hover:text-white'}`}>{ROLE_ABBREVIATIONS[r] || r}</button>))}</div></div><div className="pt-2 flex gap-2"><ButtonPrimary onClick={saveAvail} disabled={saveStatus !== 'idle'} className="flex-1">{saveStatus === 'idle' ? 'Save Slot' : 'Saving...'}</ButtonPrimary><ButtonSecondary onClick={() => openModal('Clear Day', `Clear all for ${day}?`, clearDay)}>Clear</ButtonSecondary></div></div></Card><LeaveLogger members={dynamicMembers} rosterName={rosterName} /></div><div className="space-y-6"><div className="grid grid-cols-1 xl:grid-cols-2 gap-6"><Card><h2 className="text-lg font-bold text-white mb-4 uppercase tracking-wide">Team Heatmap</h2><AvailabilityHeatmap availabilities={displayAvail} members={dynamicMembers} /></Card><Card><div className="text-[10px] uppercase tracking-[0.28em] text-neutral-500 font-black mb-3">Today</div><div className="text-4xl font-black text-white">{availableToday}/{dynamicMembers.length}</div><div className="mt-2 text-sm text-neutral-400">members have availability logged for {todayName}.</div><div className="mt-5 pt-4 border-t border-white/10 text-xs text-neutral-500">Keep this current before scrims so captains can plan realistic blocks.</div></Card></div><Card><h2 className="text-xl font-bold text-white mb-6 uppercase tracking-wide">Weekly Timeline <span className="text-neutral-500 text-sm normal-case">({userTimezone})</span></h2><div className="overflow-x-auto scrollbar-thin scrollbar-thumb-neutral-700"><table className="w-full text-left border-collapse min-w-[600px]"><thead><tr className="border-b border-neutral-800"><th className="p-3 text-xs font-bold text-neutral-500 uppercase tracking-wider w-32">Team Member</th>{SHORT_DAYS.map(day => (<th key={day} className="p-3 text-xs font-bold text-red-600 uppercase tracking-wider text-center border-l border-neutral-800">{day}</th>))}</tr></thead><tbody className="divide-y divide-neutral-800/50">{dynamicMembers.map(member => (<tr key={member} className="hover:bg-neutral-800/30 transition-colors group"><td className="p-4 font-bold text-white text-sm flex items-center gap-2"><div className="w-2 h-2 rounded-full bg-red-500 shadow-red-500/50 shadow-sm"></div>{member}</td>{DAYS.map((day) => { const slots = (displayAvail[member] || []).filter(s => s.day === day); return (<td key={day} className="p-2 align-middle border-l border-neutral-800/50"><div className="flex flex-col gap-1 items-center justify-center">{slots.length > 0 ? slots.map((s, i) => (<div key={i} className="bg-gradient-to-br from-red-600 to-red-700 text-white text-[10px] font-bold px-2 py-1 rounded w-full text-center shadow-md whitespace-nowrap flex items-center justify-center gap-1">{s.start}-{s.end}<span className="opacity-75 ml-1 text-[9px] border border-white/20 px-1 rounded bg-black/20">{ROLE_ABBREVIATIONS[s.role] || s.role}</span></div>)) : <div className="h-1 w-4 bg-neutral-800 rounded-full"></div>}</div></td>); })}</tr>))}</tbody></table></div></Card></div></div></div>}
-                    {activeTab === 'coachroom' && isStaff && <CoachRoom members={dynamicMembers} currentUserName={rosterName || currentUser.displayName || 'Coach'} />}
-                    {activeTab === 'practice' && isStaff && <PracticePlanner members={dynamicMembers} currentUserName={rosterName || currentUser.displayName || 'Unknown'} />}
-                    {activeTab === 'reviews' && isStaff && <PracticeReview members={dynamicMembers} currentUserName={rosterName || currentUser.displayName || 'Coach'} />}
+                    {activeTab === 'coachroom' && isStaff && <CoachRoom members={dynamicMembers} currentUserName={rosterName || currentUser.displayName || 'Coach'} teamId={activeTeamId} />}
+                    {activeTab === 'practice' && isStaff && <PracticePlanner members={dynamicMembers} currentUserName={rosterName || currentUser.displayName || 'Unknown'} teamId={activeTeamId} />}
+                    {activeTab === 'reviews' && isStaff && <PracticeReview members={dynamicMembers} currentUserName={rosterName || currentUser.displayName || 'Coach'} teamId={activeTeamId} />}
                     {activeTab === 'playbook' && <div className="animate-fade-in h-[80vh]"><Playbook teamId={activeTeamId} /></div>}
                     {activeTab === 'comps' && <div className="animate-fade-in h-full"><TeamComps members={dynamicMembers} teamId={activeTeamId} /></div>}
                     {activeTab === 'matches' && <div className="animate-fade-in"><MatchHistory currentUser={currentUser} members={dynamicMembers} teamId={activeTeamId} /></div>}
@@ -7660,10 +7643,10 @@ function SyrixDashboard({ onBack }) {
                     {activeTab === 'stratlibrary' && <StratLibrary teamId={activeTeamId} />}
                     {activeTab === 'lineups' && <div className="animate-fade-in h-[85vh]"><LineupLibrary teamId={activeTeamId} /></div>}
                     {activeTab === 'roster' && isAdmin && <div className="animate-fade-in h-full flex-1 flex flex-col"><RosterManager members={dynamicMembers} events={events} canManageRoster={isAdmin} canRemoveHubAccess={canSwitchPortals} teamId={activeTeamId} teams={teams} /></div>}
-                    {activeTab === 'prep' && isStaff && <MatchPrep members={dynamicMembers} events={events} currentUserName={rosterName || currentUser.displayName || 'Unknown'} />}
-                    {activeTab === 'pipeline' && isStaff && <ScrimPipeline currentUserName={rosterName || currentUser.displayName || 'Staff'} />}
+                    {activeTab === 'prep' && isStaff && <MatchPrep members={dynamicMembers} events={events} currentUserName={rosterName || currentUser.displayName || 'Unknown'} teamId={activeTeamId} />}
+                    {activeTab === 'pipeline' && isStaff && <ScrimPipeline currentUserName={rosterName || currentUser.displayName || 'Staff'} teamId={activeTeamId} />}
                     {activeTab === 'tasks' && <ActionItems members={dynamicMembers} teamId={activeTeamId} />}
-                    {activeTab === 'playernotes' && isAdmin && <PlayerAdminNotes members={dynamicMembers} currentUserName={rosterName || currentUser.displayName || 'Admin'} />}
+                    {activeTab === 'playernotes' && isAdmin && <PlayerAdminNotes members={dynamicMembers} currentUserName={rosterName || currentUser.displayName || 'Admin'} teamId={activeTeamId} />}
                     {activeTab === 'partners' && isAdmin && <div className="animate-fade-in h-full"><PartnerDirectory /></div>}
                     {activeTab === 'content' && isAdmin && <div className="animate-fade-in h-full"><ContentManager /></div>}
                     {activeTab === 'audit' && isAdmin && <AuditLog />}

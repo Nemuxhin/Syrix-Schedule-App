@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react';
-import { addDoc, collection, deleteDoc, doc, onSnapshot, setDoc, updateDoc } from 'firebase/firestore';
+import { addDoc, collection, deleteDoc, doc, onSnapshot, query, setDoc, updateDoc, where } from 'firebase/firestore';
 import { DEFAULT_TEAM_ID, STAFF_ACCESS_ROLES, MAPS, timezones } from '../../lib/constants';
 import { db } from '../../lib/firebase';
-import { safeDocId, syncTeamMember, teamMatches, writeAuditLog } from '../../lib/utils';
+import { safeDocId, syncTeamMember, writeAuditLog } from '../../lib/utils';
 import { ButtonPrimary, ButtonSecondary, Card, Input, Select } from '../shared';
 import { useToast } from '../../hooks/useToast';
 
@@ -24,11 +24,11 @@ export const AdminPanel = ({ activeTeam, teams = [], onSelectTeam, onCreateTeam 
     const addToast = useToast();
 
     useEffect(() => {
-        const unsub = onSnapshot(collection(db, 'applications'), (snap) => {
+        const unsub = onSnapshot(query(collection(db, 'applications'), where('teamId', '==', activeTeamId)), (snap) => {
             const rows = [];
             snap.forEach(d => {
                 const data = { id: d.id, ...d.data() };
-                if (teamMatches(data, activeTeamId)) rows.push(data);
+                rows.push(data);
             });
             setApplications(rows.sort((a, b) => new Date(b.submittedAt || 0) - new Date(a.submittedAt || 0)));
         });
