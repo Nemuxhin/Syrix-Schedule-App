@@ -984,11 +984,12 @@ function AvailabilityHeatmap({ availabilities, members }) {
     return (<div className="overflow-x-auto rounded-xl border border-neutral-800 bg-black/50 shadow-inner"><div className="min-w-[600px]"><div className="flex border-b border-neutral-800"><div className="w-24 bg-black/50 sticky left-0 p-2 text-xs font-bold text-red-500 border-r border-neutral-800">DAY</div>{Array.from({ length: 24 }).map((_, i) => <div key={i} className="flex-1 text-[10px] text-center text-neutral-500 py-1 border-l border-neutral-800">{i}</div>)}</div>{DAYS.map(day => <div key={day} className="flex border-b border-neutral-800/50"><div className="w-24 bg-black/50 sticky left-0 p-2 text-xs font-bold text-neutral-400 border-r border-neutral-800">{day.substring(0, 3).toUpperCase()}</div>{data[day]?.map((c, i) => <div key={i} className="flex-1 h-8 border-l border-neutral-800/30 relative group bg-red-600" style={{ opacity: c > 0 ? (c / members.length) * 0.9 + 0.1 : 0 }}>{c > 0 && <span className="absolute inset-0 flex items-center justify-center text-[10px] font-bold text-white opacity-0 group-hover:opacity-100">{c}</span>}</div>)}</div>)}</div></div>);
 }
 
-function ApplicationForm({ currentUser, teams = mergeDefaultTeams([]), activeTeamId = DEFAULT_TEAM_ID }) {
+function ApplicationForm({ currentUser, teams = mergeDefaultTeams([]), activeTeamId = DEFAULT_TEAM_ID, onSignOut }) {
     // added 'ign' (In-Game Name) to state
     const [form, setForm] = useState({ ign: '', rank: 'Unranked', role: 'Flex', exp: '', why: '' });
     const [applicationTeamId, setApplicationTeamId] = useState(activeTeamId);
     const [status, setStatus] = useState('idle');
+    const [pendingApplicationId, setPendingApplicationId] = useState('');
     const addToast = useToast();
 
     // Check if user already applied
@@ -998,11 +999,31 @@ function ApplicationForm({ currentUser, teams = mergeDefaultTeams([]), activeTea
             const q = query(collection(db, 'applications'), where("uid", "==", currentUser.uid));
             try {
                 const snap = await getDocs(q);
-                if (snap.docs.some(item => teamMatches(item.data(), applicationTeamId))) setStatus('already_applied');
+                const existingApp = snap.docs.find(item => teamMatches(item.data(), applicationTeamId));
+                if (existingApp) {
+                    setPendingApplicationId(existingApp.id);
+                    setStatus('already_applied');
+                } else if (status === 'already_applied') {
+                    setPendingApplicationId('');
+                    setStatus('idle');
+                }
             } catch (e) { console.error("Auth check error", e); }
         };
         checkExisting();
-    }, [currentUser, applicationTeamId]);
+    }, [currentUser, applicationTeamId, status]);
+
+    const withdrawApplication = async () => {
+        if (!pendingApplicationId) return;
+        try {
+            await deleteDoc(doc(db, 'applications', pendingApplicationId));
+            setPendingApplicationId('');
+            setStatus('idle');
+            addToast('Application withdrawn');
+        } catch (error) {
+            console.error('Withdraw application failed:', error);
+            addToast('Unable to withdraw application', 'error');
+        }
+    };
 
     const submitApp = async () => {
         // Validation: Ensure IGN is filled
@@ -1033,8 +1054,23 @@ function ApplicationForm({ currentUser, teams = mergeDefaultTeams([]), activeTea
         }
     };
 
-    if (status === 'success') return <div className="h-full flex flex-col gap-4 items-center justify-center text-white text-2xl font-black">✅ APPLICATION SENT</div>;
-    if (status === 'already_applied') return <div className="h-full flex flex-col gap-4 items-center justify-center text-white text-2xl font-black">⏳ APPLICATION PENDING</div>;
+    if (status === 'success') return (
+        <div className="h-full flex flex-col gap-4 items-center justify-center text-white text-center">
+            <div className="text-2xl font-black">APPLICATION SENT</div>
+            <p className="text-sm text-neutral-400 max-w-md">A manager will review it from the admin panel. You can sign out and come back later with the same account.</p>
+            {onSignOut && <ButtonSecondary onClick={onSignOut} className="text-xs py-3 px-6">Sign Out</ButtonSecondary>}
+        </div>
+    );
+    if (status === 'already_applied') return (
+        <div className="h-full flex flex-col gap-4 items-center justify-center text-white text-center px-6">
+            <div className="text-2xl font-black">APPLICATION PENDING</div>
+            <p className="text-sm text-neutral-400 max-w-md">This account already has an application waiting for review. A manager needs to approve it, or you can withdraw it and apply again.</p>
+            <div className="flex flex-col sm:flex-row gap-3">
+                <ButtonSecondary onClick={withdrawApplication} className="text-xs py-3 px-6">Withdraw Application</ButtonSecondary>
+                {onSignOut && <ButtonPrimary onClick={onSignOut} className="text-xs py-3 px-6">Sign Out</ButtonPrimary>}
+            </div>
+        </div>
+    );
 
     return (
         <div className="bg-neutral-900/90 backdrop-blur-xl p-8 rounded-[2rem] border border-white/10 max-w-2xl mx-auto shadow-2xl">
@@ -7308,7 +7344,7 @@ function SyrixDashboard({ onBack }) {
             <div className="absolute top-4 left-4 z-50">
                 <button onClick={onBack} className="text-white font-bold uppercase hover:text-red-500 transition">&larr; Home</button>
             </div>
-            <div className="relative z-10 pt-12"><ApplicationForm currentUser={currentUser} teams={teams} activeTeamId={activeTeamId} /></div>
+            <div className="relative z-10 pt-12"><ApplicationForm currentUser={currentUser} teams={teams} activeTeamId={activeTeamId} onSignOut={handleSignOut} /></div>
         </div>
     );
 

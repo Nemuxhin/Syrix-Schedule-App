@@ -1,4 +1,10 @@
-export const ADMIN_UIDS = ["M9FzRywhRIdUveh5JKUfQgJtlIB3", "SiPLxB20VzVGBZL3rTM42FsgEy52", "pmXgTX5dxbVns0nnO54kl1BR07A3"];
+export const ADMIN_UIDS = [
+    "ouEH5sdcZKPsOnXx1UnVt4cpcgi1",
+    "SiPLxB20VzVGBZL3rTM42FsgEy52",
+    "pmXgTX5dxbVns0nnO54kl1BR07A3",
+    "lJU8T8l3jwZ33g1WKdBC4SiaIQ02",
+    "M9FzRywhRIdUveh5JKUfQgJtlIB3"
+];
 export const ADMIN_ROLES = ["Manager"];
 export const ADMIN_ACCESS_ROLES = ["Owner", "Admin", "Manager"];
 export const STAFF_ACCESS_ROLES = ["Owner", "Admin", "Manager", "Head Coach", "Coach"];
