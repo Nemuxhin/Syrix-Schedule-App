@@ -6240,6 +6240,11 @@ function RosterManager({ members, events, canManageRoster = false, canRemoveHubA
     }, [teams]);
 
     const rosterTeamId = useCallback((player = {}) => player.role === 'Manager' ? ORG_TEAM_ID : (player.teamId || DEFAULT_TEAM_ID), []);
+    const rosterErrorMessage = (error, fallback) => {
+        const code = error?.code || '';
+        if (code === 'permission-denied') return `${fallback}: permission denied. Publish the latest Firestore rules and make sure your UID is an Owner/Manager.`;
+        return `${fallback}${code ? ` (${code})` : ''}`;
+    };
 
     // Save Changes Handler
     const handleSave = async () => {
@@ -6266,18 +6271,23 @@ function RosterManager({ members, events, canManageRoster = false, canRemoveHubA
                     }, { merge: true });
                 }
             }
-            await syncTeamMember({
-                uid: rosterData[selectedMember]?.uid,
-                teamId: nextTeamId,
-                name: selectedMember,
-                role: ['Manager', 'Head Coach', 'Coach'].includes(role) ? role : 'Player',
-                rosterRole: role,
-                active: role !== 'Manager'
-            });
+            try {
+                await syncTeamMember({
+                    uid: rosterData[selectedMember]?.uid,
+                    teamId: nextTeamId,
+                    name: selectedMember,
+                    role: ['Manager', 'Head Coach', 'Coach'].includes(role) ? role : 'Player',
+                    rosterRole: role,
+                    active: role !== 'Manager'
+                });
+            } catch (syncError) {
+                console.error('Team member access sync failed:', syncError);
+                addToast('Roster saved, but access sync failed. Check owner/manager rules.', 'error');
+            }
             addToast('Player Updated Successfully');
         } catch (error) {
             console.error("Save failed:", error);
-            addToast("Error saving player", "error");
+            addToast(rosterErrorMessage(error, 'Error saving player'), "error");
         }
     };
 
@@ -6301,20 +6311,25 @@ function RosterManager({ members, events, canManageRoster = false, canRemoveHubA
                     movedAt: new Date().toISOString()
                 }, { merge: true });
             }
-            await syncTeamMember({
-                uid: rosterData[member]?.uid,
-                teamId: nextTeamId,
-                name: member,
-                role: ['Manager', 'Head Coach', 'Coach'].includes(rosterData[member]?.role) ? rosterData[member]?.role : 'Player',
-                rosterRole: rosterData[member]?.role || 'Player'
-            });
+            try {
+                await syncTeamMember({
+                    uid: rosterData[member]?.uid,
+                    teamId: nextTeamId,
+                    name: member,
+                    role: ['Manager', 'Head Coach', 'Coach'].includes(rosterData[member]?.role) ? rosterData[member]?.role : 'Player',
+                    rosterRole: rosterData[member]?.role || 'Player'
+                });
+            } catch (syncError) {
+                console.error('Team member access sync failed:', syncError);
+                addToast('Team changed, but access sync failed. Check owner/manager rules.', 'error');
+            }
 
             if (selectedMember === member) setAssignedTeamId(nextTeamId);
             await writeAuditLog(isLegacyTeamMissing ? 'Roster team normalized' : 'Roster team changed', `${member}: ${teamNameById[previousTeamId] || previousTeamId} -> ${teamNameById[nextTeamId] || nextTeamId}`, 'Roster Manager');
             addToast(isLegacyTeamMissing ? `${member} normalized to ${teamNameById[nextTeamId] || nextTeamId}` : `${member} moved to ${teamNameById[nextTeamId] || nextTeamId}`);
         } catch (error) {
             console.error('Move member failed:', error);
-            addToast('Unable to move player', 'error');
+            addToast(rosterErrorMessage(error, 'Unable to move player'), 'error');
         }
     };
 
@@ -6534,6 +6549,11 @@ function RosterManager({ members, events, canManageRoster = false, canRemoveHubA
                                 ) : (
                                     <div className="rounded-xl border border-white/10 bg-black/35 p-4">
                                         <label className="block text-xs font-bold text-neutral-500 mb-2 uppercase">Assigned Team</label>
+                                        {assignedTeamId !== rosterTeamId(rosterData[selectedMember]) && (
+                                            <div className="mb-3 rounded-lg border border-yellow-500/30 bg-yellow-500/10 px-3 py-2 text-[10px] font-bold uppercase tracking-widest text-yellow-200">
+                                                Pending team change: {teamNameById[rosterTeamId(rosterData[selectedMember])] || rosterTeamId(rosterData[selectedMember])} to {teamNameById[assignedTeamId] || assignedTeamId}
+                                            </div>
+                                        )}
                                         <div className="grid grid-cols-1 md:grid-cols-[1fr_auto] gap-3">
                                             <Select value={assignedTeamId} onChange={e => setAssignedTeamId(e.target.value)}>
                                                 {teams.map(team => <option key={team.id} value={team.id}>{team.name || team.id}</option>)}
