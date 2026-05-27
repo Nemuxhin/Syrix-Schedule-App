@@ -23,6 +23,7 @@ const LandingPage = ({ onEnterHub }) => {
     const [merchData, setMerchData] = useState([]);
     const [achievements, setAchievements] = useState([]);
     const [teams, setTeams] = useState(() => mergeDefaultTeams([]));
+    const [expandedNews, setExpandedNews] = useState({});
 
     // Load real data from Firestore
     useEffect(() => {
@@ -118,6 +119,12 @@ const LandingPage = ({ onEnterHub }) => {
 
     const featuredNews = newsData.find(n => n.isFeatured) || newsData[0];
     const otherNews = newsData.filter(n => n.id !== featuredNews?.id).slice(0, 3);
+    const newsKey = (item, fallback = 'featured') => item?.id || `${fallback}-${item?.date || 'undated'}-${item?.title || 'news'}`;
+    const toggleNews = (item, fallback) => {
+        const key = newsKey(item, fallback);
+        setExpandedNews(prev => ({ ...prev, [key]: !prev[key] }));
+    };
+    const isNewsExpanded = (item, fallback) => Boolean(expandedNews[newsKey(item, fallback)]);
 
     // Dynamic Script Loading for AOS
     useEffect(() => {
@@ -480,18 +487,26 @@ const LandingPage = ({ onEnterHub }) => {
                                 <div>
                                     <span className="text-red-400 text-xs font-black uppercase tracking-widest mb-4 block">Featured • {fallbackNews.date}</span>
                                     <h4 className="text-4xl md:text-6xl font-black mb-5 uppercase italic leading-none">{fallbackNews.title}</h4>
-                                    <p className="text-neutral-400 mb-6 line-clamp-5 leading-relaxed">{fallbackNews.body}</p>
+                                    <p className={`text-neutral-400 mb-6 leading-relaxed ${isNewsExpanded(fallbackNews, 'featured') ? '' : 'line-clamp-5'}`}>{fallbackNews.body}</p>
                                 </div>
-                                {fallbackNews.url && <a href={fallbackNews.url} target="_blank" rel="noopener noreferrer" className="text-red-400 font-black text-sm hover:text-white transition-colors self-start uppercase tracking-widest">Read Full Report →</a>}
+                                <div className="flex flex-wrap gap-4 items-center">
+                                    <button onClick={() => toggleNews(fallbackNews, 'featured')} className="text-red-400 font-black text-sm hover:text-white transition-colors uppercase tracking-widest">
+                                        {isNewsExpanded(fallbackNews, 'featured') ? 'Minimize' : 'Expand'}
+                                    </button>
+                                    {fallbackNews.url && <a href={fallbackNews.url} target="_blank" rel="noopener noreferrer" className="text-red-400 font-black text-sm hover:text-white transition-colors uppercase tracking-widest">Read Full Report →</a>}
+                                </div>
                             </div>
                             <div className="grid grid-cols-1 gap-4" data-aos="fade-left">
                                 {otherNews.length ? otherNews.map(item => (
-                                    <div key={item.id} className="bg-[#0d1016] border border-white/10 p-5 flex gap-4 items-center group hover:border-red-500/50 transition-all">
+                                    <div key={item.id} className={`bg-[#0d1016] border border-white/10 p-5 flex gap-4 group hover:border-red-500/50 transition-all ${isNewsExpanded(item, 'list') ? 'items-start' : 'items-center'}`}>
                                         <div className="w-16 h-16 bg-red-600 flex-shrink-0 flex items-center justify-center text-xl font-black text-white">{item.title.substring(0, 2).toUpperCase()}</div>
                                         <div className="min-w-0">
                                             <h5 className="font-black text-white group-hover:text-red-400 transition-colors line-clamp-1 uppercase">{item.title}</h5>
                                             <p className="text-xs text-neutral-500 uppercase tracking-wider">{item.type} • {item.date}</p>
-                                            <p className="text-xs text-neutral-400 mt-1 line-clamp-2">{item.body}</p>
+                                            <p className={`text-xs text-neutral-400 mt-1 leading-relaxed ${isNewsExpanded(item, 'list') ? '' : 'line-clamp-2'}`}>{item.body}</p>
+                                            <button onClick={() => toggleNews(item, 'list')} className="mt-3 text-[10px] text-red-400 font-black uppercase tracking-widest hover:text-white">
+                                                {isNewsExpanded(item, 'list') ? 'Minimize' : 'Expand'}
+                                            </button>
                                         </div>
                                     </div>
                                 )) : <div className="bg-[#0d1016] border border-white/10 p-8 text-neutral-500">More updates will appear here.</div>}
@@ -875,15 +890,20 @@ const LandingPage = ({ onEnterHub }) => {
                                     <div className="glass-panel p-8 rounded-xl border border-red-900/30 flex flex-col justify-center" data-aos="fade-right">
                                         <span className="text-red-500 text-xs font-bold uppercase tracking-widest mb-2 block">Featured • {featuredNews.date}</span>
                                         <h4 className="text-3xl font-black text-white mb-4 uppercase leading-none">{featuredNews.title}</h4>
-                                        <p className="text-neutral-400 mb-6 line-clamp-4">{featuredNews.body}</p>
-                                        {featuredNews.url && <a href={featuredNews.url} target="_blank" rel="noopener noreferrer" className="text-white font-bold text-sm hover:text-red-500 transition-colors self-start">Read Full Report &rarr;</a>}
+                                        <p className={`text-neutral-400 mb-6 ${isNewsExpanded(featuredNews, 'sitrep-featured') ? '' : 'line-clamp-4'}`}>{featuredNews.body}</p>
+                                        <div className="flex flex-wrap gap-4">
+                                            <button onClick={() => toggleNews(featuredNews, 'sitrep-featured')} className="text-white font-bold text-sm hover:text-red-500 transition-colors self-start">
+                                                {isNewsExpanded(featuredNews, 'sitrep-featured') ? 'Minimize' : 'Expand'}
+                                            </button>
+                                            {featuredNews.url && <a href={featuredNews.url} target="_blank" rel="noopener noreferrer" className="text-white font-bold text-sm hover:text-red-500 transition-colors self-start">Read Full Report &rarr;</a>}
+                                        </div>
                                     </div>
                                 )}
 
                                 {/* Other News List */}
                                 <div className="space-y-4" data-aos="fade-left">
                                     {otherNews.map(item => (
-                                        <div key={item.id} className="glass-panel p-6 rounded-xl flex gap-4 items-center group hover:border-red-600/30 transition-all">
+                                        <div key={item.id} className={`glass-panel p-6 rounded-xl flex gap-4 group hover:border-red-600/30 transition-all ${isNewsExpanded(item, 'sitrep-list') ? 'items-start' : 'items-center'}`}>
                                             <div className="w-16 h-16 bg-neutral-800 rounded-lg flex-shrink-0 flex items-center justify-center text-2xl font-black text-neutral-700">
                                                 {/* Initials as icon */}
                                                 {item.title.substring(0, 2).toUpperCase()}
@@ -891,7 +911,10 @@ const LandingPage = ({ onEnterHub }) => {
                                             <div>
                                                 <h5 className="font-bold text-white group-hover:text-red-500 transition-colors line-clamp-1">{item.title}</h5>
                                                 <p className="text-xs text-neutral-500 uppercase tracking-wider">{item.type} • {item.date}</p>
-                                                <p className="text-xs text-neutral-400 mt-1 line-clamp-1">{item.body}</p>
+                                                <p className={`text-xs text-neutral-400 mt-1 ${isNewsExpanded(item, 'sitrep-list') ? '' : 'line-clamp-1'}`}>{item.body}</p>
+                                                <button onClick={() => toggleNews(item, 'sitrep-list')} className="mt-3 text-[10px] text-red-400 font-black uppercase tracking-widest hover:text-white">
+                                                    {isNewsExpanded(item, 'sitrep-list') ? 'Minimize' : 'Expand'}
+                                                </button>
                                             </div>
                                         </div>
                                     ))}
