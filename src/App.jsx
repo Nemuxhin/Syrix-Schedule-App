@@ -5167,9 +5167,12 @@ function PlayerProfile({ members, currentMemberName, displayAvail, events, reque
     }, [currentMemberName, isStaff, members]);
 
     useEffect(() => {
-        const unsubRoster = onSnapshot(query(collection(db, 'roster'), where('teamId', '==', teamId)), (snap) => {
+        const unsubRoster = onSnapshot(collection(db, 'roster'), (snap) => {
             const rows = [];
-            snap.forEach(d => rows.push({ id: d.id, ...d.data() }));
+            snap.forEach(d => {
+                const data = { id: d.id, ...d.data() };
+                if (teamMatches(data, teamId)) rows.push(data);
+            });
             setProfiles(sortRosterByRole(rows));
         });
         const unsubNotes = onSnapshot(query(collection(db, 'admin_player_notes'), where('teamId', '==', teamId)), (snap) => {
@@ -6253,6 +6256,16 @@ function RosterManager({ members, events, canManageRoster = false, canRemoveHubA
                 pfp,
                 ingameRole
             }, { merge: true });
+            if (nextTeamId !== ORG_TEAM_ID) {
+                const availRef = doc(db, 'availabilities', selectedMember);
+                const availSnap = await getDoc(availRef);
+                if (availSnap.exists()) {
+                    await setDoc(availRef, {
+                        teamId: nextTeamId,
+                        migratedAt: new Date().toISOString()
+                    }, { merge: true });
+                }
+            }
             await syncTeamMember({
                 uid: rosterData[selectedMember]?.uid,
                 teamId: nextTeamId,
@@ -6272,7 +6285,8 @@ function RosterManager({ members, events, canManageRoster = false, canRemoveHubA
         if (!member || !nextTeamId) return;
         if (rosterData[member]?.role === 'Manager') return addToast('Management is organization-wide and cannot be moved between team rosters', 'error');
         const previousTeamId = rosterTeamId(rosterData[member]);
-        if (previousTeamId === nextTeamId) return addToast(`${member} is already on ${teamNameById[nextTeamId] || nextTeamId}`, 'error');
+        const isLegacyTeamMissing = !rosterData[member]?.teamId;
+        if (previousTeamId === nextTeamId && !isLegacyTeamMissing) return addToast(`${member} is already on ${teamNameById[nextTeamId] || nextTeamId}`, 'error');
         try {
             await setDoc(doc(db, 'roster', member), {
                 teamId: nextTeamId,
@@ -6296,8 +6310,8 @@ function RosterManager({ members, events, canManageRoster = false, canRemoveHubA
             });
 
             if (selectedMember === member) setAssignedTeamId(nextTeamId);
-            await writeAuditLog('Roster team changed', `${member}: ${teamNameById[previousTeamId] || previousTeamId} -> ${teamNameById[nextTeamId] || nextTeamId}`, 'Roster Manager');
-            addToast(`${member} moved to ${teamNameById[nextTeamId] || nextTeamId}`);
+            await writeAuditLog(isLegacyTeamMissing ? 'Roster team normalized' : 'Roster team changed', `${member}: ${teamNameById[previousTeamId] || previousTeamId} -> ${teamNameById[nextTeamId] || nextTeamId}`, 'Roster Manager');
+            addToast(isLegacyTeamMissing ? `${member} normalized to ${teamNameById[nextTeamId] || nextTeamId}` : `${member} moved to ${teamNameById[nextTeamId] || nextTeamId}`);
         } catch (error) {
             console.error('Move member failed:', error);
             addToast('Unable to move player', 'error');
@@ -6524,9 +6538,9 @@ function RosterManager({ members, events, canManageRoster = false, canRemoveHubA
                                             <Select value={assignedTeamId} onChange={e => setAssignedTeamId(e.target.value)}>
                                                 {teams.map(team => <option key={team.id} value={team.id}>{team.name || team.id}</option>)}
                                             </Select>
-                                            <ButtonPrimary onClick={() => moveMemberToTeam(selectedMember, assignedTeamId)} className="text-xs py-2">Move Player</ButtonPrimary>
+                                            <ButtonPrimary onClick={() => moveMemberToTeam(selectedMember, assignedTeamId)} className="text-xs py-2">Apply Team</ButtonPrimary>
                                         </div>
-                                        <p className="mt-2 text-[10px] text-neutral-500">Moving a player updates their roster assignment and availability team.</p>
+                                        <p className="mt-2 text-[10px] text-neutral-500">Apply Team updates their roster assignment and availability team. Use Save Changes below for role changes like Captain to Main.</p>
                                     </div>
                                 )}
 
@@ -6563,7 +6577,7 @@ function RosterManager({ members, events, canManageRoster = false, canRemoveHubA
 
                                 <textarea className="w-full h-40 bg-black border border-neutral-800 rounded-xl p-3 text-white" value={notes} onChange={e => setNotes(e.target.value)} placeholder="Notes..." />
 
-                                <ButtonPrimary onClick={handleSave} className="w-full py-3">Save Changes</ButtonPrimary>
+                                <ButtonPrimary onClick={handleSave} className="w-full py-3">Save Role / Details</ButtonPrimary>
 
                                 {/* --- RENAME SECTION (Danger Zone) --- */}
                                 <div className="mt-8 pt-6 border-t border-neutral-800">
@@ -7192,9 +7206,11 @@ function SyrixDashboard({ onBack }) {
 
         // --- NEW LISTENER 4: FETCH ALL ROSTER NAMES ---
         // This ensures members show up even if they haven't set availability yet
-        const unsub4 = onSnapshot(query(collection(db, 'roster'), where('teamId', '==', activeTeamId)), (s) => {
+        const unsub4 = onSnapshot(collection(db, 'roster'), (s) => {
             const names = [];
-            s.forEach(doc => names.push(doc.id));
+            s.forEach(doc => {
+                if (teamMatches(doc.data(), activeTeamId)) names.push(doc.id);
+            });
             setAllRosterNames(names);
         });
 
